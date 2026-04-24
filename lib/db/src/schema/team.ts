@@ -15,6 +15,8 @@ export const teamTable = pgTable("equipe_interna", {
   email: text("email"),
   whatsapp: text("whatsapp"),
   temAcessoPlataforma: boolean("tem_acesso_plataforma").default(false),
+  inviteStatus: text("invite_status"),
+  lastAccessAt: timestamp("last_access_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

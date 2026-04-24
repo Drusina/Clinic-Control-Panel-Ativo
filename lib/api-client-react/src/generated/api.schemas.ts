@@ -13,6 +13,7 @@ export interface DashboardSummary {
   totalClinics: number;
   clinicasAtivas: number;
   clinicasTrial: number;
+  clinicasSuspensas: number;
   clinicasProspect: number;
   receitaMensalTotal: number;
   receitaPipeline: number;
@@ -81,11 +82,33 @@ export interface Clinic {
   /** @nullable */
   valorRecorrente?: number | null;
   /** @nullable */
+  suspensoMotivo?: string | null;
+  /** @nullable */
   formaPagamento?: string | null;
   /** @nullable */
   diaVencimento?: number | null;
   /** @nullable */
+  reajusteIndice?: string | null;
+  /** @nullable */
   inicioRecorrencia?: string | null;
+  /** @nullable */
+  cnae?: string | null;
+  /** @nullable */
+  situacaoCadastral?: string | null;
+  /** @nullable */
+  capitalSocial?: number | null;
+  /** @nullable */
+  dataAbertura?: string | null;
+  /**
+   * URL to the uploaded proposal PDF in Supabase Storage
+   * @nullable
+   */
+  propostaUrl?: string | null;
+  /**
+   * URL to the uploaded signed contract PDF in Supabase Storage
+   * @nullable
+   */
+  contratoUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -105,6 +128,14 @@ export const CreateClinicBodyPlano = {
   pro: "pro",
   enterprise: "enterprise",
 } as const;
+
+export type CreateClinicBodyQsaItem = {
+  nome: string;
+  /** @nullable */
+  qualificacao?: string | null;
+  /** @nullable */
+  dataEntrada?: string | null;
+};
 
 export interface CreateClinicBody {
   nome: string;
@@ -138,6 +169,15 @@ export interface CreateClinicBody {
   formaPagamento?: string | null;
   /** @nullable */
   diaVencimento?: number | null;
+  /** @nullable */
+  cnae?: string | null;
+  /** @nullable */
+  situacaoCadastral?: string | null;
+  /** @nullable */
+  capitalSocial?: number | null;
+  /** @nullable */
+  dataAbertura?: string | null;
+  qsa?: CreateClinicBodyQsaItem[];
 }
 
 export interface UpdateClinicBody {
@@ -180,7 +220,21 @@ export interface UpdateClinicBody {
   /** @nullable */
   diaVencimento?: number | null;
   /** @nullable */
+  reajusteIndice?: string | null;
+  /** @nullable */
   inicioRecorrencia?: string | null;
+  /** @nullable */
+  cnae?: string | null;
+  /** @nullable */
+  situacaoCadastral?: string | null;
+  /** @nullable */
+  capitalSocial?: number | null;
+  /** @nullable */
+  dataAbertura?: string | null;
+  /** @nullable */
+  propostaUrl?: string | null;
+  /** @nullable */
+  contratoUrl?: string | null;
 }
 
 export type UpdateClinicStatusBodyStatus =
@@ -202,6 +256,62 @@ export interface UpdateClinicStatusBody {
   motivo?: string | null;
   /** @nullable */
   tipo?: string | null;
+}
+
+export interface StatusHistory {
+  id: string;
+  clinicId: string;
+  status: string;
+  /** @nullable */
+  motivo?: string | null;
+  /** @nullable */
+  autorNome?: string | null;
+  createdAt: string;
+}
+
+export interface Socio {
+  id: string;
+  clinicId: string;
+  nome: string;
+  /** @nullable */
+  qualificacao?: string | null;
+  /** @nullable */
+  qualId?: string | null;
+  /** @nullable */
+  dataEntrada?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSocioBody {
+  nome: string;
+  /** @nullable */
+  qualificacao?: string | null;
+  /** @nullable */
+  qualId?: string | null;
+  /** @nullable */
+  dataEntrada?: string | null;
+}
+
+export interface UpdateSocioBody {
+  /** @nullable */
+  nome?: string | null;
+  /** @nullable */
+  qualificacao?: string | null;
+  /** @nullable */
+  qualId?: string | null;
+  /** @nullable */
+  dataEntrada?: string | null;
+}
+
+export interface InviteUserBody {
+  email: string;
+  role: string;
+}
+
+export interface InviteUserResponse {
+  success: boolean;
+  message: string;
 }
 
 export interface Activity {
@@ -443,6 +553,16 @@ export interface TeamMember {
   /** @nullable */
   whatsapp?: string | null;
   temAcessoPlataforma: boolean;
+  /**
+   * pending | accepted | revoked
+   * @nullable
+   */
+  inviteStatus?: string | null;
+  /**
+   * ISO timestamp of last platform login
+   * @nullable
+   */
+  lastAccessAt?: string | null;
   createdAt: string;
 }
 

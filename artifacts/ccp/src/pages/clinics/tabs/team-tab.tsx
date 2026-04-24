@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TeamMember } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { TeamMember } from "@workspace/api-client-react";
 
 const formSchema = z.object({
   nome: z.string().min(2, "Nome obrigatório"),
@@ -108,7 +108,7 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     if (editingMember) {
       updateMember.mutate(
-        { clinicId, id: editingMember.id, data: values as any },
+        { id: editingMember.id, data: values },
         {
           onSuccess: () => {
             toast({ title: "Membro atualizado" });
@@ -136,7 +136,7 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
   const handleDelete = (id: string) => {
     if (confirm("Deseja realmente excluir este membro da equipe?")) {
       deleteMember.mutate(
-        { clinicId, id },
+        { id },
         {
           onSuccess: () => {
             toast({ title: "Membro excluído" });

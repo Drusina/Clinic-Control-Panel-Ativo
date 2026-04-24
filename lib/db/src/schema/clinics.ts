@@ -36,6 +36,12 @@ export const clinicsTable = pgTable("clinics", {
   diaVencimento: integer("dia_vencimento"),
   reajusteIndice: text("reajuste_indice").default("IGPM/FGV"),
   inicioRecorrencia: date("inicio_recorrencia"),
+  cnae: text("cnae"),
+  situacaoCadastral: text("situacao_cadastral"),
+  capitalSocial: numeric("capital_social", { precision: 14, scale: 2 }),
+  dataAbertura: text("data_abertura"),
+  propostaUrl: text("proposta_url"),
+  contratoUrl: text("contrato_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Risk } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { Risk } from "@workspace/api-client-react";
 
 const formSchema = z.object({
   nome: z.string().min(2, "Nome obrigatório"),
@@ -108,7 +108,7 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     if (editingRisk) {
       updateRisk.mutate(
-        { clinicId, id: editingRisk.id, data: values as any },
+        { id: editingRisk.id, data: values },
         {
           onSuccess: () => {
             toast({ title: "Risco atualizado" });
@@ -136,7 +136,7 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
   const handleDelete = (id: string) => {
     if (confirm("Deseja realmente excluir este risco?")) {
       deleteRisk.mutate(
-        { clinicId, id },
+        { id },
         {
           onSuccess: () => {
             toast({ title: "Risco excluído" });

@@ -26,23 +26,29 @@ import type {
   CreateClinicBody,
   CreateFaturaBody,
   CreateRiskBody,
+  CreateSocioBody,
   CreateTeamMemberBody,
   DashboardSummary,
   Diagnostic,
   Fatura,
   HealthStatus,
+  InviteUserBody,
+  InviteUserResponse,
   Kickoff,
   ListActionsParams,
   ListClinicsParams,
   Notification,
   PipelineItem,
   Risk,
+  Socio,
+  StatusHistory,
   TeamMember,
   UpdateActionBody,
   UpdateClinicBody,
   UpdateClinicStatusBody,
   UpdateFaturaBody,
   UpdateRiskBody,
+  UpdateSocioBody,
   UpdateTeamMemberBody,
   UpsertKickoffBody,
 } from "./api.schemas";
@@ -878,6 +884,528 @@ export const useUpdateClinicStatus = <
   TContext
 > => {
   return useMutation(getUpdateClinicStatusMutationOptions(options));
+};
+
+/**
+ * @summary Get clinic status change history
+ */
+export const getGetClinicStatusHistoryUrl = (id: string) => {
+  return `/api/clinics/${id}/status-history`;
+};
+
+export const getClinicStatusHistory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<StatusHistory[]> => {
+  return customFetch<StatusHistory[]>(getGetClinicStatusHistoryUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetClinicStatusHistoryQueryKey = (id: string) => {
+  return [`/api/clinics/${id}/status-history`] as const;
+};
+
+export const getGetClinicStatusHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getClinicStatusHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClinicStatusHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetClinicStatusHistoryQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getClinicStatusHistory>>
+  > = ({ signal }) => getClinicStatusHistory(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getClinicStatusHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetClinicStatusHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getClinicStatusHistory>>
+>;
+export type GetClinicStatusHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get clinic status change history
+ */
+
+export function useGetClinicStatusHistory<
+  TData = Awaited<ReturnType<typeof getClinicStatusHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getClinicStatusHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetClinicStatusHistoryQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List partners (QSA) for a clinic
+ */
+export const getListSociosUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/socios`;
+};
+
+export const listSocios = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<Socio[]> => {
+  return customFetch<Socio[]>(getListSociosUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSociosQueryKey = (clinicId: string) => {
+  return [`/api/clinics/${clinicId}/socios`] as const;
+};
+
+export const getListSociosQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSocios>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSocios>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSociosQueryKey(clinicId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSocios>>> = ({
+    signal,
+  }) => listSocios(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSocios>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSociosQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSocios>>
+>;
+export type ListSociosQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List partners (QSA) for a clinic
+ */
+
+export function useListSocios<
+  TData = Awaited<ReturnType<typeof listSocios>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSocios>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSociosQueryOptions(clinicId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a partner to a clinic
+ */
+export const getCreateSocioUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/socios`;
+};
+
+export const createSocio = async (
+  clinicId: string,
+  createSocioBody: CreateSocioBody,
+  options?: RequestInit,
+): Promise<Socio> => {
+  return customFetch<Socio>(getCreateSocioUrl(clinicId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSocioBody),
+  });
+};
+
+export const getCreateSocioMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSocio>>,
+    TError,
+    { clinicId: string; data: BodyType<CreateSocioBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSocio>>,
+  TError,
+  { clinicId: string; data: BodyType<CreateSocioBody> },
+  TContext
+> => {
+  const mutationKey = ["createSocio"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSocio>>,
+    { clinicId: string; data: BodyType<CreateSocioBody> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return createSocio(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSocioMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSocio>>
+>;
+export type CreateSocioMutationBody = BodyType<CreateSocioBody>;
+export type CreateSocioMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a partner to a clinic
+ */
+export const useCreateSocio = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSocio>>,
+    TError,
+    { clinicId: string; data: BodyType<CreateSocioBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSocio>>,
+  TError,
+  { clinicId: string; data: BodyType<CreateSocioBody> },
+  TContext
+> => {
+  return useMutation(getCreateSocioMutationOptions(options));
+};
+
+/**
+ * @summary Update a partner
+ */
+export const getUpdateSocioUrl = (clinicId: string, socioId: string) => {
+  return `/api/clinics/${clinicId}/socios/${socioId}`;
+};
+
+export const updateSocio = async (
+  clinicId: string,
+  socioId: string,
+  updateSocioBody: UpdateSocioBody,
+  options?: RequestInit,
+): Promise<Socio> => {
+  return customFetch<Socio>(getUpdateSocioUrl(clinicId, socioId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSocioBody),
+  });
+};
+
+export const getUpdateSocioMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSocio>>,
+    TError,
+    { clinicId: string; socioId: string; data: BodyType<UpdateSocioBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSocio>>,
+  TError,
+  { clinicId: string; socioId: string; data: BodyType<UpdateSocioBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSocio"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSocio>>,
+    { clinicId: string; socioId: string; data: BodyType<UpdateSocioBody> }
+  > = (props) => {
+    const { clinicId, socioId, data } = props ?? {};
+
+    return updateSocio(clinicId, socioId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSocioMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSocio>>
+>;
+export type UpdateSocioMutationBody = BodyType<UpdateSocioBody>;
+export type UpdateSocioMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a partner
+ */
+export const useUpdateSocio = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSocio>>,
+    TError,
+    { clinicId: string; socioId: string; data: BodyType<UpdateSocioBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSocio>>,
+  TError,
+  { clinicId: string; socioId: string; data: BodyType<UpdateSocioBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSocioMutationOptions(options));
+};
+
+/**
+ * @summary Remove a partner
+ */
+export const getDeleteSocioUrl = (clinicId: string, socioId: string) => {
+  return `/api/clinics/${clinicId}/socios/${socioId}`;
+};
+
+export const deleteSocio = async (
+  clinicId: string,
+  socioId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteSocioUrl(clinicId, socioId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteSocioMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSocio>>,
+    TError,
+    { clinicId: string; socioId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteSocio>>,
+  TError,
+  { clinicId: string; socioId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteSocio"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteSocio>>,
+    { clinicId: string; socioId: string }
+  > = (props) => {
+    const { clinicId, socioId } = props ?? {};
+
+    return deleteSocio(clinicId, socioId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteSocioMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteSocio>>
+>;
+
+export type DeleteSocioMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove a partner
+ */
+export const useDeleteSocio = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSocio>>,
+    TError,
+    { clinicId: string; socioId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteSocio>>,
+  TError,
+  { clinicId: string; socioId: string },
+  TContext
+> => {
+  return useMutation(getDeleteSocioMutationOptions(options));
+};
+
+/**
+ * @summary Invite a user to a clinic via email
+ */
+export const getInviteClinicUserUrl = (id: string) => {
+  return `/api/clinics/${id}/invite-user`;
+};
+
+export const inviteClinicUser = async (
+  id: string,
+  inviteUserBody: InviteUserBody,
+  options?: RequestInit,
+): Promise<InviteUserResponse> => {
+  return customFetch<InviteUserResponse>(getInviteClinicUserUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(inviteUserBody),
+  });
+};
+
+export const getInviteClinicUserMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inviteClinicUser>>,
+    TError,
+    { id: string; data: BodyType<InviteUserBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof inviteClinicUser>>,
+  TError,
+  { id: string; data: BodyType<InviteUserBody> },
+  TContext
+> => {
+  const mutationKey = ["inviteClinicUser"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof inviteClinicUser>>,
+    { id: string; data: BodyType<InviteUserBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return inviteClinicUser(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type InviteClinicUserMutationResult = NonNullable<
+  Awaited<ReturnType<typeof inviteClinicUser>>
+>;
+export type InviteClinicUserMutationBody = BodyType<InviteUserBody>;
+export type InviteClinicUserMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Invite a user to a clinic via email
+ */
+export const useInviteClinicUser = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof inviteClinicUser>>,
+    TError,
+    { id: string; data: BodyType<InviteUserBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof inviteClinicUser>>,
+  TError,
+  { id: string; data: BodyType<InviteUserBody> },
+  TContext
+> => {
+  return useMutation(getInviteClinicUserMutationOptions(options));
 };
 
 /**

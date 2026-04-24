@@ -1,15 +1,19 @@
-import { useState } from "react";
-import { 
-  useListFaturas, 
-  getListFaturasQueryKey, 
-  useCreateFatura, 
-  useUpdateFatura 
+import { useState, useRef } from "react";
+import {
+  useListFaturas,
+  getListFaturasQueryKey,
+  useCreateFatura,
+  useUpdateFatura,
+  useUpdateClinic,
 } from "@workspace/api-client-react";
+import type { Clinic, Fatura, UpdateClinicBody } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, MoreHorizontal, FileText } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, FileText, Send, Upload, ExternalLink, CheckCircle2, AlertCircle } from "lucide-react";
+import { getStoredToken } from "@/hooks/use-auth";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { getGetClinicQueryKey } from "@workspace/api-client-react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useForm } from "react-hook-form";
@@ -37,11 +42,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Fatura } from "@workspace/api-client-react/src/generated/api.schemas";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-const formSchema = z.object({
+const faturaSchema = z.object({
   numero: z.string().min(1, "Número obrigatório"),
   vencimento: z.string().min(1, "Vencimento obrigatório"),
   valor: z.coerce.number().min(0.01, "Valor deve ser maior que 0"),
@@ -50,11 +55,81 @@ const formSchema = z.object({
   observacao: z.string().optional(),
 });
 
-export default function FinancialTab({ clinicId }: { clinicId: string }) {
+const contratoSchema = z.object({
+  valorImplantacao: z.coerce.number().optional(),
+  valorRecorrente: z.coerce.number().optional(),
+  formaPagamento: z.string().optional(),
+  diaVencimento: z.coerce.number().min(1).max(31).optional(),
+  reajusteIndice: z.string().optional(),
+  inicioRecorrencia: z.string().optional(),
+});
+
+const FORMA_PAGAMENTO_OPTIONS = [
+  { value: "boleto", label: "Boleto Bancário" },
+  { value: "pix", label: "PIX" },
+  { value: "cartao", label: "Cartão de Crédito" },
+  { value: "transferencia", label: "Transferência Bancária" },
+];
+
+const REAJUSTE_OPTIONS = [
+  { value: "IGPM/FGV", label: "IGPM/FGV" },
+  { value: "IPCA/IBGE", label: "IPCA/IBGE" },
+  { value: "INPC/IBGE", label: "INPC/IBGE" },
+  { value: "fixo", label: "Fixo (sem reajuste)" },
+];
+
+export default function FinancialTab({ clinicId, clinic }: { clinicId: string; clinic?: Clinic }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingFatura, setEditingFatura] = useState<Fatura | null>(null);
+  const [uploadingProposta, setUploadingProposta] = useState(false);
+  const [uploadingContrato, setUploadingContrato] = useState(false);
+  const propostaInputRef = useRef<HTMLInputElement>(null);
+  const contratoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDocumentUpload = async (file: File, type: "proposta" | "contrato") => {
+    if (!clinic) return;
+    if (file.type !== "application/pdf") {
+      toast({ variant: "destructive", title: "Apenas arquivos PDF são aceitos" });
+      return;
+    }
+    if (type === "proposta") setUploadingProposta(true);
+    else setUploadingContrato(true);
+
+    try {
+      const token = getStoredToken();
+      const res = await fetch(`/api/clinics/${clinic.id}/documents?type=${type}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/pdf",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: file,
+      });
+
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        toast({
+          variant: "destructive",
+          title: "Erro no upload",
+          description: err.error ?? "Erro desconhecido",
+        });
+        return;
+      }
+
+      toast({
+        title: type === "proposta" ? "Proposta enviada" : "Contrato enviado",
+        description: `Arquivo ${file.name} enviado com sucesso.`,
+      });
+      queryClient.invalidateQueries({ queryKey: getGetClinicQueryKey(clinic.id) });
+    } catch {
+      toast({ variant: "destructive", title: "Erro de conexão ao fazer upload" });
+    } finally {
+      if (type === "proposta") setUploadingProposta(false);
+      else setUploadingContrato(false);
+    }
+  };
 
   const { data: faturas, isLoading } = useListFaturas(clinicId, {
     query: { enabled: !!clinicId, queryKey: getListFaturasQueryKey(clinicId) },
@@ -62,9 +137,10 @@ export default function FinancialTab({ clinicId }: { clinicId: string }) {
 
   const createFatura = useCreateFatura();
   const updateFatura = useUpdateFatura();
+  const updateClinic = useUpdateClinic();
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const faturaForm = useForm<z.infer<typeof faturaSchema>>({
+    resolver: zodResolver(faturaSchema),
     defaultValues: {
       numero: "",
       vencimento: "",
@@ -75,20 +151,32 @@ export default function FinancialTab({ clinicId }: { clinicId: string }) {
     },
   });
 
+  const contratoForm = useForm<z.infer<typeof contratoSchema>>({
+    resolver: zodResolver(contratoSchema),
+    defaultValues: {
+      valorImplantacao: clinic?.valorImplantacao ?? 0,
+      valorRecorrente: clinic?.valorRecorrente ?? 0,
+      formaPagamento: clinic?.formaPagamento ?? "boleto",
+      diaVencimento: clinic?.diaVencimento ?? 10,
+      reajusteIndice: "IGPM/FGV",
+      inicioRecorrencia: clinic?.inicioRecorrencia ?? "",
+    },
+  });
+
   const openDialog = (fatura?: Fatura) => {
     if (fatura) {
       setEditingFatura(fatura);
-      form.reset({
+      faturaForm.reset({
         numero: fatura.numero,
         vencimento: fatura.vencimento.split("T")[0],
         valor: fatura.valor,
-        status: (fatura.status as any) || "pendente",
+        status: (fatura.status as "pendente" | "pago" | "atrasado" | "cancelado") || "pendente",
         formaPagamento: fatura.formaPagamento || "",
         observacao: fatura.observacao || "",
       });
     } else {
       setEditingFatura(null);
-      form.reset({
+      faturaForm.reset({
         numero: "",
         vencimento: "",
         valor: 0,
@@ -100,17 +188,16 @@ export default function FinancialTab({ clinicId }: { clinicId: string }) {
     setIsDialogOpen(true);
   };
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onFaturaSubmit = (values: z.infer<typeof faturaSchema>) => {
     if (editingFatura) {
       const isPaid = values.status === "pago" && editingFatura.status !== "pago";
       updateFatura.mutate(
-        { 
-          clinicId, 
-          id: editingFatura.id, 
-          data: { 
+        {
+          id: editingFatura.id,
+          data: {
             ...values,
-            pagoEm: isPaid ? new Date().toISOString() : editingFatura.pagoEm
-          } as any 
+            pagoEm: isPaid ? new Date().toISOString() : editingFatura.pagoEm,
+          },
         },
         {
           onSuccess: () => {
@@ -123,7 +210,7 @@ export default function FinancialTab({ clinicId }: { clinicId: string }) {
       );
     } else {
       createFatura.mutate(
-        { clinicId, data: values as any },
+        { clinicId, data: values },
         {
           onSuccess: () => {
             toast({ title: "Fatura registrada" });
@@ -136,139 +223,424 @@ export default function FinancialTab({ clinicId }: { clinicId: string }) {
     }
   };
 
+  const onContratoSubmit = (values: z.infer<typeof contratoSchema>) => {
+    if (!clinic) return;
+    updateClinic.mutate(
+      { id: clinic.id, data: values as UpdateClinicBody },
+      {
+        onSuccess: () => {
+          toast({ title: "Contrato atualizado" });
+          queryClient.invalidateQueries({ queryKey: getGetClinicQueryKey(clinic.id) });
+        },
+        onError: () => toast({ variant: "destructive", title: "Erro ao salvar" }),
+      }
+    );
+  };
+
   const markAsPaid = (id: string) => {
     updateFatura.mutate(
-      { 
-        clinicId, 
-        id, 
-        data: { 
+      {
+        id,
+        data: {
           status: "pago",
-          pagoEm: new Date().toISOString()
-        }
+          pagoEm: new Date().toISOString(),
+        },
       },
       {
         onSuccess: () => {
           toast({ title: "Fatura marcada como paga" });
           queryClient.invalidateQueries({ queryKey: getListFaturasQueryKey(clinicId) });
-        }
+        },
       }
     );
   };
 
   if (isLoading) {
-    return <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" /></div>;
+    return (
+      <div className="p-8 text-center">
+        <Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" />
+      </div>
+    );
   }
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   const getStatusVariant = (status: string) => {
-    switch(status) {
-      case "pago": return "default";
-      case "atrasado": return "destructive";
-      case "pendente": return "secondary";
-      default: return "outline";
+    switch (status) {
+      case "pago":
+        return "default";
+      case "atrasado":
+        return "destructive";
+      case "pendente":
+        return "secondary";
+      default:
+        return "outline";
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-lg font-medium">Financeiro</h3>
-          <p className="text-sm text-muted-foreground">Acompanhe as faturas e mensalidades da clínica.</p>
-        </div>
-        <Button onClick={() => openDialog()}>
-          <Plus className="mr-2 h-4 w-4" /> Nova Fatura
-        </Button>
-      </div>
+      {clinic && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Contrato & Valores</CardTitle>
+            <CardDescription>Configurações financeiras do contrato com esta clínica.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...contratoForm}>
+              <form onSubmit={contratoForm.handleSubmit(onContratoSubmit)} className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <FormField
+                    control={contratoForm.control}
+                    name="valorImplantacao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Implantação (R$)</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={contratoForm.control}
+                    name="valorRecorrente"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Recorrência / MRR (R$)</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={contratoForm.control}
+                    name="diaVencimento"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Dia de Vencimento</FormLabel>
+                        <FormControl>
+                          <Input type="number" min="1" max="31" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={contratoForm.control}
+                    name="inicioRecorrencia"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Início Recorrência</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-      <div className="rounded-md border bg-card overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Número</TableHead>
-              <TableHead>Vencimento</TableHead>
-              <TableHead>Valor</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Pagamento</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {faturas && faturas.length > 0 ? (
-              faturas.map((fatura) => (
-                <TableRow key={fatura.id}>
-                  <TableCell className="font-medium flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    {fatura.numero}
-                  </TableCell>
-                  <TableCell>{format(new Date(fatura.vencimento), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
-                  <TableCell>{formatCurrency(fatura.valor)}</TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusVariant(fatura.status)} className="capitalize">
-                      {fatura.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {fatura.pagoEm ? format(new Date(fatura.pagoEm), "dd/MM/yyyy", { locale: ptBR }) : "-"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={contratoForm.control}
+                    name="formaPagamento"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Forma de Pagamento</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {FORMA_PAGAMENTO_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={contratoForm.control}
+                    name="reajusteIndice"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Índice de Reajuste</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {REAJUSTE_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Proposta (PDF)</Label>
+                    <input
+                      ref={propostaInputRef}
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleDocumentUpload(file, "proposta");
+                        e.target.value = "";
+                      }}
+                    />
+                    {clinic?.propostaUrl ? (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="gap-1 text-green-600 border-green-300">
+                          <CheckCircle2 className="h-3 w-3" /> Proposta enviada
+                        </Badge>
+                        <a href={clinic.propostaUrl} target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="sm" type="button" className="h-7 px-2 text-xs">
+                            <ExternalLink className="h-3 w-3 mr-1" /> Ver
+                          </Button>
+                        </a>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          className="h-7 px-2 text-xs"
+                          disabled={uploadingProposta}
+                          onClick={() => propostaInputRef.current?.click()}
+                        >
+                          {uploadingProposta ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {fatura.status !== "pago" && (
-                          <DropdownMenuItem onClick={() => markAsPaid(fatura.id)}>
-                            Marcar como Pago
-                          </DropdownMenuItem>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        disabled={uploadingProposta}
+                        onClick={() => propostaInputRef.current?.click()}
+                        data-testid="btn-upload-proposta"
+                      >
+                        {uploadingProposta ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="mr-2 h-4 w-4" />
                         )}
-                        <DropdownMenuItem onClick={() => openDialog(fatura)}>Editar</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+                        Enviar Proposta
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Contrato Assinado (PDF)</Label>
+                    <input
+                      ref={contratoInputRef}
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleDocumentUpload(file, "contrato");
+                        e.target.value = "";
+                      }}
+                    />
+                    {clinic?.contratoUrl ? (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="gap-1 text-green-600 border-green-300">
+                          <CheckCircle2 className="h-3 w-3" /> Contrato enviado
+                        </Badge>
+                        <a href={clinic.contratoUrl} target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="sm" type="button" className="h-7 px-2 text-xs">
+                            <ExternalLink className="h-3 w-3 mr-1" /> Ver
+                          </Button>
+                        </a>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          className="h-7 px-2 text-xs"
+                          disabled={uploadingContrato}
+                          onClick={() => contratoInputRef.current?.click()}
+                        >
+                          {uploadingContrato ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        disabled={uploadingContrato}
+                        onClick={() => contratoInputRef.current?.click()}
+                        data-testid="btn-upload-contrato"
+                      >
+                        {uploadingContrato ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="mr-2 h-4 w-4" />
+                        )}
+                        Enviar Contrato
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      toast({
+                        title: "Disponível em breve",
+                        description: "Integração com Autentique será ativada na próxima versão.",
+                      })
+                    }
+                  >
+                    <Send className="mr-2 h-4 w-4" /> Enviar via Autentique
+                  </Button>
+                  <Button type="submit" disabled={updateClinic.isPending}>
+                    {updateClinic.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Salvar Contrato
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Faturas</CardTitle>
+            <CardDescription>Acompanhe as cobranças e mensalidades.</CardDescription>
+          </div>
+          <Button size="sm" onClick={() => openDialog()}>
+            <Plus className="mr-2 h-4 w-4" /> Nova Fatura
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Número</TableHead>
+                  <TableHead>Vencimento</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Pagamento</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  Nenhuma fatura registrada.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              </TableHeader>
+              <TableBody>
+                {faturas && faturas.length > 0 ? (
+                  faturas.map((fatura) => (
+                    <TableRow key={fatura.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          {fatura.numero}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {format(new Date(fatura.vencimento), "dd/MM/yyyy", { locale: ptBR })}
+                      </TableCell>
+                      <TableCell>{formatCurrency(fatura.valor)}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusVariant(fatura.status)} className="capitalize">
+                          {fatura.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {fatura.pagoEm
+                          ? format(new Date(fatura.pagoEm), "dd/MM/yyyy", { locale: ptBR })
+                          : "-"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {fatura.status !== "pago" && (
+                              <DropdownMenuItem onClick={() => markAsPaid(fatura.id)}>
+                                Marcar como Pago
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => openDialog(fatura)}>
+                              Editar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="h-24 text-center text-muted-foreground"
+                    >
+                      Nenhuma fatura registrada.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>{editingFatura ? "Editar Fatura" : "Nova Fatura"}</DialogTitle>
           </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <Form {...faturaForm}>
+            <form onSubmit={faturaForm.handleSubmit(onFaturaSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={form.control}
+                  control={faturaForm.control}
                   name="numero"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Número / Identificador</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
+                      <FormLabel>Número</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
-                  control={form.control}
+                  control={faturaForm.control}
                   name="valor"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Valor (R$)</FormLabel>
-                      <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                      <FormControl>
+                        <Input type="number" step="0.01" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -276,24 +648,30 @@ export default function FinancialTab({ clinicId }: { clinicId: string }) {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <FormField
-                  control={form.control}
+                  control={faturaForm.control}
                   name="vencimento"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Vencimento</FormLabel>
-                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
-                  control={form.control}
+                  control={faturaForm.control}
                   name="status"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Status</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
                         <SelectContent>
                           <SelectItem value="pendente">Pendente</SelectItem>
                           <SelectItem value="pago">Pago</SelectItem>
@@ -307,29 +685,36 @@ export default function FinancialTab({ clinicId }: { clinicId: string }) {
                 />
               </div>
               <FormField
-                control={form.control}
+                control={faturaForm.control}
                 name="formaPagamento"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Forma de Pagamento</FormLabel>
-                    <FormControl><Input placeholder="Ex: Boleto, Cartão, PIX" {...field} /></FormControl>
+                    <FormControl>
+                      <Input placeholder="Ex: Boleto, Cartão, PIX" {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
               <FormField
-                control={form.control}
+                control={faturaForm.control}
                 name="observacao"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Observações</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
               <DialogFooter className="pt-4">
-                <Button type="submit" disabled={createFatura.isPending || updateFatura.isPending}>
+                <Button
+                  type="submit"
+                  disabled={createFatura.isPending || updateFatura.isPending}
+                >
                   Salvar
                 </Button>
               </DialogFooter>

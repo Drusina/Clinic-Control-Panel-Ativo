@@ -17,6 +17,10 @@ import ActionPlanTab from "./tabs/action-plan-tab";
 import RisksTab from "./tabs/risks-tab";
 import TeamTab from "./tabs/team-tab";
 import FinancialTab from "./tabs/financial-tab";
+import CadastroTab from "./tabs/cadastro-tab";
+import StatusTab from "./tabs/status-tab";
+import UsuariosTab from "./tabs/usuarios-tab";
+import AtividadeTab from "./tabs/atividade-tab";
 
 export default function ClinicDetail() {
   const params = useParams();
@@ -38,7 +42,7 @@ export default function ClinicDetail() {
     return (
       <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
         <p className="text-xl font-semibold">Clínica não encontrada.</p>
-        <Link href="/clinics">
+        <Link href="/admin/clinicas">
           <Button variant="outline">Voltar para clínicas</Button>
         </Link>
       </div>
@@ -48,7 +52,7 @@ export default function ClinicDetail() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-4">
-        <Link href="/clinics">
+        <Link href="/admin/clinicas">
           <Button variant="outline" size="icon" data-testid="btn-back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -71,17 +75,36 @@ export default function ClinicDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full space-y-6">
-        <TabsList className="bg-card border w-full flex overflow-x-auto justify-start rounded-md h-12">
-          <TabsTrigger value="overview" className="flex-1 min-w-fit">Visão Geral</TabsTrigger>
-          <TabsTrigger value="kickoff" className="flex-1 min-w-fit">Kickoff</TabsTrigger>
-          <TabsTrigger value="diagnostics" className="flex-1 min-w-fit">Diagnóstico</TabsTrigger>
-          <TabsTrigger value="actions" className="flex-1 min-w-fit">Plano de Ação</TabsTrigger>
-          <TabsTrigger value="risks" className="flex-1 min-w-fit">Riscos</TabsTrigger>
-          <TabsTrigger value="team" className="flex-1 min-w-fit">Equipe</TabsTrigger>
-          <TabsTrigger value="financial" className="flex-1 min-w-fit">Financeiro</TabsTrigger>
+      <Tabs defaultValue="cadastro" className="w-full space-y-6">
+        <TabsList className="bg-card border w-full flex overflow-x-auto justify-start rounded-md h-auto flex-wrap gap-1 p-1">
+          <TabsTrigger value="cadastro" className="min-w-fit" data-testid="tab-cadastro">Cadastro</TabsTrigger>
+          <TabsTrigger value="financial" className="min-w-fit" data-testid="tab-financial">Financeiro & Contrato</TabsTrigger>
+          <TabsTrigger value="status" className="min-w-fit" data-testid="tab-status">Status</TabsTrigger>
+          <TabsTrigger value="usuarios" className="min-w-fit" data-testid="tab-usuarios">Usuários</TabsTrigger>
+          <TabsTrigger value="atividade" className="min-w-fit" data-testid="tab-atividade">Atividade</TabsTrigger>
+          <TabsTrigger value="overview" className="min-w-fit">Visão Geral</TabsTrigger>
+          <TabsTrigger value="kickoff" className="min-w-fit">Kickoff</TabsTrigger>
+          <TabsTrigger value="diagnostics" className="min-w-fit">Diagnóstico</TabsTrigger>
+          <TabsTrigger value="actions" className="min-w-fit">Plano de Ação</TabsTrigger>
+          <TabsTrigger value="risks" className="min-w-fit">Riscos</TabsTrigger>
+          <TabsTrigger value="team" className="min-w-fit">Equipe</TabsTrigger>
         </TabsList>
-        
+
+        <TabsContent value="cadastro">
+          <CadastroTab clinic={clinic} />
+        </TabsContent>
+        <TabsContent value="financial">
+          <FinancialTab clinicId={id} clinic={clinic} />
+        </TabsContent>
+        <TabsContent value="status">
+          <StatusTab clinic={clinic} />
+        </TabsContent>
+        <TabsContent value="usuarios">
+          <UsuariosTab clinicId={id} />
+        </TabsContent>
+        <TabsContent value="atividade">
+          <AtividadeTab clinicId={id} />
+        </TabsContent>
         <TabsContent value="overview">
           <OverviewTab clinic={clinic} />
         </TabsContent>
@@ -99,9 +122,6 @@ export default function ClinicDetail() {
         </TabsContent>
         <TabsContent value="team">
           <TeamTab clinicId={id} />
-        </TabsContent>
-        <TabsContent value="financial">
-          <FinancialTab clinicId={id} />
         </TabsContent>
       </Tabs>
     </div>

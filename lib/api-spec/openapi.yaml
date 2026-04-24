@@ -223,6 +223,147 @@ paths:
               schema:
                 $ref: "#/components/schemas/Clinic"
 
+  # ─── STATUS HISTORY ─────────────────────────────────────────────────────────
+  /clinics/{id}/status-history:
+    get:
+      operationId: getClinicStatusHistory
+      tags: [clinics]
+      summary: Get clinic status change history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Status history list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StatusHistory"
+
+  # ─── SOCIOS ─────────────────────────────────────────────────────────────────
+  /clinics/{clinicId}/socios:
+    get:
+      operationId: listSocios
+      tags: [clinics]
+      summary: List partners (QSA) for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Socios list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Socio"
+    post:
+      operationId: createSocio
+      tags: [clinics]
+      summary: Add a partner to a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSocioBody"
+      responses:
+        "201":
+          description: Created socio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Socio"
+
+  /clinics/{clinicId}/socios/{socioId}:
+    patch:
+      operationId: updateSocio
+      tags: [clinics]
+      summary: Update a partner
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: socioId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSocioBody"
+      responses:
+        "200":
+          description: Updated socio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Socio"
+    delete:
+      operationId: deleteSocio
+      tags: [clinics]
+      summary: Remove a partner
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: socioId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── USER INVITE ─────────────────────────────────────────────────────────────
+  /clinics/{id}/invite-user:
+    post:
+      operationId: inviteClinicUser
+      tags: [clinics]
+      summary: Invite a user to a clinic via email
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteUserBody"
+      responses:
+        "200":
+          description: Invite sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteUserResponse"
+
   # ─── ACTIVITY ───────────────────────────────────────────────────────────────
   /clinics/{clinicId}/activity:
     get:
@@ -768,6 +909,8 @@ components:
           type: integer
         clinicasTrial:
           type: integer
+        clinicasSuspensas:
+          type: integer
         clinicasProspect:
           type: integer
         receitaMensalTotal:
@@ -786,6 +929,7 @@ components:
         - totalClinics
         - clinicasAtivas
         - clinicasTrial
+        - clinicasSuspensas
         - clinicasProspect
         - receitaMensalTotal
         - receitaPipeline
@@ -852,12 +996,30 @@ components:
           type: ["number", "null"]
         valorRecorrente:
           type: ["number", "null"]
+        suspensoMotivo:
+          type: ["string", "null"]
         formaPagamento:
           type: ["string", "null"]
         diaVencimento:
           type: ["integer", "null"]
+        reajusteIndice:
+          type: ["string", "null"]
         inicioRecorrencia:
           type: ["string", "null"]
+        cnae:
+          type: ["string", "null"]
+        situacaoCadastral:
+          type: ["string", "null"]
+        capitalSocial:
+          type: ["number", "null"]
+        dataAbertura:
+          type: ["string", "null"]
+        propostaUrl:
+          type: ["string", "null"]
+          description: "URL to the uploaded proposal PDF in Supabase Storage"
+        contratoUrl:
+          type: ["string", "null"]
+          description: "URL to the uploaded signed contract PDF in Supabase Storage"
         createdAt:
           type: string
         updatedAt:
@@ -930,6 +1092,27 @@ components:
           type: ["string", "null"]
         diaVencimento:
           type: ["integer", "null"]
+        cnae:
+          type: ["string", "null"]
+        situacaoCadastral:
+          type: ["string", "null"]
+        capitalSocial:
+          type: ["number", "null"]
+        dataAbertura:
+          type: ["string", "null"]
+        qsa:
+          type: array
+          items:
+            type: object
+            properties:
+              nome:
+                type: string
+              qualificacao:
+                type: ["string", "null"]
+              dataEntrada:
+                type: ["string", "null"]
+            required:
+              - nome
       required:
         - nome
         - cnpj
@@ -976,7 +1159,21 @@ components:
           type: ["string", "null"]
         diaVencimento:
           type: ["integer", "null"]
+        reajusteIndice:
+          type: ["string", "null"]
         inicioRecorrencia:
+          type: ["string", "null"]
+        cnae:
+          type: ["string", "null"]
+        situacaoCadastral:
+          type: ["string", "null"]
+        capitalSocial:
+          type: ["number", "null"]
+        dataAbertura:
+          type: ["string", "null"]
+        propostaUrl:
+          type: ["string", "null"]
+        contratoUrl:
           type: ["string", "null"]
 
     UpdateClinicStatusBody:
@@ -991,6 +1188,104 @@ components:
           type: ["string", "null"]
       required:
         - status
+
+    # ─── STATUS HISTORY ─────────────────────────────────────────────────────
+    StatusHistory:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        status:
+          type: string
+        motivo:
+          type: ["string", "null"]
+        autorNome:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - status
+        - createdAt
+
+    # ─── SOCIO ──────────────────────────────────────────────────────────────
+    Socio:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        nome:
+          type: string
+        qualificacao:
+          type: ["string", "null"]
+        qualId:
+          type: ["string", "null"]
+        dataEntrada:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - nome
+        - createdAt
+        - updatedAt
+
+    CreateSocioBody:
+      type: object
+      properties:
+        nome:
+          type: string
+        qualificacao:
+          type: ["string", "null"]
+        qualId:
+          type: ["string", "null"]
+        dataEntrada:
+          type: ["string", "null"]
+      required:
+        - nome
+
+    UpdateSocioBody:
+      type: object
+      properties:
+        nome:
+          type: ["string", "null"]
+        qualificacao:
+          type: ["string", "null"]
+        qualId:
+          type: ["string", "null"]
+        dataEntrada:
+          type: ["string", "null"]
+
+    # ─── USER INVITE ─────────────────────────────────────────────────────────
+    InviteUserBody:
+      type: object
+      properties:
+        email:
+          type: string
+        role:
+          type: string
+      required:
+        - email
+        - role
+
+    InviteUserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
 
     # ─── ACTIVITY ───────────────────────────────────────────────────────────
     Activity:
@@ -1278,6 +1573,12 @@ components:
           type: ["string", "null"]
         temAcessoPlataforma:
           type: boolean
+        inviteStatus:
+          type: ["string", "null"]
+          description: "pending | accepted | revoked"
+        lastAccessAt:
+          type: ["string", "null"]
+          description: "ISO timestamp of last platform login"
         createdAt:
           type: string
       required:

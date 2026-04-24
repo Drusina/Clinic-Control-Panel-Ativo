@@ -32,7 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Action, ActionColuna } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { Action, ActionColuna } from "@workspace/api-client-react";
 
 const columns: { id: ActionColuna; title: string }[] = [
   { id: "backlog", title: "Backlog" },
@@ -105,7 +105,7 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     if (editingAction) {
       updateAction.mutate(
-        { clinicId, id: editingAction.id, data: values as any },
+        { id: editingAction.id, data: values },
         {
           onSuccess: () => {
             toast({ title: "Ação atualizada" });
@@ -133,7 +133,7 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
   const handleDelete = (id: string) => {
     if (confirm("Deseja realmente excluir esta ação?")) {
       deleteAction.mutate(
-        { clinicId, id },
+        { id },
         {
           onSuccess: () => {
             toast({ title: "Ação excluída" });
@@ -146,7 +146,7 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
 
   const moveAction = (id: string, novaColuna: ActionColuna) => {
     updateAction.mutate(
-      { clinicId, id, data: { coluna: novaColuna } },
+      { id, data: { coluna: novaColuna } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListActionsQueryKey(clinicId) });

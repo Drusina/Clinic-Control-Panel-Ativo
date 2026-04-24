@@ -21,6 +21,7 @@ export const GetDashboardSummaryResponse = zod.object({
   totalClinics: zod.number(),
   clinicasAtivas: zod.number(),
   clinicasTrial: zod.number(),
+  clinicasSuspensas: zod.number(),
   clinicasProspect: zod.number(),
   receitaMensalTotal: zod.number(),
   receitaPipeline: zod.number(),
@@ -99,9 +100,25 @@ export const ListClinicsResponse = zod.object({
       progresso: zod.number(),
       valorImplantacao: zod.number().nullish(),
       valorRecorrente: zod.number().nullish(),
+      suspensoMotivo: zod.string().nullish(),
       formaPagamento: zod.string().nullish(),
       diaVencimento: zod.number().nullish(),
+      reajusteIndice: zod.string().nullish(),
       inicioRecorrencia: zod.string().nullish(),
+      cnae: zod.string().nullish(),
+      situacaoCadastral: zod.string().nullish(),
+      capitalSocial: zod.number().nullish(),
+      dataAbertura: zod.string().nullish(),
+      propostaUrl: zod
+        .string()
+        .nullish()
+        .describe("URL to the uploaded proposal PDF in Supabase Storage"),
+      contratoUrl: zod
+        .string()
+        .nullish()
+        .describe(
+          "URL to the uploaded signed contract PDF in Supabase Storage",
+        ),
       createdAt: zod.string(),
       updatedAt: zod.string(),
     }),
@@ -132,6 +149,19 @@ export const CreateClinicBody = zod.object({
   valorRecorrente: zod.number().nullish(),
   formaPagamento: zod.string().nullish(),
   diaVencimento: zod.number().nullish(),
+  cnae: zod.string().nullish(),
+  situacaoCadastral: zod.string().nullish(),
+  capitalSocial: zod.number().nullish(),
+  dataAbertura: zod.string().nullish(),
+  qsa: zod
+    .array(
+      zod.object({
+        nome: zod.string(),
+        qualificacao: zod.string().nullish(),
+        dataEntrada: zod.string().nullish(),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -169,9 +199,23 @@ export const GetClinicResponse = zod.object({
   progresso: zod.number(),
   valorImplantacao: zod.number().nullish(),
   valorRecorrente: zod.number().nullish(),
+  suspensoMotivo: zod.string().nullish(),
   formaPagamento: zod.string().nullish(),
   diaVencimento: zod.number().nullish(),
+  reajusteIndice: zod.string().nullish(),
   inicioRecorrencia: zod.string().nullish(),
+  cnae: zod.string().nullish(),
+  situacaoCadastral: zod.string().nullish(),
+  capitalSocial: zod.number().nullish(),
+  dataAbertura: zod.string().nullish(),
+  propostaUrl: zod
+    .string()
+    .nullish()
+    .describe("URL to the uploaded proposal PDF in Supabase Storage"),
+  contratoUrl: zod
+    .string()
+    .nullish()
+    .describe("URL to the uploaded signed contract PDF in Supabase Storage"),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -203,7 +247,14 @@ export const UpdateClinicBody = zod.object({
   valorRecorrente: zod.number().nullish(),
   formaPagamento: zod.string().nullish(),
   diaVencimento: zod.number().nullish(),
+  reajusteIndice: zod.string().nullish(),
   inicioRecorrencia: zod.string().nullish(),
+  cnae: zod.string().nullish(),
+  situacaoCadastral: zod.string().nullish(),
+  capitalSocial: zod.number().nullish(),
+  dataAbertura: zod.string().nullish(),
+  propostaUrl: zod.string().nullish(),
+  contratoUrl: zod.string().nullish(),
 });
 
 export const UpdateClinicResponse = zod.object({
@@ -234,9 +285,23 @@ export const UpdateClinicResponse = zod.object({
   progresso: zod.number(),
   valorImplantacao: zod.number().nullish(),
   valorRecorrente: zod.number().nullish(),
+  suspensoMotivo: zod.string().nullish(),
   formaPagamento: zod.string().nullish(),
   diaVencimento: zod.number().nullish(),
+  reajusteIndice: zod.string().nullish(),
   inicioRecorrencia: zod.string().nullish(),
+  cnae: zod.string().nullish(),
+  situacaoCadastral: zod.string().nullish(),
+  capitalSocial: zod.number().nullish(),
+  dataAbertura: zod.string().nullish(),
+  propostaUrl: zod
+    .string()
+    .nullish()
+    .describe("URL to the uploaded proposal PDF in Supabase Storage"),
+  contratoUrl: zod
+    .string()
+    .nullish()
+    .describe("URL to the uploaded signed contract PDF in Supabase Storage"),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -297,11 +362,128 @@ export const UpdateClinicStatusResponse = zod.object({
   progresso: zod.number(),
   valorImplantacao: zod.number().nullish(),
   valorRecorrente: zod.number().nullish(),
+  suspensoMotivo: zod.string().nullish(),
   formaPagamento: zod.string().nullish(),
   diaVencimento: zod.number().nullish(),
+  reajusteIndice: zod.string().nullish(),
   inicioRecorrencia: zod.string().nullish(),
+  cnae: zod.string().nullish(),
+  situacaoCadastral: zod.string().nullish(),
+  capitalSocial: zod.number().nullish(),
+  dataAbertura: zod.string().nullish(),
+  propostaUrl: zod
+    .string()
+    .nullish()
+    .describe("URL to the uploaded proposal PDF in Supabase Storage"),
+  contratoUrl: zod
+    .string()
+    .nullish()
+    .describe("URL to the uploaded signed contract PDF in Supabase Storage"),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+});
+
+/**
+ * @summary Get clinic status change history
+ */
+export const GetClinicStatusHistoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetClinicStatusHistoryResponseItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  status: zod.string(),
+  motivo: zod.string().nullish(),
+  autorNome: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const GetClinicStatusHistoryResponse = zod.array(
+  GetClinicStatusHistoryResponseItem,
+);
+
+/**
+ * @summary List partners (QSA) for a clinic
+ */
+export const ListSociosParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ListSociosResponseItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  nome: zod.string(),
+  qualificacao: zod.string().nullish(),
+  qualId: zod.string().nullish(),
+  dataEntrada: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListSociosResponse = zod.array(ListSociosResponseItem);
+
+/**
+ * @summary Add a partner to a clinic
+ */
+export const CreateSocioParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const CreateSocioBody = zod.object({
+  nome: zod.string(),
+  qualificacao: zod.string().nullish(),
+  qualId: zod.string().nullish(),
+  dataEntrada: zod.string().nullish(),
+});
+
+/**
+ * @summary Update a partner
+ */
+export const UpdateSocioParams = zod.object({
+  clinicId: zod.coerce.string(),
+  socioId: zod.coerce.string(),
+});
+
+export const UpdateSocioBody = zod.object({
+  nome: zod.string().nullish(),
+  qualificacao: zod.string().nullish(),
+  qualId: zod.string().nullish(),
+  dataEntrada: zod.string().nullish(),
+});
+
+export const UpdateSocioResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  nome: zod.string(),
+  qualificacao: zod.string().nullish(),
+  qualId: zod.string().nullish(),
+  dataEntrada: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Remove a partner
+ */
+export const DeleteSocioParams = zod.object({
+  clinicId: zod.coerce.string(),
+  socioId: zod.coerce.string(),
+});
+
+/**
+ * @summary Invite a user to a clinic via email
+ */
+export const InviteClinicUserParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const InviteClinicUserBody = zod.object({
+  email: zod.string(),
+  role: zod.string(),
+});
+
+export const InviteClinicUserResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
 });
 
 /**
@@ -637,6 +819,11 @@ export const ListTeamResponseItem = zod.object({
   email: zod.string().nullish(),
   whatsapp: zod.string().nullish(),
   temAcessoPlataforma: zod.boolean(),
+  inviteStatus: zod.string().nullish().describe("pending | accepted | revoked"),
+  lastAccessAt: zod
+    .string()
+    .nullish()
+    .describe("ISO timestamp of last platform login"),
   createdAt: zod.string(),
 });
 export const ListTeamResponse = zod.array(ListTeamResponseItem);
@@ -685,6 +872,11 @@ export const UpdateTeamMemberResponse = zod.object({
   email: zod.string().nullish(),
   whatsapp: zod.string().nullish(),
   temAcessoPlataforma: zod.boolean(),
+  inviteStatus: zod.string().nullish().describe("pending | accepted | revoked"),
+  lastAccessAt: zod
+    .string()
+    .nullish()
+    .describe("ISO timestamp of last platform login"),
   createdAt: zod.string(),
 });
 

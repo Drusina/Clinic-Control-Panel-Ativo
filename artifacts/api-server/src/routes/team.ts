@@ -16,6 +16,8 @@ function mapTeamMember(t: typeof teamTable.$inferSelect) {
     email: t.email,
     whatsapp: t.whatsapp,
     temAcessoPlataforma: t.temAcessoPlataforma ?? false,
+    inviteStatus: t.inviteStatus ?? null,
+    lastAccessAt: t.lastAccessAt ? t.lastAccessAt.toISOString() : null,
     createdAt: t.createdAt.toISOString(),
   };
 }

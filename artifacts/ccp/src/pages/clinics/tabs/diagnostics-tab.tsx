@@ -36,7 +36,7 @@ export default function DiagnosticsTab({ clinicId }: { clinicId: string }) {
 
   const handleComplete = (id: string) => {
     completeDiagnostic.mutate(
-      { clinicId, id },
+      { id },
       {
         onSuccess: () => {
           toast({ title: "Diagnóstico concluído", description: "O diagnóstico foi marcado como concluído." });

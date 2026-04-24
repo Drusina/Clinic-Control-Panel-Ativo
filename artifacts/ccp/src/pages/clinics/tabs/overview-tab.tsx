@@ -1,4 +1,4 @@
-import { Clinic } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { Clinic } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Building, Mail, Phone, MapPin, User, Calendar } from "lucide-react";
