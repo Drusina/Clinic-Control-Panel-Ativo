@@ -1,0 +1,256 @@
+-- =====================================================================
+-- IONEX360 — Seed de dados do ICS (primeiro cliente)
+-- Rodar DEPOIS de 01_schema.sql e DEPOIS de carregar as 150 perguntas
+-- =====================================================================
+
+-- ID fixo para referência
+DO $$
+DECLARE
+  ics_id UUID := 'a0000000-1111-2222-3333-000000000001';
+BEGIN
+
+-- 1. CLÍNICA ICS
+INSERT INTO clinics (
+  id, nome, fantasia, cnpj, razao_social, cidade, uf, cep, endereco, cnae,
+  data_abertura, capital_social, situacao_receita,
+  responsavel, email, whatsapp, cargo,
+  plano, status, etapa, progresso,
+  valor_implantacao, valor_recorrente, forma_pagamento, dia_vencimento,
+  reajuste_indice, inicio_recorrencia
+) VALUES (
+  ics_id,
+  'Instituto de Cardiologia de Sorriso',
+  'ICS Cardiologia',
+  '44.593.386/0001-68',
+  'Instituto de Cardiologia de Sorriso Ltda',
+  'Sorriso', 'MT', '78891-072',
+  'Rua das Orquídeas, 825, Alphaville',
+  '8630-5/03 — Atividade médica ambulatorial restrita a consultas',
+  '2020-03-15', 500000.00, 'ATIVA',
+  'Dr. Edgar Stroppa Lamas', 'edgar@ics.com.br', '(65) 9 9123-4567', 'Sócio-Administrador',
+  'enterprise', 'ativa', 3, 32,
+  10000.00, 5000.00, 'boleto', 15,
+  'IGPM/FGV', '2026-07-15'
+);
+
+-- 2. HISTÓRICO DE STATUS
+INSERT INTO clinic_status_history (clinic_id, de, para, motivo, tipo, created_at) VALUES
+  (ics_id, 'prospect', 'proposta', 'Proposta enviada por email', 'outro', '2026-03-28 10:00'::timestamptz),
+  (ics_id, 'proposta', 'contrato', 'Proposta aceita — minuta gerada', 'outro', '2026-04-10 14:30'::timestamptz),
+  (ics_id, 'contrato', 'ativa', 'Contrato 100% assinado via Autentique', 'outro', '2026-04-18 09:15'::timestamptz);
+
+-- 3. TIMELINE DE ATIVIDADES
+INSERT INTO clinic_activity (clinic_id, tipo, titulo, descricao, created_at) VALUES
+  (ics_id, 'cadastro', 'Clínica cadastrada no IONEX360', 'Dados carregados via BrasilAPI', '2026-04-15 09:00'::timestamptz),
+  (ics_id, 'proposta_enviada', 'Proposta comercial enviada', 'R$ 10.000/mês (implantação) + R$ 5.000/mês (recorrência)', '2026-03-28 10:00'::timestamptz),
+  (ics_id, 'proposta_aceita', 'Proposta aceita', 'Resposta formal por email · Dr. Edgar', '2026-04-12 16:45'::timestamptz),
+  (ics_id, 'contrato_assinado', 'Contrato assinado via Autentique', '4/4 signatários · documento arquivado', '2026-04-18 09:15'::timestamptz),
+  (ics_id, 'kickoff_realizado', 'Kick-off executivo realizado', 'Reunião presencial com 5 participantes · 2h30', '2026-04-22 09:00'::timestamptz);
+
+-- 4. KICKOFF (ata)
+INSERT INTO kickoffs (clinic_id, data_realizacao, modalidade, duracao_minutos, facilitador, participantes, pauta, proximos_passos, status) VALUES (
+  ics_id, '2026-04-22', 'presencial', 150, 'Rafaela Calgaro · Blu Sollutions',
+  '["Dr. Edgar Stroppa Lamas (Sócio)","Dra. Júlia Ferraz (Op.)","Carla Menezes (Fin.)","Henrique Tavares (TI)","Rafael Costa (MKT)"]'::jsonb,
+  ARRAY[
+    'Apresentação da metodologia IONEX360 e cronograma de 90 dias',
+    'Validação dos 6 módulos Fase 1 (Visão Executiva, Financeiro, Operação, Docs, Plano de Ação, Riscos)',
+    'Levantamento inicial de fontes de dados — confirmado Amigo Clinic a validar',
+    'Definição da cadência: semanal no mês 1, quinzenal meses 2-3',
+    'Próximos passos e atribuição de responsáveis pelos 8 pilares'
+  ],
+  '[
+    {"acao":"Coleta dos docs constitutivos pendentes","responsavel":"ICS","prazo":"2026-04-25"},
+    {"acao":"Envio de credenciais do Amigo Clinic","responsavel":"TI","prazo":"2026-04-24"},
+    {"acao":"Entrevistas individuais com gestores","responsavel":"Blu","prazo":"2026-04-28"},
+    {"acao":"Kickoff com equipe operacional","responsavel":"Ambos","prazo":"2026-04-30"}
+  ]'::jsonb,
+  'realizado'
+);
+
+-- 5. PERFIL OPERACIONAL
+INSERT INTO perfil_operacional (clinic_id, faturamento_mensal, ticket_medio, pacientes_ativos, atendimentos_mes, especialidades, horario_funcionamento, modelo_particular, modelo_convenio, modelo_sus) VALUES (
+  ics_id, 87000.00, 450.00, 1840, 580,
+  ARRAY['Cardiologia','Ecocardiograma','Holter','MAPA','Teste Ergométrico'],
+  'Seg-Sex 7h-19h · Sáb 7h-12h', 40, 55, 5
+);
+
+-- 6. SÓCIOS (QSA — virá do BrasilAPI mas já populando)
+INSERT INTO socios (clinic_id, nome, cpf, percentual, cargo, decisor, email, whatsapp, origem) VALUES
+  (ics_id, 'Dr. Edgar Stroppa Lamas', '123.***.***-01', 60.00, 'Sócio-Administrador', true, 'edgar@ics.com.br', '(65) 9 9123-4567', 'brasilapi'),
+  (ics_id, 'Dra. Patricia Lamas',      '456.***.***-02', 40.00, 'Sócia',                true, 'patricia@ics.com.br', '(65) 9 9876-5432', 'brasilapi');
+
+-- 7. EQUIPE INTERNA
+INSERT INTO equipe_interna (clinic_id, nome, funcao, area, vinculo, email, whatsapp, tem_acesso_plataforma) VALUES
+  (ics_id, 'Dra. Júlia Ferraz',   'Gerente Operacional', 'Administrativo', 'CLT', 'julia@ics.com.br',    '(65) 9 9111-2222', true),
+  (ics_id, 'Carla Menezes',        'Gerente Financeira',  'Administrativo', 'CLT', 'carla@ics.com.br',    '(65) 9 9333-4444', true),
+  (ics_id, 'Dr. Marcos Ribeiro',   'Cardiologista',       'Clínico',        'PJ',  'marcos@ics.com.br',   '(65) 9 9555-6666', false),
+  (ics_id, 'Enf. Letícia Souza',   'Enfermeira-Chefe',    'Clínico',        'CLT', 'leticia@ics.com.br',  '(65) 9 9777-8888', true),
+  (ics_id, 'Amanda Rodrigues',     'Coord. Atendimento',  'Atendimento',    'CLT', 'amanda@ics.com.br',   '(65) 9 9111-3333', true),
+  (ics_id, 'Rafael Costa',         'Coord. Marketing',    'Marketing',      'PJ',  'rafael@ics.com.br',   '(65) 9 9222-4444', true),
+  (ics_id, 'Henrique Tavares',     'Analista de TI',      'TI',             'CLT', 'henrique@ics.com.br', '(65) 9 9333-5555', true);
+
+-- 8. PARCEIROS EXTERNOS
+INSERT INTO parceiros_externos (clinic_id, tipo, nome_empresa, responsavel, registro_profissional, telefone, email) VALUES
+  (ics_id, 'contador',    'Contábil Sorriso Ltda',     'Cláudio Menezes', 'CRC-MT 012345',    '(65) 3244-1100', 'claudio@contabilsorriso.com.br'),
+  (ics_id, 'advogado',    'Silva & Lamas Advogados',   'Dr. Pedro Silva', 'OAB-MT 15.432',    '(65) 3244-2200', 'pedro@slaadv.com.br'),
+  (ics_id, 'marketing',   'Mídia Pulse Agência',       'Carolina Duarte', NULL,               '(65) 3244-3300', 'carolina@midiapulse.com.br'),
+  (ics_id, 'banco',       'Banco Sicredi MT',          'Gerente Roberto', 'Ag. 0823',         '(65) 3244-4400', 'gerencia.sorriso@sicredi.com.br');
+
+-- 9. SISTEMAS EM USO
+INSERT INTO sistemas_uso (clinic_id, nome, fornecedor, tipo, api_disponivel, responsavel_interno, criticidade) VALUES
+  (ics_id, 'Amigo Clinic',         'Amigo Sistemas', 'ERP/Agenda',   'a_validar', 'Henrique T.', 'alto'),
+  (ics_id, 'SmartGest Financeiro', 'SmartGest',      'Financeiro',   'sim',       'Carla M.',    'alto'),
+  (ics_id, 'RD Station Marketing', 'RD',             'CRM/MKT',      'sim',       'Rafael C.',   'medio'),
+  (ics_id, 'Google Workspace',     'Google',         'E-mail/Docs',  'sim',       'Henrique T.', 'medio'),
+  (ics_id, 'WhatsApp Business',    'Meta',           'Comunicação',  'sim',       'Amanda R.',   'baixo');
+
+-- 10. DOCUMENTOS CONSTITUTIVOS (6 enviados, 3 pendentes)
+INSERT INTO docs_constitutivos (clinic_id, categoria, nome, obrigatorio, storage_path, tamanho, enviado_em) VALUES
+  (ics_id, 'Jurídico',     'Contrato Social consolidado', true,  'clinics/ics/docs/CONTRATO_SOCIAL_ICS.pdf',  2400000, '2026-04-15'::timestamptz),
+  (ics_id, 'Jurídico',     'Cartão CNPJ',                 true,  'clinics/ics/docs/CNPJ_ICS.pdf',             340000,  '2026-04-15'::timestamptz),
+  (ics_id, 'Funcionamento','Alvará de Funcionamento',     true,  'clinics/ics/docs/ALVARA_2026.pdf',          890000,  '2026-04-16'::timestamptz),
+  (ics_id, 'Funcionamento','Licença Sanitária (VISA)',    true,  NULL, NULL, NULL),
+  (ics_id, 'Funcionamento','CRM Responsável Técnico',     true,  'clinics/ics/docs/CRM_RT_EDGAR.pdf',         210000,  '2026-04-17'::timestamptz),
+  (ics_id, 'Financeiro',   'DRE últimos 12 meses',        false, NULL, NULL, NULL),
+  (ics_id, 'Financeiro',   'Balanço Patrimonial 2025',    false, 'clinics/ics/docs/BALANCO_2025.pdf',         1100000, '2026-04-18'::timestamptz),
+  (ics_id, 'Estrutura',    'Organograma funcional',       false, NULL, NULL, NULL),
+  (ics_id, 'Seguros',      'Apólice RC Profissional',     false, 'clinics/ics/docs/APOLICE_RC.pdf',           450000,  '2026-04-16'::timestamptz);
+
+-- 11. LGPD — 6 TERMOS (todos pendentes, para demonstrar o fluxo)
+INSERT INTO lgpd_termos (clinic_id, slug, nome, descricao, status) VALUES
+  (ics_id, 'tratamento_dados',    'Autorização de Tratamento de Dados',   'Autoriza a IONEX360 a coletar, armazenar e tratar dados da clínica conforme a LGPD.', 'pendente'),
+  (ics_id, 'nda',                 'Acordo de Confidencialidade (NDA)',    'Garante o sigilo de informações estratégicas, financeiras e operacionais.',          'pendente'),
+  (ics_id, 'acesso_sistemas',     'Autorização de Acesso a Sistemas',     'Permite acesso de leitura/escrita aos sistemas internos da clínica para o diagnóstico.', 'pendente'),
+  (ics_id, 'contato_terceiros',   'Autorização para Contato com Terceiros','Autoriza interação com fornecedores, contadores, advogados e parceiros da clínica.', 'pendente'),
+  (ics_id, 'dpo',                 'Nomeação de Encarregado (DPO)',        'Indica o responsável pela proteção de dados (DPO) durante o projeto.',              'pendente'),
+  (ics_id, 'politica_privacidade','Política de Privacidade',              'Aceite da Política de Privacidade aplicada ao tratamento de dados pessoais.',        'pendente');
+
+-- 12. DOCUMENTOS COMERCIAIS
+INSERT INTO clinic_documents (clinic_id, tipo, nome, storage_path, status, assinado_em, signatarios) VALUES
+  (ics_id, 'proposta', 'Proposta Comercial ICS',   'clinics/ics/comercial/PROPOSTA_ICS.pdf',  'enviado', NULL, '[]'::jsonb),
+  (ics_id, 'contrato', 'Contrato de Prestação ICS','clinics/ics/comercial/CONTRATO_ICS.pdf',  'assinado', '2026-04-18 09:15'::timestamptz,
+    '[{"nome":"Dr. Edgar Stroppa Lamas","email":"edgar@ics.com.br","papel":"CONTRATANTE","assinou_em":"2026-04-18"},{"nome":"Rafaela Calgaro","email":"rafaela@blusolutions.com.br","papel":"CONTRATADA","assinou_em":"2026-04-17"},{"nome":"Testemunha 1","email":"test1@ics.com.br","papel":"TESTEMUNHA","assinou_em":"2026-04-18"},{"nome":"Testemunha 2","email":"test2@ics.com.br","papel":"TESTEMUNHA","assinou_em":"2026-04-18"}]'::jsonb
+  );
+
+-- 13. FATURAS
+INSERT INTO faturas (clinic_id, numero, vencimento, valor, status, pago_em) VALUES
+  (ics_id, '2026-0001', '2026-05-15', 10000.00, 'pendente', NULL),
+  (ics_id, '2026-0002', '2026-06-15', 10000.00, 'pendente', NULL);
+
+-- 14. DIAGNÓSTICO INICIAL (com scores da proposta)
+INSERT INTO diagnosticos (id, clinic_id, versao, status, iniciado_em, concluido_em, score_global, scores_pilares, metas_pilares, insights_ia) VALUES (
+  'b0000000-1111-2222-3333-000000000001'::uuid,
+  ics_id, 1, 'concluido',
+  '2026-03-20 10:00'::timestamptz, '2026-03-25 17:00'::timestamptz,
+  3.10,
+  '{
+    "estrategia": 3.1, "financeiro": 3.0, "contabil": 3.3, "marketing": 2.4,
+    "operacoes": 3.1, "pessoas": 2.9, "tecnologia": 3.9, "compliance": 3.0
+  }'::jsonb,
+  '{
+    "estrategia": 4.0, "financeiro": 4.2, "contabil": 4.0, "marketing": 3.8,
+    "operacoes": 4.0, "pessoas": 4.0, "tecnologia": 4.2, "compliance": 4.0
+  }'::jsonb,
+  '{
+    "pontos_fortes": [
+      "Tecnologia madura (3,9) viabiliza governança por dados",
+      "Contabilidade estruturada (3,3) simplifica DRE gerencial",
+      "Estratégia alinhada entre sócios"
+    ],
+    "pontos_criticos": [
+      "Marketing sem mensuração de ROI (2,4) — maior lacuna",
+      "Ausência de leitura de margem por serviço",
+      "Turnover no atendimento impacta experiência"
+    ],
+    "acoes_sugeridas": [
+      {"titulo":"DRE gerencial com margem por procedimento","pilar":"financeiro","prio":"alta"},
+      {"titulo":"Matriz de indicadores de aquisição/conversão","pilar":"marketing","prio":"alta"},
+      {"titulo":"Programa de retenção da equipe","pilar":"pessoas","prio":"media"}
+    ]
+  }'::jsonb
+);
+
+-- 15. DELEGAÇÕES (8 pilares, 1 ainda sem delegação)
+INSERT INTO delegacoes (clinic_id, diagnostico_id, pilar_id, nivel1_nome, nivel1_role, status, progresso, prazo)
+SELECT 
+  ics_id,
+  'b0000000-1111-2222-3333-000000000001'::uuid,
+  p.id,
+  CASE p.slug
+    WHEN 'estrategia'  THEN 'Dr. Edgar Stroppa'
+    WHEN 'financeiro'  THEN 'Carla Menezes'
+    WHEN 'contabil'    THEN 'Carla Menezes'
+    WHEN 'marketing'   THEN 'Rafael Costa'
+    WHEN 'operacoes'   THEN 'Dra. Júlia Ferraz'
+    WHEN 'pessoas'     THEN 'Amanda Rodrigues'
+    WHEN 'tecnologia'  THEN 'Henrique Tavares'
+    WHEN 'compliance'  THEN NULL
+  END,
+  CASE p.slug
+    WHEN 'estrategia'  THEN 'Sócio-Administrador'
+    WHEN 'financeiro'  THEN 'Gerente Financeira'
+    WHEN 'contabil'    THEN 'Gerente Financeira'
+    WHEN 'marketing'   THEN 'Coord. Marketing'
+    WHEN 'operacoes'   THEN 'Gerente Operacional'
+    WHEN 'pessoas'     THEN 'Coord. Atendimento'
+    WHEN 'tecnologia'  THEN 'Analista de TI'
+    WHEN 'compliance'  THEN NULL
+  END,
+  CASE p.slug
+    WHEN 'pessoas'    THEN 'concluido'
+    WHEN 'marketing'  THEN 'pendente'
+    WHEN 'compliance' THEN 'nao_delegado'
+    ELSE 'andamento'
+  END,
+  CASE p.slug
+    WHEN 'estrategia'  THEN 55
+    WHEN 'financeiro'  THEN 38
+    WHEN 'contabil'    THEN 22
+    WHEN 'marketing'   THEN 0
+    WHEN 'operacoes'   THEN 65
+    WHEN 'pessoas'     THEN 100
+    WHEN 'tecnologia'  THEN 72
+    WHEN 'compliance'  THEN 0
+  END,
+  CASE p.slug
+    WHEN 'compliance' THEN NULL
+    ELSE '2026-05-15'::DATE
+  END
+FROM pilares p;
+
+-- 16. TOP 8 RISCOS ICS
+INSERT INTO riscos (clinic_id, nome, pilar_id, probabilidade, impacto, responsavel, status)
+VALUES
+  (ics_id, 'Margem por serviço sem leitura gerencial', (SELECT id FROM pilares WHERE slug='financeiro'),  4, 5, 'Dr. Edgar',   'identificado'),
+  (ics_id, 'Dependência de controles paralelos em planilha', (SELECT id FROM pilares WHERE slug='tecnologia'), 4, 4, 'TI',       'identificado'),
+  (ics_id, 'Falta de mensuração de ROI de marketing', (SELECT id FROM pilares WHERE slug='marketing'),  5, 3, 'Diretoria',    'identificado'),
+  (ics_id, 'Processos operacionais sem padronização', (SELECT id FROM pilares WHERE slug='operacoes'),  3, 4, 'Gerência',    'em_mitigacao'),
+  (ics_id, 'Ausência de política LGPD formalizada',   (SELECT id FROM pilares WHERE slug='compliance'), 3, 5, 'Jurídico',     'identificado'),
+  (ics_id, 'Turnover elevado no atendimento',          (SELECT id FROM pilares WHERE slug='pessoas'),    3, 3, 'RH',           'identificado'),
+  (ics_id, 'Indicadores sem rotina de leitura executiva', (SELECT id FROM pilares WHERE slug='estrategia'), 2, 4, 'Sócios',   'em_mitigacao'),
+  (ics_id, 'Notas fiscais sem conciliação contábil',  (SELECT id FROM pilares WHERE slug='contabil'),   2, 3, 'Financeiro',   'identificado');
+
+-- 17. AÇÕES DO KANBAN (distribuídas nas 5 colunas)
+INSERT INTO acoes (clinic_id, titulo, pilar_id, responsavel_nome, prazo, prioridade, coluna) VALUES
+  (ics_id, 'Montar DRE gerencial mensal',              (SELECT id FROM pilares WHERE slug='financeiro'), 'Financeiro',   '2026-05-15', 'alta',  'doing'),
+  (ics_id, 'Definir matriz de indicadores-chave',      (SELECT id FROM pilares WHERE slug='estrategia'), 'Dr. Edgar',    '2026-05-10', 'alta',  'doing'),
+  (ics_id, 'Implementar controle de margem por serviço',(SELECT id FROM pilares WHERE slug='financeiro'),'Financeiro',   '2026-05-30', 'alta',  'todo'),
+  (ics_id, 'Documentar fluxo de agendamento',          (SELECT id FROM pilares WHERE slug='operacoes'),  'Operações',    '2026-06-05', 'media', 'todo'),
+  (ics_id, 'Criar política LGPD básica',                (SELECT id FROM pilares WHERE slug='compliance'), 'Jurídico',     '2026-05-20', 'media', 'backlog'),
+  (ics_id, 'Mapear jornada do paciente',                (SELECT id FROM pilares WHERE slug='marketing'),  'Marketing',    '2026-06-10', 'baixa', 'backlog'),
+  (ics_id, 'Reunião kickoff com sócios',                (SELECT id FROM pilares WHERE slug='estrategia'), 'Consultoria',  '2026-04-22', 'alta',  'done'),
+  (ics_id, 'Coleta inicial de documentos constitutivos',(SELECT id FROM pilares WHERE slug='compliance'), 'ICS',          '2026-04-20', 'media', 'done'),
+  (ics_id, 'Validar acesso Amigo Clinic',               (SELECT id FROM pilares WHERE slug='tecnologia'), 'TI',           '2026-05-25', 'alta',  'review');
+
+END $$;
+
+-- =====================================================================
+-- FIM DO SEED ICS
+-- Total populado:
+--   1 clínica, 3 mudanças de status, 5 eventos timeline
+--   1 kick-off completo, perfil operacional, 2 sócios
+--   7 funcionários, 4 parceiros, 5 sistemas
+--   9 docs constitutivos (6 enviados), 6 termos LGPD, 2 docs comerciais
+--   2 faturas, 1 diagnóstico com scores, 8 delegações
+--   8 riscos, 9 ações no Kanban
+-- =====================================================================

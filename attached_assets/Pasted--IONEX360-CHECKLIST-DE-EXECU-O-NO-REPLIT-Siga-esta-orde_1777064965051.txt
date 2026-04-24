@@ -1,0 +1,192 @@
+# ✅ IONEX360 — CHECKLIST DE EXECUÇÃO NO REPLIT
+
+> Siga esta ordem exata. Não avance sem validar a etapa anterior.
+
+---
+
+## 📋 PREPARAÇÃO (30 min)
+
+### 1. Criar projeto Supabase
+- [ ] Acessar [supabase.com](https://supabase.com) → New Project
+- [ ] Nome: `ionex360-prod` (ou `ionex360-dev`)
+- [ ] Região: **São Paulo (sa-east-1)**
+- [ ] Senha do banco: guardar em lugar seguro
+- [ ] Aguardar provisionamento (~2 min)
+
+### 2. Rodar os SQLs na ordem
+Abrir **SQL Editor** do Supabase e rodar na ordem:
+
+- [ ] Cole e execute `01_schema.sql` — cria todas as tabelas, RLS, seed dos 8 pilares
+- [ ] Carregue as **150 perguntas** via script Python (ou use o CSV da pasta local do Cowork: `diagnostico_pilares_questoes.csv`)
+- [ ] Cole e execute `02_seed_ics.sql` — cria o ICS como primeiro cliente
+
+### 3. Coletar as credenciais
+No Supabase, em **Settings → API**:
+- [ ] Project URL (`NEXT_PUBLIC_SUPABASE_URL`)
+- [ ] Anon key (`NEXT_PUBLIC_SUPABASE_ANON_KEY`)  
+- [ ] Service role key (`SUPABASE_SERVICE_ROLE_KEY`) — **secreta, nunca commitar**
+
+### 4. Criar buckets de Storage
+Em **Storage** do Supabase, criar buckets (private):
+- [ ] `clinic-docs` (proposta, contrato, docs constitutivos)
+- [ ] `evidencias` (uploads dos módulos de evidências)
+- [ ] `signed-docs` (PDFs assinados retornados pela Autentique)
+
+### 5. APIs externas
+- [ ] **Autentique:** criar conta em [autentique.com.br](https://autentique.com.br), gerar token em Integrações → API
+- [ ] **Claude API:** obter chave em [console.anthropic.com](https://console.anthropic.com)
+- [ ] **Resend:** criar conta em [resend.com](https://resend.com), pegar API key
+- [ ] **Meta WhatsApp** (opcional para M7): [developers.facebook.com](https://developers.facebook.com/apps)
+
+---
+
+## 🚀 EXECUÇÃO NO REPLIT
+
+### 6. Criar o Repl
+- [ ] Acessar [replit.com](https://replit.com) → **Create Repl**
+- [ ] Template: **Next.js**
+- [ ] Nome: `ionex360-command-center`
+
+### 7. Configurar Secrets
+Na aba **Secrets** do Replit, adicionar:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGc...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+ANTHROPIC_API_KEY=sk-ant-...
+AUTENTIQUE_API_TOKEN=...
+RESEND_API_KEY=re_...
+WHATSAPP_TOKEN=          (deixar vazio por enquanto)
+WHATSAPP_PHONE_ID=       (deixar vazio por enquanto)
+```
+
+### 8. Colar o prompt master no Agent
+- [ ] Abrir **Agent** (painel lateral direito)
+- [ ] Colar o conteúdo completo de `00_PROMPT_MASTER_IONEX.md` (da linha "INÍCIO DO PROMPT")
+- [ ] Enviar
+
+### 9. Durante a geração pelo Agent
+O Agent vai perguntar coisas. Respostas padrão:
+- Usar App Router? **Sim**
+- Instalar shadcn/ui? **Sim**
+- Dark mode? **Apenas dark, sem light**
+- Gerar todas as rotas? **Sim**
+
+---
+
+## ✅ VALIDAÇÃO POR MILESTONE
+
+### M1 — Infra (depois da primeira geração)
+- [ ] `npm run dev` roda sem erros
+- [ ] Consigo acessar `/` e vejo o dashboard com stepper e KPIs
+- [ ] ICS aparece como clínica ativa na sidebar
+- [ ] Role switcher funciona (troca menus)
+- [ ] Login via magic link funciona
+
+### M2 — Super Admin
+- [ ] Em `/admin/clinicas` vejo 1 clínica (ICS)
+- [ ] Clicando em "Nova clínica" → abre form com CNPJ
+- [ ] **Teste crítico:** digito um CNPJ real (ex: `44593386000168` do ICS) e clico em "Buscar na Receita" → campos são preenchidos automaticamente com dados da BrasilAPI
+- [ ] As 5 abas (Cadastro, Financeiro, Status, Usuários, Atividade) carregam
+- [ ] Consigo suspender → motivo obrigatório → log aparece na Atividade
+- [ ] Consigo reativar
+
+### M3 — Kick-off 8 abas
+- [ ] As 8 abas aparecem com os contadores corretos
+- [ ] **Teste crítico LGPD:** na aba LGPD vejo os 6 termos corretos (Tratamento de Dados, NDA, Acesso a Sistemas, Contato com Terceiros, DPO, Política de Privacidade)
+- [ ] Clico em "Aceite digital" → modal da Autentique abre com signatário pré-preenchido
+- [ ] Envio → documento é criado na Autentique (verificar no painel deles)
+- [ ] Link de assinatura chega no email
+- [ ] Depois de assinar no link → webhook atualiza o status no painel
+- [ ] Upload de PDF nos docs constitutivos funciona
+
+### M4 — Diagnóstico + IA
+- [ ] Wizard de diagnóstico carrega as perguntas (ou 40 seed, ou 150)
+- [ ] Respondo algumas → auto-save funciona
+- [ ] Ao concluir, calcula scores corretamente
+- [ ] Radar é renderizado com scores e meta tracejada
+- [ ] Clicando em "Gerar insights IA" chama a Claude API e retorna JSON estruturado
+- [ ] Pontos fortes/críticos/ações aparecem na tela
+
+### M5 — Delegação + Riscos + Ação
+- [ ] Delegação mostra os 8 pilares com responsáveis do ICS
+- [ ] Posso delegar pilar "Compliance" que está sem responsável
+- [ ] Sub-delegação funciona (Pilar Financeiro → Paula + Rita)
+- [ ] Matriz 5×5 renderiza com os 8 riscos posicionados
+- [ ] Kanban tem drag-and-drop funcional entre as 5 colunas
+
+### M6 — Relatórios
+- [ ] Clicando em "Diagnóstico 360° completo" gera PDF baixável
+- [ ] PDF tem logo IONEX, data, cliente, radar e insights
+
+### M7 — PWA + Notificações
+- [ ] No celular, consigo "Adicionar à tela inicial"
+- [ ] Ao delegar um pilar, o responsável recebe email via Resend
+- [ ] (Opcional) WhatsApp é disparado via Meta Cloud
+
+---
+
+## 🐛 PROBLEMAS COMUNS E SOLUÇÕES
+
+### BrasilAPI retorna CORS error
+- **Causa:** BrasilAPI aceita CORS de qualquer origem. Se falhar, provavelmente é CNPJ inválido.
+- **Solução:** validar o CNPJ antes com dígito verificador, ou mover a chamada para Edge Function Next.js (`/api/cnpj/[cnpj]`)
+
+### Autentique não cria documento
+- **Causa:** Token inválido ou PDF com problema
+- **Solução:** testar o token em [studio.apollographql.com](https://studio.apollographql.com) com o endpoint `https://api.autentique.com.br/v2/graphql`, header `Authorization: Bearer {token}`
+
+### RLS bloqueia queries
+- **Causa:** Usuário não tem vínculo em `clinic_users`
+- **Solução:** verificar a tabela `clinic_users` e a função `user_clinic_ids()`. Super admin deve ter `profiles.is_super_admin = true`.
+
+### Claude API retorna 429
+- **Causa:** rate limit do plano free
+- **Solução:** upgrade para plano build ou implementar retry exponencial
+
+### shadcn/ui components não aparecem
+- **Causa:** falta importar no projeto
+- **Solução:** `npx shadcn-ui@latest add button card dialog input select table tabs`
+
+---
+
+## 📦 ENTREGA FINAL
+
+Quando tudo estiver validado:
+
+- [ ] Rodar `npm run build` → deve completar sem erros
+- [ ] Deploy no Replit (botão **Deploy**) ou Vercel
+- [ ] Configurar domínio custom (ex: `app.ionex360.com.br`)
+- [ ] Configurar DNS do domínio para o deploy
+- [ ] Testar em produção com o ICS
+- [ ] Treinar Dr. Edgar e equipe no uso (30 min)
+
+---
+
+## 📞 SUPORTE
+
+Se travar em algum ponto:
+1. Copie o erro do console
+2. Identifique qual milestone está
+3. Volte aqui no Claude que refinamos juntos até destravar
+
+**Documentos complementares:**
+- `00_PROMPT_MASTER_IONEX.md` — o prompt principal
+- `01_schema.sql` — estrutura do banco
+- `02_seed_ics.sql` — dados do primeiro cliente
+- Este arquivo — roteiro de execução
+
+---
+
+## 🎯 META DE ENTREGA
+
+**Sprint 1 (7 dias):** M1 + M2 + M3 — Super Admin + Kick-off LGPD funcionando com ICS
+
+**Sprint 2 (7 dias):** M4 + M5 — Diagnóstico com IA + Delegação + Riscos + Kanban
+
+**Sprint 3 (7 dias):** M6 + M7 — Relatórios PDF + PWA + Notificações
+
+**Total:** 21 dias de trabalho para um MVP production-ready do IONEX360.
+
+Boa sorte, Rafaela! 🚀

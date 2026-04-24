@@ -1,0 +1,151 @@
+﻿Pilar,Ordem do Pilar,Número da Questão,Questão,Tipo de Resposta,Complemento/Dica
+Estratégia e Governança,1,1,"A clínica possui missão, visão e valores formalmente definidos e comunicados à equipe?",sim_nao,Verifique se há documento escrito ou apresentação que os colaboradores conhecem.
+Estratégia e Governança,1,2,Existe um planejamento estratégico anual com metas mensuráveis (KPIs)?,sim_nao,"Exemplos de KPIs: taxa de ocupação, faturamento mensal, NPS, ticket médio."
+Estratégia e Governança,1,3,As metas estratégicas são revisadas com que frequência?,texto_livre,Periodicidade ideal: mensal ou trimestral.
+Estratégia e Governança,1,4,Qual é o nível de envolvimento dos sócios na gestão operacional do dia a dia?,escala_1_5,"1 = Totalmente ausente, 5 = Muito envolvido e presente."
+Estratégia e Governança,1,5,Existe separação clara entre a pessoa jurídica da clínica e as finanças pessoais dos sócios?,sim_nao,Pró-labore definido? Contas bancárias separadas?
+Estratégia e Governança,1,6,A clínica tem um organograma atualizado e conhecido por toda a equipe?,sim_nao,Hierarquia clara reduz conflitos e duplicidade de responsabilidades.
+Estratégia e Governança,1,7,Há reuniões de gestão periódicas com pauta e ata?,sim_nao,Reuniões semanais ou mensais com registro facilitam a accountability.
+Estratégia e Governança,1,8,A tomada de decisão é centralizada nos sócios ou distribuída para gestores?,texto_livre,Descreva o modelo atual de governança e tomada de decisão.
+Estratégia e Governança,1,9,Existe um comitê ou responsável dedicado à gestão (gestor/diretor clínico)?,sim_nao,A ausência de um gestor profissionalizado é um fator de risco comum.
+Estratégia e Governança,1,10,A clínica realiza análise SWOT ou análise de mercado periodicamente?,sim_nao,Análise competitiva e de mercado é fundamental para posicionamento estratégico.
+Estratégia e Governança,1,11,Os profissionais de saúde conhecem e compartilham da visão de crescimento da clínica?,sim_nao,Alinhamento da equipe clínica com os objetivos estratégicos.
+Estratégia e Governança,1,12,Existem indicadores definidos para monitorar a saúde do negócio mensalmente?,sim_nao,"Exemplos: faturamento, inadimplência, produtividade por profissional, etc."
+Estratégia e Governança,1,13,Como você avalia o processo de tomada de decisão estratégica na clínica?,escala_1_5,"1 = Muito desestruturado e reativo, 5 = Estruturado, baseado em dados."
+Estratégia e Governança,1,14,"A clínica tem plano de contingência para cenários de crise (perda de profissional-chave, queda de receita)?",sim_nao,Planos de contingência aumentam a resiliência do negócio.
+Estratégia e Governança,1,15,A liderança da clínica tem clareza sobre as forças e fraquezas do negócio?,escala_1_5,"1 = Baixa clareza, 5 = Alta clareza e ação sobre os pontos de melhoria."
+Estratégia e Governança,1,16,"Existe acordo entre sócios formalizado sobre papéis, responsabilidades e retiradas?",sim_nao,Acordo de sócios previne conflitos e define regras de saída.
+Estratégia e Governança,1,17,A clínica realiza benchmarking com concorrentes ou referências de mercado?,sim_nao,Benchmarking ajuda a identificar oportunidades e diferenciais competitivos.
+Estratégia e Governança,1,18,Como você avalia a maturidade de gestão estratégica da clínica?,escala_1_5,"1 = Muito imaturo/informal, 5 = Altamente estruturado e profissionalizado."
+Financeiro e Fluxo de Caixa,2,1,A clínica realiza controle de fluxo de caixa diário ou semanal?,sim_nao,Controle frequente evita surpresas e permite tomada de decisão ágil.
+Financeiro e Fluxo de Caixa,2,2,"Qual é o prazo médio de recebimento das consultas/procedimentos (particular, planos, convênios)?",texto_livre,Descreva o prazo médio por modalidade de recebimento.
+Financeiro e Fluxo de Caixa,2,3,A clínica conhece sua margem de contribuição por procedimento?,sim_nao,Margem de contribuição = Receita – Custos Variáveis diretos.
+Financeiro e Fluxo de Caixa,2,4,Existe reserva de capital de giro equivalente a pelo menos 3 meses de despesas fixas?,sim_nao,Reserva mínima recomendada para segurança operacional.
+Financeiro e Fluxo de Caixa,2,5,Como você avalia a previsibilidade da receita mensal da clínica?,escala_1_5,"1 = Muito imprevisível, 5 = Altamente previsível e recorrente."
+Financeiro e Fluxo de Caixa,2,6,A clínica monitora a taxa de inadimplência e possui processo de cobrança estruturado?,sim_nao,"Taxa de inadimplência saudável varia por segmento, mas idealmente abaixo de 3%."
+Financeiro e Fluxo de Caixa,2,7,O DRE (Demonstrativo de Resultados) é elaborado mensalmente?,sim_nao,DRE mensal permite identificar lucro/prejuízo e tendências financeiras.
+Financeiro e Fluxo de Caixa,2,8,"A clínica tem acesso a crédito ou linhas de financiamento para expansão, se necessário?",sim_nao,Relação bancária saudável e histórico positivo facilitam acesso a crédito.
+Financeiro e Fluxo de Caixa,2,9,Qual é o percentual de receita proveniente de planos de saúde/convênios?,numerico,Informe o percentual aproximado em %. Alta concentração em convênios é fator de risco.
+Financeiro e Fluxo de Caixa,2,10,A clínica realiza análise de rentabilidade por especialidade ou profissional?,sim_nao,Identificar procedimentos e profissionais mais rentáveis otimiza a alocação de recursos.
+Financeiro e Fluxo de Caixa,2,11,As despesas fixas e variáveis estão claramente categorizadas e controladas?,sim_nao,Categorização permite identificar oportunidades de redução de custos.
+Financeiro e Fluxo de Caixa,2,12,A clínica possui meta de faturamento definida por mês?,sim_nao,Meta de faturamento deve ser baseada em capacidade instalada e histórico.
+Financeiro e Fluxo de Caixa,2,13,Como você avalia a saúde financeira atual da clínica?,escala_1_5,"1 = Em situação crítica/déficit, 5 = Excelente/lucrativa com reservas."
+Financeiro e Fluxo de Caixa,2,14,Existe separação clara entre os pagamentos de sócios (pró-labore/dividendos) e os custos operacionais?,sim_nao,Misturar finanças pessoais com empresariais distorce os resultados reais da clínica.
+Financeiro e Fluxo de Caixa,2,15,A clínica investe em precificação estratégica de seus serviços?,sim_nao,Precificação baseada em custos + margem desejada + posicionamento de mercado.
+Financeiro e Fluxo de Caixa,2,16,Qual é o ticket médio por consulta/procedimento?,numerico,Informe o valor médio em reais (R$) por atendimento particular.
+Financeiro e Fluxo de Caixa,2,17,A clínica acompanha o ponto de equilíbrio (break-even) mensalmente?,sim_nao,Ponto de equilíbrio = quando a receita cobre todos os custos fixos e variáveis.
+Financeiro e Fluxo de Caixa,2,18,Existem processos para controle e aprovação de despesas acima de determinado valor?,sim_nao,Alçadas de aprovação evitam gastos não planejados e aumentam o controle.
+Financeiro e Fluxo de Caixa,2,19,Como você avalia a maturidade de gestão financeira da clínica?,escala_1_5,"1 = Sem controle ou gestão, 5 = Altamente estruturado com relatórios e previsões."
+Financeiro e Fluxo de Caixa,2,20,A clínica possui política de concessão de descontos com critérios e alçadas definidas?,sim_nao,Descontos sem política clara comprometem a margem e criam percepção de valor inconsistente.
+Financeiro e Fluxo de Caixa,2,21,"Existe acompanhamento do ROI de investimentos realizados (equipamentos, reformas, treinamentos)?",sim_nao,Calcular o retorno sobre investimentos ajuda a priorizar alocações futuras de capital.
+Contabilidade e Fiscal,3,1,A clínica possui contabilidade regular com escritório contábil ou contador interno?,sim_nao,Contabilidade regular é obrigação legal e fonte de informação de gestão.
+Contabilidade e Fiscal,3,2,Qual é o regime tributário atual da clínica?,texto_livre,"Simples Nacional, Lucro Presumido ou Lucro Real? O regime é revisado anualmente?"
+Contabilidade e Fiscal,3,3,"A clínica está em dia com todas as obrigações acessórias (SPED, e-Social, DCTF, etc.)?",sim_nao,Obrigações acessórias em atraso geram multas e problemas com o Fisco.
+Contabilidade e Fiscal,3,4,O contador fornece relatórios gerenciais além da contabilidade fiscal obrigatória?,sim_nao,Relatórios gerenciais complementam a tomada de decisão estratégica.
+Contabilidade e Fiscal,3,5,A clínica realiza planejamento tributário para otimizar a carga fiscal?,sim_nao,Planejamento tributário legal pode reduzir significativamente impostos pagos.
+Contabilidade e Fiscal,3,6,Há controle adequado de notas fiscais emitidas e recebidas?,sim_nao,Controle de NFs é obrigação fiscal e facilita a reconciliação contábil.
+Contabilidade e Fiscal,3,7,A clínica tem parcelamentos ou débitos em aberto com a Receita Federal ou prefeitura?,sim_nao,Débitos tributários comprometem a capacidade de crédito e geram juros.
+Contabilidade e Fiscal,3,8,Os sócios recebem pró-labore e/ou distribuição de lucros de forma documentada?,sim_nao,Formalizar remuneração dos sócios protege juridicamente a empresa.
+Contabilidade e Fiscal,3,9,Como você avalia a organização contábil e fiscal da clínica?,escala_1_5,"1 = Desorganizada e em atraso, 5 = Totalmente regular e planejada."
+Contabilidade e Fiscal,3,10,"A clínica realiza inventário e controle de ativos (equipamentos, imóveis)?",sim_nao,Controle de ativos é necessário para depreciação contábil e seguros adequados.
+Contabilidade e Fiscal,3,11,O ISS (Imposto sobre Serviços) é recolhido corretamente de acordo com o município?,sim_nao,Alíquota e obrigações de ISS variam por município. Verifique a legislação local.
+Contabilidade e Fiscal,3,12,A clínica mantém documentos contábeis arquivados pelo prazo legal (mínimo 5 anos)?,sim_nao,Guarda de documentos fiscais é obrigação legal e proteção em caso de auditoria.
+Contabilidade e Fiscal,3,13,Há planejamento para sucessão ou venda eventual da clínica?,sim_nao,Planejamento patrimonial e successório evita problemas fiscais no futuro.
+Contabilidade e Fiscal,3,14,A clínica avalia periodicamente se o regime tributário atual é o mais vantajoso?,sim_nao,"Com o crescimento da receita, o regime ideal pode mudar. Revisão anual é recomendada."
+Contabilidade e Fiscal,3,15,Como você avalia o relacionamento da clínica com o escritório contábil?,escala_1_5,"1 = Relacionamento precário/sem suporte, 5 = Parceria estratégica e proativa."
+Contabilidade e Fiscal,3,16,"A clínica possui seguro empresarial (responsabilidade civil, equipamentos, estabelecimento)?",sim_nao,Seguros protegem contra sinistros que podem comprometer a continuidade do negócio.
+Contabilidade e Fiscal,3,17,Existe controle de contas a pagar e a receber integrado à contabilidade?,sim_nao,Integração financeira-contábil garante consistência dos números e facilita auditorias.
+Contabilidade e Fiscal,3,18,Os médicos/dentistas prestam serviços como PJ (pessoa jurídica)? Os contratos estão formalizados?,sim_nao,Contratos PJ sem formalização adequada geram risco trabalhista (pejotização irregular).
+"Vendas, Marketing e Captação de Pacientes",4,1,A clínica possui uma estratégia de marketing digital estruturada?,sim_nao,"Inclui: redes sociais, Google Meu Negócio, site, anúncios pagos, SEO."
+"Vendas, Marketing e Captação de Pacientes",4,2,Como os novos pacientes chegam à clínica? Qual canal é o principal?,texto_livre,"Descreva os principais canais: indicação, Google, Instagram, convênio, localização, etc."
+"Vendas, Marketing e Captação de Pacientes",4,3,A clínica monitora a taxa de conversão de consultas iniciais em tratamentos?,sim_nao,Taxa de conversão = % de pacientes novos que iniciam tratamento após primeira consulta.
+"Vendas, Marketing e Captação de Pacientes",4,4,Existe um processo estruturado de retorno e retenção de pacientes?,sim_nao,"Lembretes de retorno, follow-up pós-consulta, programa de fidelidade."
+"Vendas, Marketing e Captação de Pacientes",4,5,A clínica tem presença ativa e consistente nas redes sociais?,sim_nao,Frequência mínima recomendada: 3-4 publicações por semana com conteúdo relevante.
+"Vendas, Marketing e Captação de Pacientes",4,6,"Como você avalia a reputação online da clínica (Google, Doctoralia, Reclame Aqui)?",escala_1_5,"1 = Muitas avaliações negativas ou ausência de avaliações, 5 = Excelente reputação."
+"Vendas, Marketing e Captação de Pacientes",4,7,Qual é a nota média da clínica no Google Meu Negócio?,numerico,"Informe a nota de 1 a 5. Nota acima de 4,5 é considerada ótima."
+"Vendas, Marketing e Captação de Pacientes",4,8,"A clínica investe em tráfego pago (Google Ads, Meta Ads)?",sim_nao,Investimento em mídia paga deve ser monitorado pelo CAC (Custo de Aquisição de Cliente).
+"Vendas, Marketing e Captação de Pacientes",4,9,O site da clínica é otimizado para buscas locais e mobile?,sim_nao,"Site responsivo, rápido, com informações de contato e agendamento online."
+"Vendas, Marketing e Captação de Pacientes",4,10,A clínica mede o Custo de Aquisição de Paciente (CAP)?,sim_nao,CAP = Total investido em marketing / Número de novos pacientes adquiridos.
+"Vendas, Marketing e Captação de Pacientes",4,11,Existe um processo de coleta de avaliações/depoimentos de pacientes satisfeitos?,sim_nao,Depoimentos autênticos aumentam a credibilidade e auxiliam na decisão de novos pacientes.
+"Vendas, Marketing e Captação de Pacientes",4,12,"A clínica realiza ações de marketing de conteúdo (blog, vídeos educativos)?",sim_nao,Conteúdo educativo posiciona a clínica como autoridade e atrai tráfego orgânico.
+"Vendas, Marketing e Captação de Pacientes",4,13,Como você avalia a identidade visual e o posicionamento de marca da clínica?,escala_1_5,"1 = Sem identidade clara, 5 = Marca forte, diferenciada e reconhecida."
+"Vendas, Marketing e Captação de Pacientes",4,14,"A clínica oferece facilidades de agendamento online (WhatsApp, site, app)?",sim_nao,Agendamento digital reduz barreiras e aumenta a taxa de conversão de interessados.
+"Vendas, Marketing e Captação de Pacientes",4,15,A clínica tem programa de indicação (referral) para pacientes e parceiros?,sim_nao,Programas de indicação bem estruturados são um dos canais de maior ROI.
+"Vendas, Marketing e Captação de Pacientes",4,16,"Existe acompanhamento de métricas de marketing (alcance, engajamento, leads gerados)?",sim_nao,Métricas de marketing permitem otimização contínua das estratégias adotadas.
+"Vendas, Marketing e Captação de Pacientes",4,17,A clínica possui proposta de valor clara e diferenciada em relação aos concorrentes?,texto_livre,Qual é o diferencial competitivo da clínica? Por que um paciente escolheria vocês?
+"Vendas, Marketing e Captação de Pacientes",4,18,Como você avalia a maturidade de marketing e captação de pacientes da clínica?,escala_1_5,"1 = Sem estratégia, depende apenas de indicações espontâneas, 5 = Marketing estruturado e multicanal."
+Processos Operacionais e Atendimento,5,1,A clínica possui fluxograma documentado do processo de atendimento ao paciente?,sim_nao,"Da chegada ao pós-atendimento: recepção, anamnese, consulta, pagamento, retorno."
+Processos Operacionais e Atendimento,5,2,Como você avalia a eficiência do processo de agendamento e controle de agenda?,escala_1_5,"1 = Muitos conflitos e falhas, 5 = Altamente eficiente com baixa taxa de no-show."
+Processos Operacionais e Atendimento,5,3,Qual é a taxa de não comparecimento (no-show) sem aviso prévio?,numerico,Informe o percentual estimado (%). Taxa acima de 10% requer intervenção ativa.
+Processos Operacionais e Atendimento,5,4,Existe protocolo para o tratamento de reclamações e insatisfações de pacientes?,sim_nao,Protocolo de atendimento a reclamações é obrigatório para ISO e melhores práticas.
+Processos Operacionais e Atendimento,5,5,"A clínica mede periodicamente a satisfação dos pacientes (NPS, pesquisa pós-consulta)?",sim_nao,NPS (Net Promoter Score) mede a probabilidade de indicação e lealdade dos pacientes.
+Processos Operacionais e Atendimento,5,6,Os processos de esterilização e biossegurança estão documentados e são seguidos?,sim_nao,Obrigação legal e de segurança do paciente. Documentação é exigida em fiscalizações.
+Processos Operacionais e Atendimento,5,7,Existe padronização no atendimento telefônico e na recepção da clínica?,sim_nao,Script de atendimento e treinamento da equipe de front-desk são fundamentais.
+Processos Operacionais e Atendimento,5,8,A clínica possui controle de estoque de materiais e insumos com ponto de reposição definido?,sim_nao,Falta de insumos gera cancelamentos e impacta a experiência do paciente.
+Processos Operacionais e Atendimento,5,9,"Como você avalia a experiência do paciente na clínica (ambiente, tempo de espera, atendimento)?",escala_1_5,"1 = Experiência ruim com reclamações frequentes, 5 = Experiência excelente e elogiada."
+Processos Operacionais e Atendimento,5,10,A clínica possui indicadores de produtividade por consultório/cadeira e por profissional?,sim_nao,Taxa de ocupação ideal: acima de 75% da capacidade instalada.
+Processos Operacionais e Atendimento,5,11,Os processos de faturamento com convênios estão padronizados e com baixa taxa de glosa?,sim_nao,Glosas acima de 5% indicam necessidade de revisão dos processos de faturamento.
+Processos Operacionais e Atendimento,5,12,Existe manual de procedimentos operacionais (MOP) ou procedimentos operacionais padrão (POPs)?,sim_nao,POPs garantem consistência e facilitam o treinamento de novos colaboradores.
+Processos Operacionais e Atendimento,5,13,A limpeza e organização das instalações são realizadas seguindo protocolos definidos?,sim_nao,Checklist de limpeza e manutenção é fundamental para biossegurança e fiscalizações.
+Processos Operacionais e Atendimento,5,14,"Como você avalia a capacidade de escala operacional da clínica (horários, profissionais, espaço)?",escala_1_5,"1 = Totalmente saturada sem capacidade de crescimento, 5 = Com ampla capacidade para crescer."
+Processos Operacionais e Atendimento,5,15,Existe processo de acompanhamento pós-tratamento com o paciente?,sim_nao,"Follow-up pós-consulta aumenta satisfação, fidelização e taxa de indicação."
+Processos Operacionais e Atendimento,5,16,A clínica registra e analisa os motivos de cancelamento e não retorno de pacientes?,sim_nao,Análise de cancelamentos e churn é fundamental para melhoria contínua.
+Processos Operacionais e Atendimento,5,17,Como você avalia a maturidade dos processos operacionais da clínica?,escala_1_5,"1 = Processos informais e dependentes de pessoas-chave, 5 = Processos documentados e escaláveis."
+Processos Operacionais e Atendimento,5,18,A clínica realiza manutenção preventiva dos equipamentos com registro?,sim_nao,Manutenção preventiva evita paradas inesperadas e prolonga a vida útil dos equipamentos.
+Processos Operacionais e Atendimento,5,19,A clínica monitora o tempo médio de espera do paciente desde a chegada até o atendimento?,sim_nao,Tempo de espera acima de 20 minutos afeta a satisfação e a fidelização do paciente.
+Processos Operacionais e Atendimento,5,20,Como você avalia a eficiência no processo de check-in e check-out do paciente?,escala_1_5,"1 = Processo lento e cheio de falhas, 5 = Processo ágil, digital e sem filas."
+Processos Operacionais e Atendimento,5,21,A clínica possui protocolo de atendimento de emergência e primeiros socorros?,sim_nao,Protocolo de emergência e equipe treinada em primeiros socorros são requisitos de segurança.
+Gestão de Pessoas e Cultura,6,1,A clínica possui processo estruturado de recrutamento e seleção?,sim_nao,Processo seletivo com critérios claros reduz rotatividade e melhora a qualidade das contratações.
+Gestão de Pessoas e Cultura,6,2,"Existe plano de cargos, salários e benefícios formalmente definido?",sim_nao,Plano de cargos e salários aumenta a transparência e reduz conflitos salariais.
+Gestão de Pessoas e Cultura,6,3,Como você avalia o nível de engajamento e motivação da equipe?,escala_1_5,"1 = Equipe desmotivada com alta rotatividade, 5 = Equipe altamente engajada e comprometida."
+Gestão de Pessoas e Cultura,6,4,A taxa de rotatividade (turnover) de colaboradores está sob controle?,sim_nao,Turnover acima de 20% ao ano indica problemas de gestão de pessoas.
+Gestão de Pessoas e Cultura,6,5,A clínica realiza avaliações de desempenho periódicas com feedback estruturado?,sim_nao,Avaliações semestrais ou anuais com critérios claros e feedback construtivo.
+Gestão de Pessoas e Cultura,6,6,Existe programa de treinamento e capacitação contínua para a equipe?,sim_nao,Treinamentos técnicos e comportamentais melhoram qualidade e engajamento.
+Gestão de Pessoas e Cultura,6,7,"A clínica está em conformidade com a legislação trabalhista (CLT, e-Social)?",sim_nao,Irregularidades trabalhistas geram passivos significativos em auditorias.
+Gestão de Pessoas e Cultura,6,8,Existe cultura de feedback contínuo e comunicação transparente entre liderança e equipe?,sim_nao,Comunicação aberta e regular reduz conflitos e aumenta o alinhamento estratégico.
+Gestão de Pessoas e Cultura,6,9,Como você avalia o clima organizacional da clínica?,escala_1_5,"1 = Clima ruim com muitos conflitos, 5 = Clima excelente com alto nível de satisfação."
+Gestão de Pessoas e Cultura,6,10,Os colaboradores conhecem claramente suas atribuições e responsabilidades?,sim_nao,Descrição de cargos clara reduz sobreposição de funções e aumenta produtividade.
+Gestão de Pessoas e Cultura,6,11,A clínica tem programa de reconhecimento e recompensa por resultados?,sim_nao,Reconhecimento não financeiro e financeiro aumenta motivação e retenção de talentos.
+Gestão de Pessoas e Cultura,6,12,Existe Comissão Interna de Prevenção de Acidentes (CIPA) ou PPRA conforme obrigação?,sim_nao,"Dependendo do porte, CIPA e PPRA são obrigações legais. Verifique os requisitos."
+Gestão de Pessoas e Cultura,6,13,A liderança da clínica promove e exemplifica os valores da organização?,escala_1_5,"1 = Liderança não exemplar, 5 = Liderança inspiradora e alinhada aos valores."
+Gestão de Pessoas e Cultura,6,14,Existe processo de onboarding estruturado para novos colaboradores?,sim_nao,Onboarding eficaz reduz o tempo de adaptação e aumenta a retenção nos primeiros 90 dias.
+Gestão de Pessoas e Cultura,6,15,A clínica realiza pesquisa de clima organizacional periodicamente?,sim_nao,Pesquisa de clima é ferramenta essencial para identificar insatisfações antes que virem problemas.
+Gestão de Pessoas e Cultura,6,16,Os contratos de trabalho (CLT) ou de prestação de serviços (PJ) estão regularizados?,sim_nao,Contratos irregulares geram risco trabalhista significativo em caso de rescisão ou fiscalização.
+Gestão de Pessoas e Cultura,6,17,Como você avalia a maturidade de gestão de pessoas da clínica?,escala_1_5,"1 = Sem estrutura de RH, 5 = Gestão de pessoas profissionalizada e estratégica."
+Gestão de Pessoas e Cultura,6,18,A clínica investe no desenvolvimento pessoal e profissional de lideranças intermediárias?,sim_nao,"Líderes de nível médio (coordenadores, supervisores) são fundamentais para escalar a operação."
+Tecnologia e Sistemas,7,1,A clínica utiliza algum software de gestão (PMS/sistema clínico)?,sim_nao,"Exemplos: Doctoralia, iClinic, MedSênior, Totvs, ClinicWeb, etc."
+Tecnologia e Sistemas,7,2,Qual é o sistema de gestão utilizado e qual o nível de adoção pela equipe?,texto_livre,Descreva o sistema e o percentual de funcionalidades realmente utilizadas.
+Tecnologia e Sistemas,7,3,Os prontuários médicos são 100% eletrônicos?,sim_nao,Prontuário eletrônico é obrigatório em muitas especialidades e facilita acesso à informação.
+Tecnologia e Sistemas,7,4,Existe backup regular e seguro dos dados da clínica?,sim_nao,Backup diário automatizado em nuvem é o mínimo recomendado para continuidade de negócio.
+Tecnologia e Sistemas,7,5,A clínica possui wifi separado para pacientes e para a rede interna?,sim_nao,Separação de redes é prática básica de cibersegurança.
+Tecnologia e Sistemas,7,6,Qual é o nível de digitalização do processo de agendamento e confirmação de consultas?,escala_1_5,"1 = Totalmente manual (agenda papel/ligações), 5 = 100% digital com confirmação automática."
+Tecnologia e Sistemas,7,7,"A clínica utiliza ferramentas de automação para comunicação com pacientes (WhatsApp, e-mail)?",sim_nao,Automação de confirmações e lembretes reduz no-show significativamente.
+Tecnologia e Sistemas,7,8,A equipe recebe treinamento regular para uso adequado das ferramentas tecnológicas?,sim_nao,Treinamento em tecnologia aumenta a adoção e o retorno sobre o investimento em software.
+Tecnologia e Sistemas,7,9,Existe política de segurança de senhas e controle de acessos ao sistema?,sim_nao,Controle de acesso por usuário individual é requisito de segurança e LGPD.
+Tecnologia e Sistemas,7,10,A clínica utiliza telemedicina ou teleconsulta?,sim_nao,Telemedicina é regulamentada pelo CFM e pode expandir a capacidade de atendimento.
+Tecnologia e Sistemas,7,11,"Como você avalia a infraestrutura de TI da clínica (internet, computadores, equipamentos)?",escala_1_5,"1 = Infraestrutura precária e obsoleta, 5 = Infraestrutura moderna e estável."
+Tecnologia e Sistemas,7,12,A clínica utiliza dashboards ou relatórios digitais para acompanhar indicadores de desempenho?,sim_nao,Relatórios digitais eliminam planilhas manuais e agilizam a tomada de decisão baseada em dados.
+Tecnologia e Sistemas,7,13,Existe integração entre os sistemas utilizados (gestão + financeiro + agenda)?,sim_nao,Integração elimina retrabalho e reduz erros de digitação entre sistemas.
+Tecnologia e Sistemas,7,14,A clínica possui contrato de suporte técnico para os sistemas críticos?,sim_nao,Suporte técnico contratado garante resposta rápida em casos de falha de sistemas críticos.
+Tecnologia e Sistemas,7,15,Como você avalia a maturidade tecnológica da clínica?,escala_1_5,"1 = Muito analógica e dependente de processos manuais, 5 = Altamente digital e automatizada."
+Tecnologia e Sistemas,7,16,"A clínica realiza análise de dados para tomada de decisão (relatórios de produção, faturamento)?",sim_nao,Análise de dados clínicos e financeiros é diferencial competitivo crescente na saúde.
+Tecnologia e Sistemas,7,17,Existe plano de contingência para indisponibilidade dos sistemas?,sim_nao,O que acontece se o sistema cair? Existe processo manual de emergência documentado?
+Tecnologia e Sistemas,7,18,"A clínica utiliza assinatura digital para documentos (contratos, consentimentos)?",sim_nao,Assinatura digital é legalmente válida e agiliza processos administrativos.
+"Conformidade, Regulamentação e LGPD",8,1,"A clínica está registrada e em situação regular no conselho de classe correspondente (CFM, CRO, CRN, etc.)?",sim_nao,Regularidade no conselho de classe é requisito básico para funcionamento legal.
+"Conformidade, Regulamentação e LGPD",8,2,O alvará de funcionamento da clínica está válido e atualizado?,sim_nao,Alvará vencido implica em interdição imediata pela vigilância sanitária.
+"Conformidade, Regulamentação e LGPD",8,3,A clínica possui licença sanitária da VISA (Vigilância Sanitária) válida?,sim_nao,Licença sanitária é obrigatória para estabelecimentos de saúde em todos os municípios.
+"Conformidade, Regulamentação e LGPD",8,4,"Os equipamentos de saúde (radiologia, lasers, etc.) possuem registro e calibração atualizados?",sim_nao,Equipamentos médicos exigem registro na ANVISA e manutenção periódica documentada.
+"Conformidade, Regulamentação e LGPD",8,5,A clínica tem Responsável Técnico (RT) formalmente designado e registrado?,sim_nao,RT é obrigação legal para estabelecimentos de saúde. Deve constar no alvará.
+"Conformidade, Regulamentação e LGPD",8,6,Existe programa de gerenciamento de resíduos de saúde (PGRSS) implementado?,sim_nao,PGRSS é obrigatório para clínicas que geram resíduos de saúde (RSS). Fiscalizado pela VISA.
+"Conformidade, Regulamentação e LGPD",8,7,A clínica possui Programa de Prevenção de Riscos Ambientais (PPRA/PGR) atualizado?,sim_nao,PGR (substitui PPRA) é obrigatório para empresas com funcionários CLT.
+"Conformidade, Regulamentação e LGPD",8,8,A clínica já foi submetida a alguma auditoria ou fiscalização nos últimos 2 anos?,sim_nao,"Se sim, foram identificadas não-conformidades? Foram corrigidas? Documente."
+"Conformidade, Regulamentação e LGPD",8,9,Existe política de privacidade e termos de uso alinhados com a LGPD?,sim_nao,LGPD (Lei 13.709/2018) é obrigatória para todas as empresas que tratam dados pessoais.
+"Conformidade, Regulamentação e LGPD",8,10,"A clínica possui Encarregado de Dados (DPO) designado, mesmo que informal?",sim_nao,"DPO é recomendado para clínicas. Para grandes volumes de dados sensíveis, pode ser obrigatório."
+"Conformidade, Regulamentação e LGPD",8,11,Existe termo de consentimento livre e esclarecido (TCLE) para todos os procedimentos?,sim_nao,TCLE protege a clínica juridicamente e é obrigatório para procedimentos de risco.
+"Conformidade, Regulamentação e LGPD",8,12,A clínica possui seguro de responsabilidade civil profissional (malpractice)?,sim_nao,Seguro de responsabilidade civil é fortemente recomendado para todos os profissionais de saúde.
+"Conformidade, Regulamentação e LGPD",8,13,Como você avalia a conformidade da clínica com a LGPD?,escala_1_5,"1 = Sem nenhuma adequação, 5 = Totalmente adequada com DPO, políticas e treinamentos."
+"Conformidade, Regulamentação e LGPD",8,14,"Os contratos com pacientes, fornecedores e prestadores são revisados periodicamente por advogado?",sim_nao,Revisão jurídica periódica protege a clínica de passivos contratuais não percebidos.
+"Conformidade, Regulamentação e LGPD",8,15,A equipe recebe treinamentos sobre boas práticas de segurança do paciente?,sim_nao,Cultura de segurança do paciente reduz eventos adversos e responsabilidade legal.
+"Conformidade, Regulamentação e LGPD",8,16,A clínica possui câmeras de segurança e política de retenção das imagens?,sim_nao,Política de câmeras deve ser comunicada a pacientes e colaboradores (LGPD).
+"Conformidade, Regulamentação e LGPD",8,17,Existe protocolo documentado para notificação de eventos adversos e queixas técnicas?,sim_nao,Notificação de eventos adversos é obrigação legal (NOTIVISA/ANVISA) em muitos casos.
+"Conformidade, Regulamentação e LGPD",8,18,Como você avalia a maturidade de conformidade e regulamentação da clínica?,escala_1_5,"1 = Em situação irregular com múltiplas não-conformidades, 5 = Totalmente regular e auditável."

@@ -3,20 +3,40 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CCP IONEX — Clinic Control Panel API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: clinics
+    description: Clinic management
+  - name: dashboard
+    description: Dashboard summaries
+  - name: kickoffs
+    description: Kickoff management
+  - name: diagnostics
+    description: Diagnosis and scoring
+  - name: actions
+    description: Action plan (kanban)
+  - name: risks
+    description: Risk management
+  - name: team
+    description: Team members
+  - name: activity
+    description: Activity timeline
+  - name: notifications
+    description: Notifications
+  - name: faturas
+    description: Invoices/Faturas
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +44,710 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── DASHBOARD ──────────────────────────────────────────────────────────────
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/pipeline:
+    get:
+      operationId: getDashboardPipeline
+      tags: [dashboard]
+      summary: Get pipeline breakdown by status
+      responses:
+        "200":
+          description: Pipeline data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PipelineItem"
+
+  /dashboard/recent-activity:
+    get:
+      operationId: getDashboardRecentActivity
+      tags: [dashboard]
+      summary: Get recent activity across all clinics
+      responses:
+        "200":
+          description: Recent activities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Activity"
+
+  # ─── CLINICS ────────────────────────────────────────────────────────────────
+  /clinics:
+    get:
+      operationId: listClinics
+      tags: [clinics]
+      summary: List all clinics
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: plano
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: page
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: pageSize
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: Clinics list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicListResponse"
+    post:
+      operationId: createClinic
+      tags: [clinics]
+      summary: Create a new clinic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClinicBody"
+      responses:
+        "201":
+          description: Created clinic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clinic"
+
+  /clinics/{id}:
+    get:
+      operationId: getClinic
+      tags: [clinics]
+      summary: Get a clinic by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Clinic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clinic"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateClinic
+      tags: [clinics]
+      summary: Update a clinic
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClinicBody"
+      responses:
+        "200":
+          description: Updated clinic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clinic"
+    delete:
+      operationId: deleteClinic
+      tags: [clinics]
+      summary: Delete a clinic
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /clinics/{id}/status:
+    patch:
+      operationId: updateClinicStatus
+      tags: [clinics]
+      summary: Change clinic status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClinicStatusBody"
+      responses:
+        "200":
+          description: Updated clinic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clinic"
+
+  # ─── ACTIVITY ───────────────────────────────────────────────────────────────
+  /clinics/{clinicId}/activity:
+    get:
+      operationId: getClinicActivity
+      tags: [activity]
+      summary: Get clinic activity timeline
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Activity list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Activity"
+    post:
+      operationId: createClinicActivity
+      tags: [activity]
+      summary: Add activity to clinic timeline
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateActivityBody"
+      responses:
+        "201":
+          description: Created activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Activity"
+
+  # ─── KICKOFFS ───────────────────────────────────────────────────────────────
+  /clinics/{clinicId}/kickoff:
+    get:
+      operationId: getKickoff
+      tags: [kickoffs]
+      summary: Get kickoff for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Kickoff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Kickoff"
+        "404":
+          description: Not found
+    put:
+      operationId: upsertKickoff
+      tags: [kickoffs]
+      summary: Create or update kickoff
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertKickoffBody"
+      responses:
+        "200":
+          description: Kickoff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Kickoff"
+
+  # ─── DIAGNOSTICS ────────────────────────────────────────────────────────────
+  /clinics/{clinicId}/diagnostics:
+    get:
+      operationId: listDiagnostics
+      tags: [diagnostics]
+      summary: List diagnostics for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Diagnostics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Diagnostic"
+    post:
+      operationId: createDiagnostic
+      tags: [diagnostics]
+      summary: Start a new diagnostic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Created diagnostic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diagnostic"
+
+  /diagnostics/{id}:
+    get:
+      operationId: getDiagnostic
+      tags: [diagnostics]
+      summary: Get a diagnostic
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Diagnostic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diagnostic"
+
+  /diagnostics/{id}/complete:
+    post:
+      operationId: completeDiagnostic
+      tags: [diagnostics]
+      summary: Mark diagnostic as complete and calculate score
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Completed diagnostic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diagnostic"
+
+  # ─── ACTIONS (KANBAN) ────────────────────────────────────────────────────────
+  /clinics/{clinicId}/actions:
+    get:
+      operationId: listActions
+      tags: [actions]
+      summary: List action plan items for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: coluna
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Actions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Action"
+    post:
+      operationId: createAction
+      tags: [actions]
+      summary: Create action item
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateActionBody"
+      responses:
+        "201":
+          description: Created action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Action"
+
+  /actions/{id}:
+    patch:
+      operationId: updateAction
+      tags: [actions]
+      summary: Update action (move column, update status, etc.)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateActionBody"
+      responses:
+        "200":
+          description: Updated action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Action"
+    delete:
+      operationId: deleteAction
+      tags: [actions]
+      summary: Delete action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── RISKS ──────────────────────────────────────────────────────────────────
+  /clinics/{clinicId}/risks:
+    get:
+      operationId: listRisks
+      tags: [risks]
+      summary: List risks for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Risks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Risk"
+    post:
+      operationId: createRisk
+      tags: [risks]
+      summary: Create a risk
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRiskBody"
+      responses:
+        "201":
+          description: Created risk
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Risk"
+
+  /risks/{id}:
+    patch:
+      operationId: updateRisk
+      tags: [risks]
+      summary: Update a risk
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRiskBody"
+      responses:
+        "200":
+          description: Updated risk
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Risk"
+    delete:
+      operationId: deleteRisk
+      tags: [risks]
+      summary: Delete a risk
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── TEAM ───────────────────────────────────────────────────────────────────
+  /clinics/{clinicId}/team:
+    get:
+      operationId: listTeam
+      tags: [team]
+      summary: List internal team members for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Team members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamMember"
+    post:
+      operationId: createTeamMember
+      tags: [team]
+      summary: Add a team member
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTeamMemberBody"
+      responses:
+        "201":
+          description: Created team member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMember"
+
+  /team/{id}:
+    patch:
+      operationId: updateTeamMember
+      tags: [team]
+      summary: Update a team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTeamMemberBody"
+      responses:
+        "200":
+          description: Updated team member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMember"
+    delete:
+      operationId: deleteTeamMember
+      tags: [team]
+      summary: Delete a team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── FATURAS ────────────────────────────────────────────────────────────────
+  /clinics/{clinicId}/faturas:
+    get:
+      operationId: listFaturas
+      tags: [faturas]
+      summary: List invoices for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Fatura"
+    post:
+      operationId: createFatura
+      tags: [faturas]
+      summary: Create an invoice
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFaturaBody"
+      responses:
+        "201":
+          description: Created invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fatura"
+
+  /faturas/{id}:
+    patch:
+      operationId: updateFatura
+      tags: [faturas]
+      summary: Update invoice status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFaturaBody"
+      responses:
+        "200":
+          description: Updated invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fatura"
+
+  # ─── NOTIFICATIONS ──────────────────────────────────────────────────────────
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    post:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +758,663 @@ components:
       required:
         - status
 
+    # ─── DASHBOARD ──────────────────────────────────────────────────────────
+    DashboardSummary:
+      type: object
+      properties:
+        totalClinics:
+          type: integer
+        clinicasAtivas:
+          type: integer
+        clinicasTrial:
+          type: integer
+        clinicasProspect:
+          type: integer
+        receitaMensalTotal:
+          type: number
+        receitaPipeline:
+          type: number
+        inadimplentes:
+          type: integer
+        diagnosticosEmAndamento:
+          type: integer
+        acoesAtrasadas:
+          type: integer
+        notificacoesNaoLidas:
+          type: integer
+      required:
+        - totalClinics
+        - clinicasAtivas
+        - clinicasTrial
+        - clinicasProspect
+        - receitaMensalTotal
+        - receitaPipeline
+        - inadimplentes
+        - diagnosticosEmAndamento
+        - acoesAtrasadas
+        - notificacoesNaoLidas
+
+    PipelineItem:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+        valor:
+          type: number
+      required:
+        - status
+        - count
+        - valor
+
+    # ─── CLINIC ─────────────────────────────────────────────────────────────
+    Clinic:
+      type: object
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+        fantasia:
+          type: ["string", "null"]
+        cnpj:
+          type: string
+        razaoSocial:
+          type: ["string", "null"]
+        cidade:
+          type: ["string", "null"]
+        uf:
+          type: ["string", "null"]
+        cep:
+          type: ["string", "null"]
+        endereco:
+          type: ["string", "null"]
+        responsavel:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
+        cargo:
+          type: ["string", "null"]
+        plano:
+          type: string
+          enum: [starter, pro, enterprise]
+        status:
+          type: string
+          enum: [prospect, proposta, contrato, trial, ativa, suspensa, desativada]
+        etapa:
+          type: integer
+        progresso:
+          type: integer
+        valorImplantacao:
+          type: ["number", "null"]
+        valorRecorrente:
+          type: ["number", "null"]
+        formaPagamento:
+          type: ["string", "null"]
+        diaVencimento:
+          type: ["integer", "null"]
+        inicioRecorrencia:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - nome
+        - cnpj
+        - plano
+        - status
+        - etapa
+        - progresso
+        - createdAt
+        - updatedAt
+
+    ClinicListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Clinic"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+      required:
+        - data
+        - total
+        - page
+        - pageSize
+
+    CreateClinicBody:
+      type: object
+      properties:
+        nome:
+          type: string
+        fantasia:
+          type: ["string", "null"]
+        cnpj:
+          type: string
+        razaoSocial:
+          type: ["string", "null"]
+        cidade:
+          type: ["string", "null"]
+        uf:
+          type: ["string", "null"]
+        cep:
+          type: ["string", "null"]
+        endereco:
+          type: ["string", "null"]
+        responsavel:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
+        cargo:
+          type: ["string", "null"]
+        plano:
+          type: string
+          enum: [starter, pro, enterprise]
+        valorImplantacao:
+          type: ["number", "null"]
+        valorRecorrente:
+          type: ["number", "null"]
+        formaPagamento:
+          type: ["string", "null"]
+        diaVencimento:
+          type: ["integer", "null"]
+      required:
+        - nome
+        - cnpj
+        - plano
+
+    UpdateClinicBody:
+      type: object
+      properties:
+        nome:
+          type: ["string", "null"]
+        fantasia:
+          type: ["string", "null"]
+        cnpj:
+          type: ["string", "null"]
+        razaoSocial:
+          type: ["string", "null"]
+        cidade:
+          type: ["string", "null"]
+        uf:
+          type: ["string", "null"]
+        cep:
+          type: ["string", "null"]
+        endereco:
+          type: ["string", "null"]
+        responsavel:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
+        cargo:
+          type: ["string", "null"]
+        plano:
+          type: ["string", "null"]
+        etapa:
+          type: ["integer", "null"]
+        progresso:
+          type: ["integer", "null"]
+        valorImplantacao:
+          type: ["number", "null"]
+        valorRecorrente:
+          type: ["number", "null"]
+        formaPagamento:
+          type: ["string", "null"]
+        diaVencimento:
+          type: ["integer", "null"]
+        inicioRecorrencia:
+          type: ["string", "null"]
+
+    UpdateClinicStatusBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [prospect, proposta, contrato, trial, ativa, suspensa, desativada]
+        motivo:
+          type: ["string", "null"]
+        tipo:
+          type: ["string", "null"]
+      required:
+        - status
+
+    # ─── ACTIVITY ───────────────────────────────────────────────────────────
+    Activity:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        tipo:
+          type: string
+        titulo:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        autorNome:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - tipo
+        - titulo
+        - createdAt
+
+    CreateActivityBody:
+      type: object
+      properties:
+        tipo:
+          type: string
+        titulo:
+          type: string
+        descricao:
+          type: ["string", "null"]
+      required:
+        - tipo
+        - titulo
+
+    # ─── KICKOFF ────────────────────────────────────────────────────────────
+    Kickoff:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        dataRealizacao:
+          type: ["string", "null"]
+        modalidade:
+          type: ["string", "null"]
+        duracaoMinutos:
+          type: ["integer", "null"]
+        facilitador:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [rascunho, realizado, validado]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - status
+        - createdAt
+        - updatedAt
+
+    UpsertKickoffBody:
+      type: object
+      properties:
+        dataRealizacao:
+          type: ["string", "null"]
+        modalidade:
+          type: ["string", "null"]
+        duracaoMinutos:
+          type: ["integer", "null"]
+        facilitador:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+
+    # ─── DIAGNOSTIC ─────────────────────────────────────────────────────────
+    Diagnostic:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        versao:
+          type: integer
+        status:
+          type: string
+          enum: [em_andamento, concluido, arquivado]
+        iniciadoEm:
+          type: string
+        concluidoEm:
+          type: ["string", "null"]
+        scoreGlobal:
+          type: ["number", "null"]
+        scoresPilares:
+          type: ["object", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - versao
+        - status
+        - iniciadoEm
+        - createdAt
+
+    # ─── ACTION ─────────────────────────────────────────────────────────────
+    Action:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        titulo:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        responsavelNome:
+          type: ["string", "null"]
+        prazo:
+          type: ["string", "null"]
+        prioridade:
+          type: ["string", "null"]
+          enum: [alta, media, baixa, null]
+        coluna:
+          type: string
+          enum: [backlog, todo, doing, review, done]
+        ordem:
+          type: integer
+        concluidoEm:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - titulo
+        - coluna
+        - ordem
+        - createdAt
+        - updatedAt
+
+    CreateActionBody:
+      type: object
+      properties:
+        titulo:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        responsavelNome:
+          type: ["string", "null"]
+        prazo:
+          type: ["string", "null"]
+        prioridade:
+          type: ["string", "null"]
+        coluna:
+          type: string
+          enum: [backlog, todo, doing, review, done]
+      required:
+        - titulo
+
+    UpdateActionBody:
+      type: object
+      properties:
+        titulo:
+          type: ["string", "null"]
+        descricao:
+          type: ["string", "null"]
+        responsavelNome:
+          type: ["string", "null"]
+        prazo:
+          type: ["string", "null"]
+        prioridade:
+          type: ["string", "null"]
+        coluna:
+          type: ["string", "null"]
+        ordem:
+          type: ["integer", "null"]
+
+    # ─── RISK ───────────────────────────────────────────────────────────────
+    Risk:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        nome:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        probabilidade:
+          type: integer
+        impacto:
+          type: integer
+        severidade:
+          type: integer
+        responsavel:
+          type: ["string", "null"]
+        acoesMitigadoras:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [identificado, em_mitigacao, mitigado, aceito]
+        createdAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - nome
+        - probabilidade
+        - impacto
+        - severidade
+        - status
+        - createdAt
+
+    CreateRiskBody:
+      type: object
+      properties:
+        nome:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        probabilidade:
+          type: integer
+        impacto:
+          type: integer
+        responsavel:
+          type: ["string", "null"]
+        acoesMitigadoras:
+          type: ["string", "null"]
+      required:
+        - nome
+        - probabilidade
+        - impacto
+
+    UpdateRiskBody:
+      type: object
+      properties:
+        nome:
+          type: ["string", "null"]
+        descricao:
+          type: ["string", "null"]
+        probabilidade:
+          type: ["integer", "null"]
+        impacto:
+          type: ["integer", "null"]
+        responsavel:
+          type: ["string", "null"]
+        acoesMitigadoras:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+
+    # ─── TEAM ───────────────────────────────────────────────────────────────
+    TeamMember:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        nome:
+          type: string
+        funcao:
+          type: ["string", "null"]
+        area:
+          type: ["string", "null"]
+        vinculo:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
+        temAcessoPlataforma:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - nome
+        - temAcessoPlataforma
+        - createdAt
+
+    CreateTeamMemberBody:
+      type: object
+      properties:
+        nome:
+          type: string
+        funcao:
+          type: ["string", "null"]
+        area:
+          type: ["string", "null"]
+        vinculo:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
+        temAcessoPlataforma:
+          type: boolean
+      required:
+        - nome
+
+    UpdateTeamMemberBody:
+      type: object
+      properties:
+        nome:
+          type: ["string", "null"]
+        funcao:
+          type: ["string", "null"]
+        area:
+          type: ["string", "null"]
+        vinculo:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        whatsapp:
+          type: ["string", "null"]
+        temAcessoPlataforma:
+          type: ["boolean", "null"]
+
+    # ─── FATURA ─────────────────────────────────────────────────────────────
+    Fatura:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        numero:
+          type: string
+        vencimento:
+          type: string
+        valor:
+          type: number
+        status:
+          type: string
+          enum: [pendente, pago, atrasado, cancelado]
+        pagoEm:
+          type: ["string", "null"]
+        formaPagamento:
+          type: ["string", "null"]
+        observacao:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - numero
+        - vencimento
+        - valor
+        - status
+        - createdAt
+
+    CreateFaturaBody:
+      type: object
+      properties:
+        numero:
+          type: string
+        vencimento:
+          type: string
+        valor:
+          type: number
+        status:
+          type: string
+          enum: [pendente, pago, atrasado, cancelado]
+        formaPagamento:
+          type: ["string", "null"]
+        observacao:
+          type: ["string", "null"]
+      required:
+        - numero
+        - vencimento
+        - valor
+
+    UpdateFaturaBody:
+      type: object
+      properties:
+        status:
+          type: ["string", "null"]
+        pagoEm:
+          type: ["string", "null"]
+        formaPagamento:
+          type: ["string", "null"]
+        observacao:
+          type: ["string", "null"]
+
+    # ─── NOTIFICATION ───────────────────────────────────────────────────────
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: ["string", "null"]
+        tipo:
+          type: string
+        titulo:
+          type: string
+        mensagem:
+          type: ["string", "null"]
+        lida:
+          type: boolean
+        acaoUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - tipo
+        - titulo
+        - lida
+        - createdAt

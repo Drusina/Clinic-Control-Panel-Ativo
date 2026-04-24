@@ -1,0 +1,638 @@
+-- =====================================================================
+-- IONEX360 — Schema completo do Supabase
+-- Multi-tenant com RLS por clinic_id
+-- Rodar este arquivo no SQL Editor do Supabase APÓS criar o projeto
+-- =====================================================================
+
+-- Extensões necessárias
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- =====================================================================
+-- 1. TENANTS E USUÁRIOS
+-- =====================================================================
+
+-- Clínicas (tenant principal)
+CREATE TABLE clinics (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  nome TEXT NOT NULL,
+  fantasia TEXT,
+  cnpj TEXT UNIQUE NOT NULL,
+  razao_social TEXT,
+  cidade TEXT,
+  uf CHAR(2),
+  cep TEXT,
+  endereco TEXT,
+  cnae TEXT,
+  data_abertura DATE,
+  capital_social NUMERIC(14,2),
+  situacao_receita TEXT,
+  -- Contato principal
+  responsavel TEXT,
+  email TEXT,
+  whatsapp TEXT,
+  cargo TEXT,
+  -- Plano e status
+  plano TEXT NOT NULL DEFAULT 'starter' CHECK (plano IN ('starter','pro','enterprise')),
+  status TEXT NOT NULL DEFAULT 'prospect' CHECK (status IN ('prospect','proposta','contrato','trial','ativa','suspensa','desativada')),
+  suspenso_motivo TEXT,
+  suspenso_em TIMESTAMPTZ,
+  desativado_em TIMESTAMPTZ,
+  retencao_ate DATE, -- Cláusula 14 do contrato (30 dias após desativação)
+  etapa INT NOT NULL DEFAULT 1 CHECK (etapa BETWEEN 1 AND 10),
+  progresso INT DEFAULT 0 CHECK (progresso BETWEEN 0 AND 100),
+  -- Financeiro
+  valor_implantacao NUMERIC(12,2),
+  valor_recorrente NUMERIC(12,2),
+  forma_pagamento TEXT CHECK (forma_pagamento IN ('pix','boleto','cartao','ted')),
+  dia_vencimento INT CHECK (dia_vencimento BETWEEN 1 AND 28),
+  reajuste_indice TEXT DEFAULT 'IGPM/FGV',
+  inicio_recorrencia DATE,
+  -- Metadados
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Usuários (referência para auth.users do Supabase)
+CREATE TABLE profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  whatsapp TEXT,
+  avatar_url TEXT,
+  is_super_admin BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Vínculo usuário × clínica com role
+CREATE TABLE clinic_users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('consultor','gestor','equipe')),
+  area TEXT, -- para equipe: Administrativo, Clínico, Atendimento, Marketing, TI
+  convite_enviado_em TIMESTAMPTZ,
+  aceito_em TIMESTAMPTZ,
+  ultimo_acesso TIMESTAMPTZ,
+  ativo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(clinic_id, user_id)
+);
+
+-- Histórico de mudanças de status da clínica
+CREATE TABLE clinic_status_history (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  de TEXT NOT NULL,
+  para TEXT NOT NULL,
+  motivo TEXT,
+  tipo TEXT, -- inadimplencia, solicitacao_cliente, fim_contrato, reestruturacao, outro
+  autor UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Timeline de atividades da clínica
+CREATE TABLE clinic_activity (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL, -- kickoff_realizado, contrato_assinado, diagnostico_iniciado, etc
+  titulo TEXT NOT NULL,
+  descricao TEXT,
+  autor UUID REFERENCES profiles(id),
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 2. DOCUMENTOS COMERCIAIS (PROPOSTA + CONTRATO + FATURAS)
+-- =====================================================================
+
+CREATE TABLE clinic_documents (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL CHECK (tipo IN ('proposta','contrato','aditivo','ata','outro')),
+  nome TEXT NOT NULL,
+  storage_path TEXT NOT NULL,
+  tamanho INT,
+  status TEXT DEFAULT 'rascunho' CHECK (status IN ('rascunho','enviado','assinado','arquivado')),
+  assinado_em TIMESTAMPTZ,
+  signatarios JSONB, -- [{nome, email, papel, assinou_em}]
+  autentique_doc_id TEXT, -- id retornado pela Autentique
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Faturas emitidas
+CREATE TABLE faturas (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  numero TEXT NOT NULL,
+  vencimento DATE NOT NULL,
+  valor NUMERIC(12,2) NOT NULL,
+  status TEXT DEFAULT 'pendente' CHECK (status IN ('pendente','pago','atrasado','cancelado')),
+  pago_em DATE,
+  forma_pagamento TEXT,
+  observacao TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 3. KICK-OFF EXPANDIDO
+-- =====================================================================
+
+-- Ata do kick-off
+CREATE TABLE kickoffs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE UNIQUE,
+  data_realizacao DATE,
+  modalidade TEXT CHECK (modalidade IN ('presencial','remoto','hibrido')),
+  duracao_minutos INT,
+  facilitador TEXT,
+  participantes JSONB,
+  pauta TEXT[],
+  proximos_passos JSONB, -- [{acao, responsavel, prazo}]
+  status TEXT DEFAULT 'rascunho' CHECK (status IN ('rascunho','realizado','validado')),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Perfil operacional
+CREATE TABLE perfil_operacional (
+  clinic_id UUID PRIMARY KEY REFERENCES clinics(id) ON DELETE CASCADE,
+  faturamento_mensal NUMERIC(14,2),
+  ticket_medio NUMERIC(10,2),
+  pacientes_ativos INT,
+  atendimentos_mes INT,
+  especialidades TEXT[],
+  horario_funcionamento TEXT,
+  modelo_particular INT DEFAULT 0,
+  modelo_convenio INT DEFAULT 0,
+  modelo_sus INT DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Sócios (QSA)
+CREATE TABLE socios (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  cpf TEXT,
+  percentual NUMERIC(5,2),
+  cargo TEXT,
+  decisor BOOLEAN DEFAULT false,
+  email TEXT,
+  whatsapp TEXT,
+  origem TEXT DEFAULT 'manual' CHECK (origem IN ('brasilapi','manual')),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Equipe interna
+CREATE TABLE equipe_interna (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  funcao TEXT,
+  area TEXT CHECK (area IN ('Administrativo','Clínico','Atendimento','Marketing','TI','Outro')),
+  vinculo TEXT CHECK (vinculo IN ('CLT','PJ','Socio','Terceirizado')),
+  email TEXT,
+  whatsapp TEXT,
+  tem_acesso_plataforma BOOLEAN DEFAULT false,
+  user_id UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Parceiros externos
+CREATE TABLE parceiros_externos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL CHECK (tipo IN ('contador','advogado','marketing','ti_externo','banco','outro')),
+  nome_empresa TEXT,
+  responsavel TEXT,
+  registro_profissional TEXT, -- CRC, OAB, etc
+  telefone TEXT,
+  email TEXT,
+  observacoes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Sistemas em uso
+CREATE TABLE sistemas_uso (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  fornecedor TEXT,
+  tipo TEXT, -- ERP, CRM, Agenda, Financeiro, etc
+  api_disponivel TEXT CHECK (api_disponivel IN ('sim','nao','a_validar')),
+  responsavel_interno TEXT,
+  criticidade TEXT CHECK (criticidade IN ('alto','medio','baixo')),
+  integrado BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Documentos constitutivos
+CREATE TABLE docs_constitutivos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  categoria TEXT NOT NULL, -- Jurídico, Funcionamento, Financeiro, Estrutura, Seguros
+  nome TEXT NOT NULL,
+  obrigatorio BOOLEAN DEFAULT false,
+  storage_path TEXT,
+  tamanho INT,
+  enviado_em TIMESTAMPTZ,
+  enviado_por UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 4. LGPD & AUTORIZAÇÕES (6 termos fixos)
+-- =====================================================================
+
+CREATE TABLE lgpd_termos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  slug TEXT NOT NULL, -- tratamento_dados, nda, acesso_sistemas, contato_terceiros, dpo, politica_privacidade
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  status TEXT DEFAULT 'pendente' CHECK (status IN ('pendente','enviado','assinado','anexado','recusado')),
+  metodo TEXT CHECK (metodo IN ('aceite_digital','pdf_anexado')),
+  autentique_doc_id TEXT,
+  signatario_nome TEXT,
+  signatario_email TEXT,
+  assinado_em TIMESTAMPTZ,
+  storage_path TEXT, -- PDF assinado
+  enviado_em TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(clinic_id, slug)
+);
+
+-- Requisições de assinatura (Autentique)
+CREATE TABLE assinaturas (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  documento_id UUID, -- pode ser clinic_documents.id ou lgpd_termos.id
+  documento_tipo TEXT NOT NULL, -- contrato, proposta, aditivo, lgpd
+  autentique_doc_id TEXT NOT NULL,
+  status TEXT DEFAULT 'aguardando' CHECK (status IN ('aguardando','visualizado','assinado_parcial','concluido','expirado','recusado')),
+  prazo_dias INT DEFAULT 15,
+  signatarios JSONB NOT NULL, -- [{nome, email, papel, status, link, assinou_em}]
+  mensagem TEXT,
+  enviado_em TIMESTAMPTZ DEFAULT now(),
+  concluido_em TIMESTAMPTZ,
+  webhook_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 5. PILARES E PERGUNTAS (referência compartilhada entre clínicas)
+-- =====================================================================
+
+CREATE TABLE pilares (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  slug TEXT UNIQUE NOT NULL,
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  ordem INT NOT NULL,
+  cor TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE perguntas (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  pilar_id UUID NOT NULL REFERENCES pilares(id) ON DELETE CASCADE,
+  pilar_slug TEXT NOT NULL,
+  texto TEXT NOT NULL,
+  tipo TEXT NOT NULL CHECK (tipo IN ('sim_nao','escala_1_5','texto_livre','numerico')),
+  peso INT NOT NULL DEFAULT 3 CHECK (peso BETWEEN 1 AND 5),
+  ordem INT NOT NULL,
+  opcoes JSONB, -- para multipla escolha futura
+  ativo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 6. DIAGNÓSTICO E RESPOSTAS
+-- =====================================================================
+
+CREATE TABLE diagnosticos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  versao INT DEFAULT 1,
+  status TEXT DEFAULT 'em_andamento' CHECK (status IN ('em_andamento','concluido','arquivado')),
+  iniciado_em TIMESTAMPTZ DEFAULT now(),
+  concluido_em TIMESTAMPTZ,
+  score_global NUMERIC(3,2),
+  scores_pilares JSONB, -- { estrategia: 3.1, financeiro: 3.0, ... }
+  metas_pilares JSONB,
+  insights_ia JSONB, -- { pontos_fortes, pontos_criticos, acoes_sugeridas }
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE respostas (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  diagnostico_id UUID NOT NULL REFERENCES diagnosticos(id) ON DELETE CASCADE,
+  pergunta_id UUID NOT NULL REFERENCES perguntas(id),
+  valor TEXT, -- sempre string; parse conforme tipo
+  respondido_por UUID REFERENCES profiles(id),
+  respondido_em TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(diagnostico_id, pergunta_id)
+);
+
+-- =====================================================================
+-- 7. DELEGAÇÃO HIERÁRQUICA (2 níveis)
+-- =====================================================================
+
+CREATE TABLE delegacoes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  diagnostico_id UUID REFERENCES diagnosticos(id) ON DELETE CASCADE,
+  pilar_id UUID NOT NULL REFERENCES pilares(id),
+  -- Nível 1: gestor responsável
+  nivel1_user_id UUID REFERENCES profiles(id),
+  nivel1_nome TEXT,
+  nivel1_role TEXT,
+  -- Status e prazo
+  status TEXT DEFAULT 'nao_delegado' CHECK (status IN ('nao_delegado','pendente','andamento','concluido','atrasado')),
+  progresso INT DEFAULT 0,
+  prazo DATE,
+  delegado_em TIMESTAMPTZ,
+  delegado_por UUID REFERENCES profiles(id),
+  mensagem TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE sub_delegacoes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  delegacao_id UUID NOT NULL REFERENCES delegacoes(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES profiles(id),
+  nome TEXT,
+  intervalo_perguntas TEXT, -- ex: "1-10"
+  progresso INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 8. RISCOS
+-- =====================================================================
+
+CREATE TABLE riscos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  pilar_id UUID REFERENCES pilares(id),
+  probabilidade INT NOT NULL CHECK (probabilidade BETWEEN 1 AND 5),
+  impacto INT NOT NULL CHECK (impacto BETWEEN 1 AND 5),
+  severidade INT GENERATED ALWAYS AS (probabilidade * impacto) STORED,
+  responsavel TEXT,
+  responsavel_user_id UUID REFERENCES profiles(id),
+  acoes_mitigadoras TEXT,
+  status TEXT DEFAULT 'identificado' CHECK (status IN ('identificado','em_mitigacao','mitigado','aceito')),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 9. PLANO DE AÇÃO (KANBAN)
+-- =====================================================================
+
+CREATE TABLE acoes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  titulo TEXT NOT NULL,
+  descricao TEXT,
+  pilar_id UUID REFERENCES pilares(id),
+  risco_id UUID REFERENCES riscos(id),
+  responsavel_user_id UUID REFERENCES profiles(id),
+  responsavel_nome TEXT,
+  prazo DATE,
+  prioridade TEXT CHECK (prioridade IN ('alta','media','baixa')),
+  coluna TEXT DEFAULT 'backlog' CHECK (coluna IN ('backlog','todo','doing','review','done')),
+  ordem INT DEFAULT 0,
+  concluido_em TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 10. PROCESSOS, EVIDÊNCIAS, DOCUMENTOS GERAIS
+-- =====================================================================
+
+CREATE TABLE processos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  responsavel TEXT,
+  duracao_media TEXT,
+  status TEXT DEFAULT 'pendente' CHECK (status IN ('pendente','em_mapeamento','mapeado','validado')),
+  gargalos JSONB,
+  fluxograma_json JSONB, -- React Flow nodes/edges
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE evidencias (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  pilar_id UUID REFERENCES pilares(id),
+  storage_path TEXT NOT NULL,
+  tipo TEXT, -- pdf, img, xlsx, doc
+  tamanho INT,
+  acao_id UUID REFERENCES acoes(id),
+  enviado_por UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE documentos_gerais (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  nome TEXT NOT NULL,
+  categoria TEXT,
+  storage_path TEXT,
+  tamanho INT,
+  vencimento DATE,
+  status TEXT DEFAULT 'ativo' CHECK (status IN ('ativo','pendente','expirado','arquivado')),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 11. NOTIFICAÇÕES
+-- =====================================================================
+
+CREATE TABLE notificacoes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  clinic_id UUID REFERENCES clinics(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL, -- delegacao, assinatura, vencimento, etc
+  titulo TEXT NOT NULL,
+  mensagem TEXT,
+  lida BOOLEAN DEFAULT false,
+  acao_url TEXT,
+  canais_enviados TEXT[], -- email, whatsapp, inapp
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- =====================================================================
+-- 12. ÍNDICES PARA PERFORMANCE
+-- =====================================================================
+
+CREATE INDEX idx_clinic_users_clinic ON clinic_users(clinic_id);
+CREATE INDEX idx_clinic_users_user ON clinic_users(user_id);
+CREATE INDEX idx_acoes_clinic_coluna ON acoes(clinic_id, coluna);
+CREATE INDEX idx_riscos_severidade ON riscos(clinic_id, severidade DESC);
+CREATE INDEX idx_respostas_diagnostico ON respostas(diagnostico_id);
+CREATE INDEX idx_delegacoes_clinic ON delegacoes(clinic_id);
+CREATE INDEX idx_notificacoes_user_lida ON notificacoes(user_id, lida);
+CREATE INDEX idx_activity_clinic ON clinic_activity(clinic_id, created_at DESC);
+
+-- =====================================================================
+-- 13. FUNÇÕES AUXILIARES
+-- =====================================================================
+
+-- Função: obter IDs de clínicas que o usuário pode acessar
+CREATE OR REPLACE FUNCTION user_clinic_ids(uid UUID)
+RETURNS SETOF UUID
+LANGUAGE SQL
+SECURITY DEFINER
+STABLE
+AS $$
+  SELECT clinic_id FROM clinic_users WHERE user_id = uid AND ativo = true
+  UNION
+  SELECT id FROM clinics WHERE EXISTS (SELECT 1 FROM profiles WHERE id = uid AND is_super_admin = true)
+$$;
+
+-- Função: verificar se é super_admin
+CREATE OR REPLACE FUNCTION is_super_admin()
+RETURNS BOOLEAN
+LANGUAGE SQL
+SECURITY DEFINER
+STABLE
+AS $$
+  SELECT COALESCE((SELECT is_super_admin FROM profiles WHERE id = auth.uid()), false)
+$$;
+
+-- Função: role do usuário em uma clínica específica
+CREATE OR REPLACE FUNCTION user_role_in_clinic(cid UUID)
+RETURNS TEXT
+LANGUAGE SQL
+SECURITY DEFINER
+STABLE
+AS $$
+  SELECT role FROM clinic_users WHERE clinic_id = cid AND user_id = auth.uid() AND ativo = true LIMIT 1
+$$;
+
+-- Trigger: atualizar updated_at
+CREATE OR REPLACE FUNCTION touch_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER touch_clinics BEFORE UPDATE ON clinics FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER touch_acoes BEFORE UPDATE ON acoes FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER touch_kickoffs BEFORE UPDATE ON kickoffs FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+-- =====================================================================
+-- 14. ROW LEVEL SECURITY (RLS)
+-- =====================================================================
+
+-- Habilitar RLS em todas as tabelas operacionais
+ALTER TABLE clinics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinic_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinic_status_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinic_activity ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinic_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE faturas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kickoffs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE perfil_operacional ENABLE ROW LEVEL SECURITY;
+ALTER TABLE socios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE equipe_interna ENABLE ROW LEVEL SECURITY;
+ALTER TABLE parceiros_externos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sistemas_uso ENABLE ROW LEVEL SECURITY;
+ALTER TABLE docs_constitutivos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lgpd_termos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assinaturas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE diagnosticos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE respostas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delegacoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sub_delegacoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE riscos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE acoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE processos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE evidencias ENABLE ROW LEVEL SECURITY;
+ALTER TABLE documentos_gerais ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notificacoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Pilares e perguntas são PÚBLICOS de leitura (referência compartilhada)
+-- Apenas super_admin pode editar
+
+-- Policy genérica: SELECT/UPDATE/DELETE baseado em clinic_id do usuário
+-- (repetir para todas as tabelas com clinic_id)
+
+-- CLINICS
+CREATE POLICY "super_admin_all_clinics" ON clinics FOR ALL USING (is_super_admin()) WITH CHECK (is_super_admin());
+CREATE POLICY "user_read_own_clinics" ON clinics FOR SELECT USING (id IN (SELECT user_clinic_ids(auth.uid())));
+
+-- Padrão para tabelas com clinic_id (super_admin vê tudo, usuários veem só suas clínicas)
+DO $$
+DECLARE
+  t TEXT;
+  tables TEXT[] := ARRAY[
+    'clinic_users','clinic_status_history','clinic_activity','clinic_documents','faturas',
+    'kickoffs','perfil_operacional','socios','equipe_interna','parceiros_externos',
+    'sistemas_uso','docs_constitutivos','lgpd_termos','assinaturas','diagnosticos',
+    'respostas','delegacoes','sub_delegacoes','riscos','acoes','processos','evidencias',
+    'documentos_gerais','notificacoes'
+  ];
+BEGIN
+  FOREACH t IN ARRAY tables LOOP
+    -- Super admin pode tudo
+    EXECUTE format('CREATE POLICY "super_admin_all_%I" ON %I FOR ALL USING (is_super_admin()) WITH CHECK (is_super_admin())', t, t);
+    -- Usuários veem só suas clínicas (exceção: profiles, respostas, sub_delegacoes usam join)
+    IF t NOT IN ('respostas','sub_delegacoes','notificacoes') THEN
+      EXECUTE format('CREATE POLICY "clinic_read_%I" ON %I FOR SELECT USING (clinic_id IN (SELECT user_clinic_ids(auth.uid())))', t, t);
+      EXECUTE format('CREATE POLICY "clinic_write_%I" ON %I FOR INSERT WITH CHECK (clinic_id IN (SELECT user_clinic_ids(auth.uid())))', t, t);
+      EXECUTE format('CREATE POLICY "clinic_update_%I" ON %I FOR UPDATE USING (clinic_id IN (SELECT user_clinic_ids(auth.uid()))) WITH CHECK (clinic_id IN (SELECT user_clinic_ids(auth.uid())))', t, t);
+    END IF;
+  END LOOP;
+END $$;
+
+-- Policies especiais
+
+-- Profiles: usuário vê o próprio + super_admin vê todos
+CREATE POLICY "own_profile" ON profiles FOR ALL USING (id = auth.uid() OR is_super_admin()) WITH CHECK (id = auth.uid() OR is_super_admin());
+
+-- Respostas: via diagnostico_id → clinic
+CREATE POLICY "clinic_respostas" ON respostas FOR ALL
+  USING (diagnostico_id IN (SELECT id FROM diagnosticos WHERE clinic_id IN (SELECT user_clinic_ids(auth.uid()))))
+  WITH CHECK (diagnostico_id IN (SELECT id FROM diagnosticos WHERE clinic_id IN (SELECT user_clinic_ids(auth.uid()))));
+
+-- Sub-delegações: via delegacao_id → clinic
+CREATE POLICY "clinic_sub_deleg" ON sub_delegacoes FOR ALL
+  USING (delegacao_id IN (SELECT id FROM delegacoes WHERE clinic_id IN (SELECT user_clinic_ids(auth.uid()))))
+  WITH CHECK (delegacao_id IN (SELECT id FROM delegacoes WHERE clinic_id IN (SELECT user_clinic_ids(auth.uid()))));
+
+-- Notificações: só as do próprio usuário
+CREATE POLICY "own_notifications" ON notificacoes FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+
+-- =====================================================================
+-- 15. SEED DOS 8 PILARES
+-- =====================================================================
+
+INSERT INTO pilares (slug, nome, descricao, ordem, cor) VALUES
+  ('estrategia',  'Estratégia',           'Planejamento, metas e direcionamento',              1, '#3b82f6'),
+  ('financeiro',  'Financeiro',           'Receita, despesas, margem, fluxo de caixa',         2, '#22c55e'),
+  ('contabil',    'Contabilidade',        'Conformidade fiscal, obrigações acessórias',        3, '#06b6d4'),
+  ('marketing',   'Vendas e Marketing',   'Aquisição, conversão, retenção, ROI',              4, '#ec4899'),
+  ('operacoes',   'Operações',            'Processos, produtividade, capacidade',              5, '#f97316'),
+  ('pessoas',     'Pessoas',              'Equipe, cultura, retenção, desenvolvimento',        6, '#eab308'),
+  ('tecnologia',  'Tecnologia',           'Sistemas, integrações, segurança de dados',         7, '#8b5cf6'),
+  ('compliance',  'Compliance / LGPD',    'Conformidade regulatória e proteção de dados',      8, '#64748b');
+
+-- =====================================================================
+-- FIM DO SCHEMA
+-- Depois deste arquivo, rode o seed_perguntas.py para carregar as 150 perguntas
+-- e o seed_ics.sql para criar a clínica-exemplo
+-- =====================================================================

@@ -1,0 +1,649 @@
+# 🚀 IONEX360 — PROMPT MASTER PARA REPLIT AGENT
+
+> **Como usar este documento:** Cole TODO o conteúdo abaixo (da linha "INÍCIO DO PROMPT" até o final) dentro do Replit Agent. Antes disso, provisione o Supabase e rode os SQLs anexos (schema.sql + seed). Siga a ordem do CHECKLIST.md.
+
+---
+
+## INÍCIO DO PROMPT — cole a partir daqui no Replit Agent
+
+Você vai construir o **IONEX360 Command Center** — uma plataforma SaaS multi-tenant para consultorias de governança que atendem clínicas médicas. O sistema é operado pela **Blu Sollutions** (consultoria) e usado por suas clínicas-cliente.
+
+Primeiro cliente real: **Instituto de Cardiologia de Sorriso (ICS)** — contrato assinado, R$ 10.000/mês nos primeiros 3 meses + R$ 5.000/mês de recorrência.
+
+---
+
+## 1. STACK TÉCNICO (OBRIGATÓRIO)
+
+- **Framework:** Next.js 14 (App Router) + TypeScript
+- **Styling:** Tailwind CSS + shadcn/ui (dark mode default)
+- **Banco:** Supabase (Postgres + Auth + Storage + RLS)
+- **ORM:** Supabase JS Client (não usar Prisma)
+- **Fonts:** Geist + Geist Mono + Instrument Serif (display)
+- **Icons:** lucide-react
+- **PDF:** react-pdf + @react-pdf/renderer
+- **Forms:** react-hook-form + zod
+- **Charts:** recharts (radar, bars)
+- **DnD:** @dnd-kit/core (Kanban)
+- **Date:** date-fns (locale pt-BR)
+- **Notificações in-app:** sonner
+- **PWA:** next-pwa
+
+### Variáveis de ambiente (.env.local)
+
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+ANTHROPIC_API_KEY=
+AUTENTIQUE_API_TOKEN=
+RESEND_API_KEY=
+WHATSAPP_TOKEN=
+WHATSAPP_PHONE_ID=
+```
+
+---
+
+## 2. DESIGN SYSTEM
+
+### Paleta (dark mode)
+
+```css
+:root {
+  --bg: #0a0b0f;
+  --bg-elev: #101218;
+  --surface: #151822;
+  --surface-2: #1a1e2a;
+  --border: #242938;
+  --border-hi: #323849;
+  --text: #e7e9ef;
+  --text-dim: #9aa0b4;
+  --text-muted: #646a7e;
+  --accent: #3b82f6;          /* azul IONEX */
+  --accent-hi: #60a5fa;
+  --accent-glow: rgba(59,130,246,.18);
+  --gold: #d4a574;             /* accent secundário IONEX */
+  --success: #34d399;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --critical: #ef4444;
+}
+```
+
+### Princípios visuais
+
+- **Dark mode é default** e é a única versão (não fazer light mode)
+- Tipografia display: **Instrument Serif** para títulos h1/h2
+- Tipografia corpo: **Geist**
+- Código/monospace: **Geist Mono**
+- Use `.font-display` para os `<h1>` das páginas: tamanho 32-38px, itálico ocasional em palavras-chave com cor dourada
+- Cards com `border: 1px solid var(--border)`, borda aumenta intensidade no hover
+- KPIs com gradiente sutil top→bottom e linha superior accent
+- Tabelas com headers em minúsculas, uppercase, tracking amplo
+- Chips pequenos (11px) para status e metadados
+- Micro-animações: transição 150-180ms cubic-bezier(.4,0,.2,1)
+
+### Logo
+
+- Texto "IONEX360" com "360" em dourado (`var(--gold)`)
+- Ícone zap (lucide) dentro de quadrado 30px com gradiente azul
+
+---
+
+## 3. ROLES E PERMISSÕES
+
+4 roles, com hierarquia:
+
+| Role | Pode ver | Pode editar |
+|---|---|---|
+| **super_admin** | Tudo, incluindo gestão de todas as clínicas | Tudo |
+| **consultor** | Clínica ativa: todos os módulos | Tudo exceto Admin de clínicas |
+| **gestor** | Clínica ativa: todos menos Pilares/Perguntas | Delegar sub-tarefas, responder, enviar evidências |
+| **equipe** | Command Center, Diagnóstico (só suas perguntas), Plano de Ação (suas tarefas), Evidências | Responder, enviar evidências, atualizar status de tarefas suas |
+
+O **super_admin** pertence à **Blu Sollutions** (tenant da consultoria).
+**Consultor, gestor, equipe** pertencem a **uma clínica específica** (tenant da clínica).
+
+RLS do Supabase deve garantir isolamento por `clinic_id`.
+
+---
+
+## 4. ARQUITETURA MULTI-TENANT
+
+- Tabela `clinics` é o **tenant principal**. Cada linha = uma clínica cliente.
+- Todas as tabelas operacionais (delegacoes, riscos, acoes, etc.) têm `clinic_id` com FK + RLS.
+- Tabela `organization_users` liga usuários a clínicas com role.
+- Um usuário pode estar em MÚLTIPLAS clínicas (ex: Rafaela Calgaro é super_admin e também consultora em várias clínicas).
+- Contexto de clínica ativa fica em cookie/localStorage. Switcher no topbar.
+
+---
+
+## 5. MÓDULOS (IMPLEMENTAR TODOS)
+
+### 5.1. Super Admin — Gestão de Clínicas (CRM)
+
+**Rota:** `/admin/clinicas` e `/admin/clinicas/[id]`
+
+**Lista (`/admin/clinicas`):**
+- KPIs no topo: Total, Ativas, Em trial, Suspensas
+- Tabela com: Nome, CNPJ, Localização, Plano, Status, Progresso (etapa/10 + barra), MRR
+- Filtros por status e plano
+- Busca por nome/CNPJ
+- Botão "Nova clínica" → abre `/admin/clinicas/new`
+
+**Edição (`/admin/clinicas/[id]`):** 5 abas
+
+#### Aba 1 — Cadastro (com BrasilAPI)
+
+- Input CNPJ com botão "Buscar na Receita"
+- Ao clicar: `fetch('https://brasilapi.com.br/api/cnpj/v1/' + cnpjLimpo)`
+- Preencher automaticamente: razão social, nome fantasia, endereço completo, CEP, município, UF, CNAE, data abertura, capital social, situação cadastral, **QSA (quadro societário)**
+- Mostrar indicador de loading → success/error
+- Campos editáveis após retorno
+- Seção "Responsável principal" (contato): nome, cargo, email, WhatsApp
+
+#### Aba 2 — Financeiro & Contrato
+
+- Upload Proposta (PDF) + Upload Contrato (PDF)
+- Status do contrato: rascunho / enviado / assinado
+- **Botão "Enviar via Autentique"** → Edge Function chama API Autentique (ver seção 7.2)
+- Valor implantação (R$ 10.000 para ICS)
+- Valor recorrente (R$ 5.000)
+- Data início recorrência (mês 4)
+- Forma de pagamento: Pix, Boleto, Cartão, TED (radio)
+- Dia de vencimento
+- Índice de reajuste (default IGPM/FGV)
+- Tabela de faturas emitidas (status: pago, pendente, atrasado)
+
+#### Aba 3 — Status (ciclo de vida)
+
+Estados possíveis: `prospect → proposta → contrato → trial → ativa → suspensa → desativada`
+
+Ações disponíveis:
+- **Suspender** (apenas se ativa): bloqueia acesso, mantém dados. Requer motivo.
+- **Reativar** (apenas se suspensa): restaura acesso.
+- **Desativar** (qualquer estado): encerra contrato. Dados disponíveis por export por 30 dias (Cláusula 14 do contrato), depois acesso é revogado. Requer motivo. Confirmação dupla.
+
+Cada mudança grava linha em `clinic_status_history` com: de, para, data, autor, motivo.
+
+Timeline vertical do histórico visível.
+
+Alerta destacado explicando a cláusula 14 de retenção de dados.
+
+#### Aba 4 — Usuários
+
+Lista de usuários da clínica com: nome, email, role, último acesso, status (ativo/convite pendente).
+- Botão "Convidar usuário" (envia magic link via Supabase Auth)
+- Revogar acesso
+- Reenviar convite
+
+#### Aba 5 — Atividade
+
+Timeline vertical com eventos importantes:
+- Clínica cadastrada
+- Proposta enviada
+- Contrato assinado
+- Kick-off realizado
+- Diagnóstico concluído
+- Suspensão/reativação
+- Pagamentos
+
+---
+
+### 5.2. Command Center (Home) — `/`
+
+- Stepper horizontal das 10 etapas (destacar etapa atual)
+- 4 KPIs: Índice Geral, Ações ativas, Riscos críticos, Docs constitutivos
+- Grid 3×4 dos 10 módulos da metodologia (cards clicáveis com ícone colorido + descrição)
+- Radar dos 8 pilares (com linha de meta tracejada dourada)
+- Top 4 riscos ordenados por severidade (prob × impacto)
+
+Etapas:
+1. Cadastro  2. Kick-off  3. Diagnóstico 360°  4. Montagem dos Processos  5. Definição do Painel  6. Avaliação e Validação  7. Treinamento  8. Mapa de Riscos  9. Plano de Ação  10. Acompanhamento
+
+---
+
+### 5.3. Kick-off — `/kickoff` (8 abas)
+
+#### Aba 1 — Ata
+- Data, modalidade (presencial/remoto), duração, facilitador
+- Participantes (chips)
+- Pauta executada (lista ordenada)
+- Próximos passos (ações com responsável e prazo)
+- Botão "Exportar ata em PDF"
+
+#### Aba 2 — Perfil operacional
+- Faturamento médio mensal (input R$)
+- Ticket médio
+- Nº de pacientes ativos
+- Nº de atendimentos/mês
+- Especialidades (multi-select com chips)
+- Horário de funcionamento (texto livre)
+- Modelo: % particular / % convênio / % SUS (barras)
+
+#### Aba 3 — Quadro societário
+- Auto-populado da busca CNPJ (BrasilAPI retorna QSA)
+- Tabela editável: Nome, CPF, %, Cargo, Decisor (sim/não), Email, WhatsApp
+- Botão "Novo sócio"
+
+#### Aba 4 — Equipe interna
+- Agrupada por áreas: Administrativo, Clínico, Atendimento, Marketing, TI
+- Por pessoa: nome, função, vínculo (CLT/PJ/Sócio), email, WhatsApp, flag "acesso à plataforma" (se sim → convida)
+
+#### Aba 5 — Rede externa (parceiros)
+- Cards para: Contador, Advogado, Agência de Marketing, TI externo, Banco principal
+- Por parceiro: nome da empresa, responsável, registro profissional (CRC/OAB/etc), telefone, email
+
+#### Aba 6 — Sistemas em uso
+- Tabela: Nome, Fornecedor, Tipo (ERP/CRM/Agenda/Financeiro/etc), API disponível (sim/não/a validar), Responsável interno, Criticidade (alto/médio/baixo)
+- ICS já tem: Amigo Clinic, SmartGest, RD Station, Google Workspace, WhatsApp Business
+
+#### Aba 7 — Documentos constitutivos
+- Lista agrupada por categoria: Jurídico, Funcionamento, Financeiro, Estrutura, Seguros
+- Por doc: nome, obrigatório (sim/não), arquivo anexado, tamanho, data, botão visualizar ou enviar
+- Dropzone para upload direto
+- Barra de progresso lateral: "X/Y obrigatórios enviados"
+
+Documentos obrigatórios: Contrato Social, CNPJ, Alvará, Licença VISA, CRM do RT.
+Opcionais: DRE, Balanço, Organograma, Apólice RC, Política LGPD.
+
+#### Aba 8 — LGPD & Autorizações
+
+**6 termos específicos (OBRIGATÓRIO criar exatamente estes):**
+
+1. **Autorização de Tratamento de Dados** — Autoriza a IONEX360 a coletar, armazenar e tratar dados da clínica conforme a LGPD.
+2. **Acordo de Confidencialidade (NDA)** — Garante o sigilo de informações estratégicas, financeiras e operacionais.
+3. **Autorização de Acesso a Sistemas** — Permite acesso de leitura/escrita aos sistemas internos da clínica para o diagnóstico.
+4. **Autorização para Contato com Terceiros** — Autoriza interação com fornecedores, contadores, advogados e parceiros da clínica.
+5. **Nomeação de Encarregado (DPO)** — Indica o responsável pela proteção de dados (DPO) durante o projeto.
+6. **Política de Privacidade** — Aceite da Política de Privacidade aplicada ao tratamento de dados pessoais.
+
+**Para cada termo, duas ações:**
+- **"Aceite digital"** → abre modal Autentique, envia para assinatura do responsável da clínica
+- **"Anexar PDF"** → upload de PDF já assinado fisicamente
+
+Header do bloco: ícone shield + "LGPD e Autorizações" + contador "X de 6 termos formalizados".
+
+---
+
+### 5.4. Diagnóstico 360° — `/diagnostico`
+
+- Wizard linear com 150 perguntas, 8 pilares
+- Progress bar global + navegação por dots
+- 4 tipos de pergunta:
+  - `sim_nao` — 2 cards grandes clicáveis
+  - `escala_1_5` — 5 cards com número + label (Crítico/Ruim/Médio/Bom/Ótimo)
+  - `texto_livre` — textarea
+  - `numerico` — input number
+- Auto-save a cada resposta
+- Sessão pode ser pausada/retomada
+- Cada pilar pode ser delegado para alguém (ver seção 5.5)
+
+Pilares e distribuição:
+| Pilar | Perguntas |
+|---|---|
+| Estratégia | 18 |
+| Financeiro | 21 |
+| Contabilidade | 18 |
+| Vendas e Marketing | 18 |
+| Operações | 21 |
+| Pessoas | 18 |
+| Tecnologia | 18 |
+| Compliance / LGPD | 18 |
+| **TOTAL** | **150** |
+
+> **Nota:** Use o arquivo `diagnostico_pilares_questoes.csv` da pasta do cliente (já existe na pasta local do OneDrive) OU gere o CSV novo com base nos pilares acima. Script Python de seed em `scripts/seed_perguntas.py`.
+
+Score por pilar = média ponderada das respostas (peso 1-5 por pergunta).
+Score global = média dos 8 pilares.
+
+---
+
+### 5.5. Delegação — `/delegacao`
+
+Hierarquia de 2 níveis:
+- **Nível 1:** Consultor → Gestor. Gestor responde o pilar todo OU sub-delega.
+- **Nível 2:** Gestor → Equipe. Fraciona o pilar por intervalo de perguntas.
+
+Ex: Pilar Financeiro (21 perguntas) → Carla Menezes (Gestora) → Paula Reis responde 1-10, Rita Alves responde 11-21.
+
+Tabela de delegações:
+- Por pilar: Pilar | Responsável N1 | Progresso | Status | Prazo | Ações
+- Expansível (details/summary) para ver sub-delegações N2
+- Ações: Delegar, Sub-delegar, Reatribuir, Remover
+
+Status: não_delegado, pendente, andamento, concluido, atrasado.
+
+Ao delegar, envia email + WhatsApp para o responsável com link único de acesso ao diagnóstico.
+
+---
+
+### 5.6. Mapa de Riscos — `/riscos`
+
+- Matriz 5×5 (eixo X = probabilidade, eixo Y = impacto)
+- Células coloridas por severidade (verde → amarelo → vermelho)
+- Cada risco aparece como círculo numerado na célula (prob, imp)
+- Hover mostra nome do risco
+- Lista lateral ordenada por severidade (prob × impacto)
+- Cada risco: Nome, Pilar relacionado, Probabilidade, Impacto, Responsável, Ações mitigadoras (vira tarefa no Plano de Ação)
+
+Botão "+ Novo risco" com modal.
+
+---
+
+### 5.7. Plano de Ação — `/acao`
+
+Kanban 5 colunas: **Backlog → To Do → Doing → Review → Done**
+
+Cada card:
+- Prioridade (alta/média/baixa com cor)
+- Título
+- Pilar relacionado
+- Responsável (avatar)
+- Prazo
+- Link para evidências
+
+Drag-and-drop entre colunas (@dnd-kit/core).
+
+Filtros: por responsável, por pilar, por prioridade.
+
+---
+
+### 5.8. Processos — `/processos`
+
+Lista de processos críticos da clínica com status (mapeado / em mapeamento / pendente).
+Para cada processo:
+- Nome
+- Responsável
+- Duração média
+- Gargalos identificados
+- Fluxograma (usar React Flow — `reactflow`)
+
+---
+
+### 5.9. Evidências — `/evidencias`
+
+Galeria de uploads (prints, planilhas, atas, fotos) agrupados por pilar.
+Cada evidência: tipo (ícone), pilar, responsável, data, descrição.
+Botão "Nova evidência" com dropzone.
+Supabase Storage: bucket `evidencias`, path `clinics/{clinic_id}/evidencias/`.
+
+---
+
+### 5.10. Documentos — `/documentos`
+
+Gestão documental geral (diferente dos constitutivos do kick-off).
+Tabela: Nome, Categoria, Tamanho, Vencimento, Status (ativo/expirado/pendente).
+Alertas automáticos 30/15/7 dias antes do vencimento (via email).
+
+---
+
+### 5.11. Relatórios — `/relatorios`
+
+6 relatórios gerados como PDF automático:
+1. **Diagnóstico 360° completo** (radar + scores + insights IA + recomendações)
+2. **Mapa de Riscos consolidado**
+3. **Plano de ação mensal**
+4. **Relatório de delegação**
+5. **Documentos constitutivos**
+6. **Ata consolidada (mensal)**
+
+Usar `@react-pdf/renderer`. Templates com header IONEX (logo + cliente + data).
+
+---
+
+## 6. PILARES E PERGUNTAS (SEED)
+
+Use o CSV `diagnostico_pilares_questoes.csv` (150 linhas) como fonte. Script para carregar:
+
+```python
+# scripts/seed_perguntas.py
+import csv, os
+from supabase import create_client
+
+sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_SERVICE_ROLE_KEY'])
+
+with open('diagnostico_pilares_questoes.csv') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        sb.table('perguntas').insert({
+            'pilar_slug': row['pilar_slug'],
+            'texto': row['texto'],
+            'tipo': row['tipo'],   # sim_nao, escala_1_5, texto_livre, numerico
+            'peso': int(row['peso']),
+            'ordem': int(row['ordem']),
+        }).execute()
+```
+
+Se o CSV não estiver disponível, **gere uma versão mínima com 5 perguntas por pilar** (40 total) como placeholder e marque TODO para substituir.
+
+---
+
+## 7. INTEGRAÇÕES EXTERNAS
+
+### 7.1. BrasilAPI (CNPJ)
+
+- **URL:** `https://brasilapi.com.br/api/cnpj/v1/{cnpj}` (sem token, CORS-friendly)
+- **Chamada:** client-side direto via fetch
+- **Resposta principal:** `razao_social`, `nome_fantasia`, `logradouro`, `numero`, `bairro`, `municipio`, `uf`, `cep`, `cnae_fiscal`, `cnae_fiscal_descricao`, `data_inicio_atividade`, `capital_social`, `descricao_situacao_cadastral`, `qsa[]` (array de sócios)
+- **Sem quota** — 100% gratuito
+
+### 7.2. Autentique (assinatura digital)
+
+- **URL:** `https://api.autentique.com.br/v2/graphql`
+- **Auth:** Header `Authorization: Bearer {AUTENTIQUE_API_TOKEN}`
+- **Edge Function Next.js:** `/api/autentique/create-document`
+- **Fluxo:**
+  1. Upload do PDF para Supabase Storage
+  2. Chama Autentique via GraphQL mutation `createDocument`
+  3. Recebe `document.id` + `signatures[].link`
+  4. Envia link por email (Resend) para cada signatário
+  5. Webhook `/api/autentique/webhook` recebe updates de status
+  6. Atualiza `assinaturas.status` no banco em tempo real
+- **Status possíveis:** aguardando, visualizado, assinado, concluido, expirado, recusado
+- **Plano:** 5 assinaturas grátis/mês, R$ 0,30/doc depois
+
+Esquema GraphQL mínimo para criar documento:
+```graphql
+mutation {
+  createDocument(
+    document: { name: "Contrato ICS" }
+    signers: [
+      { email: "edgar@ics.com.br", action: SIGN, positions: [...] }
+      { email: "rafaela@blu.com.br", action: SIGN }
+    ]
+    file: $file
+  ) {
+    id
+    signatures { public_id link { short_link } email }
+  }
+}
+```
+
+### 7.3. Claude API (insights IA)
+
+- **URL:** `https://api.anthropic.com/v1/messages`
+- **Model:** `claude-opus-4-5` (ou o mais recente disponível)
+- **Edge Function:** `/api/ai/analyze-diagnostico`
+- **Input:** JSON com scores dos 8 pilares + respostas críticas
+- **Output estruturado:** 
+  ```json
+  {
+    "pontos_fortes": ["..."],
+    "pontos_criticos": ["..."],
+    "acoes_sugeridas": [{"titulo":"...","pilar":"...","prio":"alta"}]
+  }
+  ```
+- Mostrar indicador "Gerado pela IA · Claude" com disclaimer
+
+### 7.4. Email (Resend)
+
+- Envio transacional (convites, notificações de delegação, faturas, alertas de vencimento)
+- Templates em React Email (`@react-email/components`)
+- Domain: `ionex360.com.br` (configurar SPF/DKIM depois)
+
+### 7.5. WhatsApp (Meta Cloud API)
+
+- Notificações de delegação e aprovações
+- Templates pré-aprovados (iniciar com 2-3 templates)
+- Fallback: se falhar, só envia email
+
+---
+
+## 8. SEED DE DADOS — ICS (primeiro cliente)
+
+Criar 1 clínica seed **Instituto de Cardiologia de Sorriso** com estes dados reais:
+
+```sql
+INSERT INTO clinics (id, nome, fantasia, cnpj, razao_social, cidade, uf, cep, endereco, cnae, plano, status, etapa, responsavel, email, whatsapp, cargo, valor_implantacao, valor_recorrente, forma_pagamento, dia_venc) VALUES (
+  'ics-seed-uuid', 'Instituto de Cardiologia de Sorriso', 'ICS Cardiologia',
+  '44.593.386/0001-68', 'Instituto de Cardiologia de Sorriso Ltda',
+  'Sorriso', 'MT', '78.891-072', 'Rua das Orquídeas, 825, Alphaville',
+  '8630-5/03 — Atividade médica ambulatorial restrita a consultas',
+  'Enterprise', 'ativa', 3,
+  'Dr. Edgar Stroppa Lamas', 'edgar@ics.com.br', '(65) 9 9123-4567', 'Sócio-Administrador',
+  10000.00, 5000.00, 'boleto', 15
+);
+```
+
+**Scores do diagnóstico ICS (já realizado):**
+
+| Pilar | Score | Meta |
+|---|---|---|
+| Estratégia | 3,1 | 4,0 |
+| Financeiro | 3,0 | 4,2 |
+| Contabilidade | 3,3 | 4,0 |
+| Vendas e Marketing | 2,4 | 3,8 |
+| Operações | 3,1 | 4,0 |
+| Pessoas | 2,9 | 4,0 |
+| Tecnologia | 3,9 | 4,2 |
+| Compliance / LGPD | 3,0 | 4,0 |
+| **Global** | **3,1** | **4,0** |
+
+**Sócios ICS (QSA):**
+- Dr. Edgar Stroppa Lamas — 60% — Sócio-Administrador
+- Dra. Patricia Lamas — 40% — Sócia
+
+**Equipe-chave (seed):**
+- Dra. Júlia Ferraz — Gerente Operacional — CLT
+- Carla Menezes — Gerente Financeira — CLT
+- Henrique Tavares — Analista TI — CLT
+- Rafael Costa — Coord. Marketing — PJ
+- Amanda Rodrigues — Coord. Atendimento — CLT
+
+**Parceiros externos:**
+- Contador: Contábil Sorriso Ltda (Cláudio Menezes, CRC-MT 012345)
+- Advogado: Silva & Lamas Advogados (Dr. Pedro Silva, OAB-MT 15.432)
+- Marketing: Mídia Pulse Agência (Carolina Duarte)
+- Banco: Sicredi MT (Agência 0823)
+
+**Sistemas em uso:**
+- Amigo Clinic — ERP/Agenda — API a validar — CRÍTICO
+- SmartGest Financeiro — Financeiro — API REST — CRÍTICO
+- RD Station — CRM/Marketing — API Sim
+- Google Workspace — E-mail/Docs — API Sim
+- WhatsApp Business — Cloud API
+
+**Top 5 riscos ICS:**
+
+| Risco | Pilar | Prob | Imp | Sev |
+|---|---|---|---|---|
+| Margem por serviço sem leitura gerencial | Financeiro | 4 | 5 | 20 |
+| Dependência de controles paralelos | Tecnologia | 4 | 4 | 16 |
+| Falta de mensuração de ROI MKT | Marketing | 5 | 3 | 15 |
+| Ausência de política LGPD formalizada | Compliance | 3 | 5 | 15 |
+| Processos sem padronização | Operações | 3 | 4 | 12 |
+
+---
+
+## 9. ROTAS (RESUMO)
+
+```
+/                              → Home / Command Center
+/kickoff                       → Kick-off (8 abas)
+/diagnostico                   → Wizard do diagnóstico
+/diagnostico/resultado         → Radar + scores + insights IA
+/delegacao                     → Delegação hierárquica
+/pilares                       → CRUD pilares/perguntas (só super_admin e consultor)
+/riscos                        → Mapa de riscos 5×5
+/acao                          → Kanban plano de ação
+/processos                     → Processos e fluxos
+/evidencias                    → Galeria
+/documentos                    → Gestão documental
+/relatorios                    → Central de PDFs
+
+/admin/clinicas                → Lista de clínicas (só super_admin)
+/admin/clinicas/new            → Nova clínica (wizard ou form)
+/admin/clinicas/[id]           → Edição 5 abas
+
+/auth/login
+/auth/callback                 → Supabase magic link
+/api/autentique/create-document
+/api/autentique/webhook
+/api/ai/analyze-diagnostico
+```
+
+---
+
+## 10. ENTREGA — MILESTONES
+
+Entregue na seguinte ordem. NÃO avance sem validar o anterior:
+
+### M1 — Infra (Dia 1)
+- Projeto Next.js 14 + TypeScript + Tailwind + shadcn/ui
+- Supabase conectado com RLS ativo
+- Auth funcionando (magic link)
+- Layout base: sidebar + topbar + dark mode + role switcher (dev)
+- Seed ICS carregado
+
+### M2 — Super Admin (Dia 2)
+- Lista de clínicas + KPIs + filtros
+- Edição 5 abas (Cadastro com BrasilAPI funcionando de verdade, Financeiro, Status, Usuários, Atividade)
+- Ciclo de vida (suspender/reativar/desativar com log)
+
+### M3 — Kick-off completo (Dia 3)
+- 8 abas funcionais
+- LGPD com integração Autentique real (aceite digital gerando link)
+- Upload de documentos no Supabase Storage
+
+### M4 — Diagnóstico + Resultado (Dia 4)
+- Wizard com 150 perguntas (ou 40 seed)
+- Auto-save
+- Cálculo de scores
+- Tela de resultado com radar + insights IA (Claude)
+
+### M5 — Delegação + Riscos + Ação (Dia 5)
+- Delegação 2 níveis funcional
+- Matriz de riscos 5×5
+- Kanban com DnD
+
+### M6 — Módulos complementares + PDFs (Dia 6)
+- Processos, Evidências, Documentos, Relatórios
+- Export PDF dos 6 relatórios
+
+### M7 — PWA + Notificações (Dia 7)
+- Next-PWA configurado
+- Emails via Resend
+- WhatsApp via Meta Cloud API
+
+---
+
+## 11. ACEITAÇÃO FINAL
+
+O sistema é considerado pronto quando:
+
+- [ ] Super admin consegue cadastrar nova clínica digitando só o CNPJ e clicando "Buscar na Receita"
+- [ ] Contrato pode ser enviado via Autentique e status atualiza via webhook
+- [ ] Aceite digital dos 6 termos LGPD funciona individualmente
+- [ ] Diagnóstico completo pode ser respondido com sub-delegação funcionando
+- [ ] Insights IA são gerados pela Claude após conclusão do diagnóstico
+- [ ] PDFs dos 6 relatórios podem ser baixados
+- [ ] Suspensão bloqueia acesso e reativação restaura
+- [ ] Role switcher mostra menus corretos para cada perfil
+- [ ] PWA instalável no celular
+- [ ] Todos os dados do ICS aparecem corretamente populados
+
+---
+
+## FIM DO PROMPT
+
+**Dica para o Replit Agent:** Se algum arquivo for grande demais, quebre em módulos. Priorize funcionalidade sobre polish inicial — o polish visual vem na fase 2.
