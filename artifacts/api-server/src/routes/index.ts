@@ -23,6 +23,9 @@ import docsConstitutivoRouter from "./docs-constitutivos";
 import lgpdTermosRouter from "./lgpd-termos";
 import { autentiquePublicRouter, autentiqueProtectedRouter } from "./autentique";
 import delegacoesRouter from "./delegacoes";
+import processosRouter from "./processos";
+import evidenciasRouter from "./evidencias";
+import documentosRouter from "./documentos";
 
 const router: IRouter = Router();
 
@@ -48,6 +51,9 @@ router.use(requireSuperAdmin, docsConstitutivoRouter);
 router.use(requireSuperAdmin, lgpdTermosRouter);
 router.use(requireSuperAdmin, autentiqueProtectedRouter);
 router.use(requireSuperAdmin, delegacoesRouter);
+router.use(requireSuperAdmin, processosRouter);
+router.use(requireSuperAdmin, evidenciasRouter);
+router.use(requireSuperAdmin, documentosRouter);
 router.use(autentiquePublicRouter);
 router.use(notificationsRouter);
 

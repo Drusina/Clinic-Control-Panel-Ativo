@@ -11,6 +11,10 @@ import {
   ShieldAlert,
   KanbanSquare,
   ChevronDown,
+  GitFork,
+  Image,
+  FileText,
+  BarChart3,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +26,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [operacionalOpen, setOperacionalOpen] = useState(
     location.startsWith("/delegacao") || location.startsWith("/riscos") || location.startsWith("/acao")
+  );
+  const [complementarOpen, setComplementarOpen] = useState(
+    location.startsWith("/processos") || location.startsWith("/evidencias") || location.startsWith("/documentos") || location.startsWith("/relatorios")
   );
 
   const navigation = [
@@ -35,6 +42,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Delegação", href: "/delegacao/select", icon: Users },
     { name: "Mapa de Riscos", href: "/riscos/select", icon: ShieldAlert },
     { name: "Plano de Ação", href: "/acao/select", icon: KanbanSquare },
+  ];
+
+  const complementarNav = [
+    { name: "Processos", href: "/processos/select", icon: GitFork },
+    { name: "Evidências", href: "/evidencias/select", icon: Image },
+    { name: "Documentos", href: "/documentos/select", icon: FileText },
+    { name: "Relatórios", href: "/relatorios/select", icon: BarChart3 },
   ];
 
   const SidebarContent = () => (
@@ -51,6 +65,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <Link key={item.name} href={item.href}>
                 <Button
                   variant={isActive ? "secondary" : "ghost"}
+                  aria-current={isActive ? "page" : undefined}
                   className={`w-full justify-start gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
                 >
                   <item.icon className="h-4 w-4" />
@@ -76,6 +91,36 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     <Link key={item.name} href={item.href}>
                       <Button
                         variant={isActive ? "secondary" : "ghost"}
+                        aria-current={isActive ? "page" : undefined}
+                        className={`w-full justify-start gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.name}
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-2">
+            <button
+              onClick={() => setComplementarOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider hover:text-sidebar-foreground/70 transition-colors"
+            >
+              <span>Complementar</span>
+              <ChevronDown className={cn("h-3 w-3 transition-transform", complementarOpen ? "rotate-180" : "")} />
+            </button>
+            {complementarOpen && (
+              <div className="flex flex-col gap-1">
+                {complementarNav.map((item) => {
+                  const isActive = location.startsWith(item.href.split("/select")[0]);
+                  return (
+                    <Link key={item.name} href={item.href}>
+                      <Button
+                        variant={isActive ? "secondary" : "ghost"}
+                        aria-current={isActive ? "page" : undefined}
                         className={`w-full justify-start gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
                       >
                         <item.icon className="h-4 w-4" />

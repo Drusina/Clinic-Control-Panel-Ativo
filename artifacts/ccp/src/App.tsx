@@ -22,6 +22,10 @@ import DiagnosticoResultado from "@/pages/diagnostico/resultado";
 import DelegacaoPage from "@/pages/delegacao/index";
 import RiscosPage from "@/pages/riscos/index";
 import AcaoPage from "@/pages/acao/index";
+import ProcessosPage from "@/pages/processos/index";
+import EvidenciasPage from "@/pages/evidencias/index";
+import DocumentosPage from "@/pages/documentos/index";
+import RelatoriosPage from "@/pages/relatorios/index";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -239,6 +243,94 @@ function Router() {
           <AppLayout>
             <SuperAdminGuard>
               <AcaoPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/processos">
+        <Redirect to="/processos/select" />
+      </Route>
+      <Route path="/processos/select">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <ProcessosPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/processos/:clinicId">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <ProcessosPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/evidencias">
+        <Redirect to="/evidencias/select" />
+      </Route>
+      <Route path="/evidencias/select">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <EvidenciasPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/evidencias/:clinicId">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <EvidenciasPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/documentos">
+        <Redirect to="/documentos/select" />
+      </Route>
+      <Route path="/documentos/select">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <DocumentosPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/documentos/:clinicId">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <DocumentosPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/relatorios">
+        <Redirect to="/relatorios/select" />
+      </Route>
+      <Route path="/relatorios/select">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <RelatoriosPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/relatorios/:clinicId">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <RelatoriosPage />
             </SuperAdminGuard>
           </AppLayout>
         )}

@@ -17,3 +17,6 @@ export * from "./docs_constitutivos";
 export * from "./lgpd_termos";
 export * from "./perguntas";
 export * from "./respostas";
+export * from "./processos";
+export * from "./evidencias";
+export * from "./documentos";
