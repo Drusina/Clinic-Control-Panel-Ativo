@@ -1,18 +1,137 @@
+import { useState } from "react";
 import type { Clinic } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Building, Mail, Phone, MapPin, User, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Building, Mail, Phone, MapPin, User, Calendar, Wand2, CheckCircle2, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { getStoredToken } from "@/hooks/use-auth";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+interface SeedResult {
+  delegacoes: number;
+  risks: number;
+  actions: number;
+}
 
 export default function OverviewTab({ clinic }: { clinic: Clinic }) {
+  const [seeding, setSeeding] = useState(false);
+  const [seeded, setSeeded] = useState<SeedResult | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
-      value
-    );
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
+  async function handleSeed() {
+    setSeeding(true);
+    const token = getStoredToken();
+    const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const [delRes, riskRes, actionRes] = await Promise.all([
+        fetch(`${BASE}/api/clinics/${clinic.id}/delegacoes/seed`, { method: "POST", headers: authHeaders }),
+        fetch(`${BASE}/api/clinics/${clinic.id}/risks/seed`, { method: "POST", headers: authHeaders }),
+        fetch(`${BASE}/api/clinics/${clinic.id}/actions/seed`, { method: "POST", headers: authHeaders }),
+      ]);
+
+      if (!delRes.ok || !riskRes.ok || !actionRes.ok) {
+        throw new Error("Uma ou mais requisições falharam.");
+      }
+
+      const [delData, riskData, actionData] = await Promise.all([
+        delRes.json(),
+        riskRes.json(),
+        actionRes.json(),
+      ]);
+
+      const result: SeedResult = {
+        delegacoes: delData.created ?? 0,
+        risks: riskData.created ?? 0,
+        actions: actionData.created ?? 0,
+      };
+
+      setSeeded(result);
+
+      const total = result.delegacoes + result.risks + result.actions;
+      if (total === 0) {
+        toast({
+          title: "Dados já inicializados",
+          description: "Esta clínica já possui todos os dados ICS padrão.",
+        });
+      } else {
+        toast({
+          title: "Dados ICS inicializados com sucesso",
+          description: `${result.delegacoes} delegações, ${result.risks} riscos e ${result.actions} ações foram criados.`,
+        });
+        await queryClient.invalidateQueries();
+      }
+    } catch {
+      toast({
+        title: "Erro ao inicializar dados",
+        description: "Não foi possível concluir a inicialização. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setSeeding(false);
+    }
+  }
 
   return (
     <div className="grid gap-6 md:grid-cols-3">
+      <Card className="md:col-span-3 border-primary/30 bg-primary/5">
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5 text-primary" />
+              Inicializar dados ICS
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Pré-carrega 7 delegações por pilar, 8 riscos operacionais e 9 ações no Kanban — conforme a metodologia ICS. Seguro repetir: não duplica registros já existentes.
+            </CardDescription>
+          </div>
+          <Button
+            onClick={handleSeed}
+            disabled={seeding}
+            data-testid="btn-seed-ics"
+            className="shrink-0"
+          >
+            {seeding ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Inicializando…
+              </>
+            ) : (
+              <>
+                <Wand2 className="mr-2 h-4 w-4" />
+                Inicializar dados ICS
+              </>
+            )}
+          </Button>
+        </CardHeader>
+        {seeded !== null && (
+          <CardContent>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <strong>{seeded.delegacoes}</strong> delegações criadas
+              </span>
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <strong>{seeded.risks}</strong> riscos criados
+              </span>
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <strong>{seeded.actions}</strong> ações criadas
+              </span>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
       <Card className="md:col-span-2">
         <CardHeader>
           <CardTitle>Progresso de Implantação</CardTitle>

@@ -98,6 +98,110 @@ router.patch("/risks/:id", async (req, res): Promise<void> => {
   res.json(UpdateRiskResponse.parse(mapRisk(risk)));
 });
 
+const ICS_RISKS = [
+  {
+    nome: "Inadimplência de pacientes",
+    descricao: "Risco de alto volume de contas a receber sem liquidação, impactando o fluxo de caixa.",
+    probabilidade: 4,
+    impacto: 4,
+    pilarSlug: "financeiro",
+    acoesMitigadoras: "Implantar política de cobrança preventiva e parcelamentos controlados.",
+  },
+  {
+    nome: "Falha no controle de fluxo de caixa",
+    descricao: "Desconhecimento do saldo real disponível, levando a decisões financeiras equivocadas.",
+    probabilidade: 3,
+    impacto: 5,
+    pilarSlug: "financeiro",
+    acoesMitigadoras: "Adotar planilha ou sistema de fluxo de caixa com atualizações semanais.",
+  },
+  {
+    nome: "Elevado índice de turnover da equipe",
+    descricao: "Rotatividade acima da média gera custos de recontratação e perda de know-how.",
+    probabilidade: 3,
+    impacto: 4,
+    pilarSlug: "pessoas",
+    acoesMitigadoras: "Criar plano de cargos e salários e programa de reconhecimento interno.",
+  },
+  {
+    nome: "Autuação fiscal ou tributária",
+    descricao: "Erros no recolhimento de impostos ou obrigações acessórias podem gerar multas e passivos.",
+    probabilidade: 2,
+    impacto: 5,
+    pilarSlug: "contabil",
+    acoesMitigadoras: "Revisão mensal das obrigações fiscais com contador especializado.",
+  },
+  {
+    nome: "Baixa captação de novos pacientes",
+    descricao: "Insuficiência de estratégias de marketing digital reduz o volume de novos atendimentos.",
+    probabilidade: 4,
+    impacto: 3,
+    pilarSlug: "marketing",
+    acoesMitigadoras: "Definir funil de captação e investir em canais digitais com metas mensais.",
+  },
+  {
+    nome: "Falha em sistemas de gestão",
+    descricao: "Indisponibilidade de prontuário ou agendamento compromete a operação da clínica.",
+    probabilidade: 2,
+    impacto: 4,
+    pilarSlug: "tecnologia",
+    acoesMitigadoras: "Contratar suporte técnico e manter backup diário dos dados.",
+  },
+  {
+    nome: "Não conformidade com a LGPD",
+    descricao: "Tratamento inadequado de dados sensíveis de pacientes pode gerar sanções da ANPD.",
+    probabilidade: 2,
+    impacto: 5,
+    pilarSlug: "compliance",
+    acoesMitigadoras: "Elaborar política de privacidade e nomear um DPO interno.",
+  },
+  {
+    nome: "Ausência de processos padronizados",
+    descricao: "Falta de procedimentos operacionais escritos gera retrabalho e atendimento inconsistente.",
+    probabilidade: 4,
+    impacto: 3,
+    pilarSlug: "operacoes",
+    acoesMitigadoras: "Documentar os principais fluxos operacionais em POPs (Procedimentos Operacionais Padrão).",
+  },
+];
+
+router.post("/clinics/:clinicId/risks/seed", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+
+  const existing = await db
+    .select({ nome: risksTable.nome })
+    .from(risksTable)
+    .where(eq(risksTable.clinicId, clinicId));
+
+  const existingNames = new Set(existing.map(r => r.nome));
+  const toCreate = ICS_RISKS.filter(r => !existingNames.has(r.nome));
+
+  if (toCreate.length === 0) {
+    res.json({ created: 0, message: "Todos os riscos ICS já foram inseridos." });
+    return;
+  }
+
+  const created = await db
+    .insert(risksTable)
+    .values(
+      toCreate.map(r => ({
+        clinicId,
+        nome: r.nome,
+        descricao: r.descricao,
+        probabilidade: r.probabilidade,
+        impacto: r.impacto,
+        severidade: r.probabilidade * r.impacto,
+        pilarSlug: r.pilarSlug,
+        responsavel: null,
+        acoesMitigadoras: r.acoesMitigadoras,
+        status: "identificado" as const,
+      }))
+    )
+    .returning();
+
+  res.status(201).json({ created: created.length, risks: created.map(mapRisk) });
+});
+
 router.delete("/risks/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
