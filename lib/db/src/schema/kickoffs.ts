@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, integer, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, integer, date, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { clinicsTable } from "./clinics";
@@ -13,6 +13,9 @@ export const kickoffsTable = pgTable("kickoffs", {
   modalidade: text("modalidade"),
   duracaoMinutos: integer("duracao_minutos"),
   facilitador: text("facilitador"),
+  participantes: jsonb("participantes").$type<string[]>(),
+  pauta: text("pauta").array(),
+  proximosPassos: jsonb("proximos_passos").$type<Array<{ acao: string; responsavel: string; prazo: string }>>(),
   status: text("status").notNull().default("rascunho"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

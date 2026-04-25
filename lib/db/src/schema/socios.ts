@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, boolean, timestamp, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { clinicsTable } from "./clinics";
@@ -9,9 +9,16 @@ export const sociosTable = pgTable("socios", {
     .notNull()
     .references(() => clinicsTable.id, { onDelete: "cascade" }),
   nome: text("nome").notNull(),
+  cpf: text("cpf"),
+  percentual: numeric("percentual", { precision: 5, scale: 2 }),
+  cargo: text("cargo"),
+  decisor: boolean("decisor").default(false),
+  email: text("email"),
+  whatsapp: text("whatsapp"),
+  origem: text("origem").default("manual"),
   qualificacao: text("qualificacao"),
   qualId: text("qual_id"),
-  dataEntrada: date("data_entrada"),
+  dataEntrada: text("data_entrada"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

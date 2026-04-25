@@ -1,10 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, sociosTable } from "@workspace/db";
-import {
-  CreateSocioBody,
-  UpdateSocioBody,
-} from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -13,6 +9,13 @@ function mapSocio(s: typeof sociosTable.$inferSelect) {
     id: s.id,
     clinicId: s.clinicId,
     nome: s.nome,
+    cpf: s.cpf ?? null,
+    percentual: s.percentual != null ? Number(s.percentual) : null,
+    cargo: s.cargo ?? null,
+    decisor: s.decisor ?? false,
+    email: s.email ?? null,
+    whatsapp: s.whatsapp ?? null,
+    origem: s.origem ?? "manual",
     qualificacao: s.qualificacao ?? null,
     qualId: s.qualId ?? null,
     dataEntrada: s.dataEntrada ?? null,
@@ -35,10 +38,10 @@ router.get("/clinics/:clinicId/socios", async (req, res): Promise<void> => {
 
 router.post("/clinics/:clinicId/socios", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  const d = req.body;
 
-  const parsed = CreateSocioBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  if (!d.nome) {
+    res.status(400).json({ error: "nome is required" });
     return;
   }
 
@@ -46,10 +49,17 @@ router.post("/clinics/:clinicId/socios", async (req, res): Promise<void> => {
     .insert(sociosTable)
     .values({
       clinicId,
-      nome: parsed.data.nome,
-      qualificacao: parsed.data.qualificacao ?? null,
-      qualId: parsed.data.qualId ?? null,
-      dataEntrada: parsed.data.dataEntrada ?? null,
+      nome: d.nome,
+      cpf: d.cpf ?? null,
+      percentual: d.percentual != null ? String(d.percentual) : null,
+      cargo: d.cargo ?? null,
+      decisor: d.decisor ?? false,
+      email: d.email ?? null,
+      whatsapp: d.whatsapp ?? null,
+      origem: d.origem ?? "manual",
+      qualificacao: d.qualificacao ?? null,
+      qualId: d.qualId ?? null,
+      dataEntrada: d.dataEntrada ?? null,
     })
     .returning();
 
@@ -59,20 +69,20 @@ router.post("/clinics/:clinicId/socios", async (req, res): Promise<void> => {
 router.patch("/clinics/:clinicId/socios/:socioId", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   const socioId = Array.isArray(req.params.socioId) ? req.params.socioId[0] : req.params.socioId;
+  const d = req.body;
 
-  const parsed = UpdateSocioBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const updates: Partial<typeof sociosTable.$inferInsert> = {};
-  const d = parsed.data;
+  const updates: Partial<typeof sociosTable.$inferInsert> & { updatedAt: Date } = { updatedAt: new Date() };
   if (d.nome != null) updates.nome = d.nome;
+  if (d.cpf !== undefined) updates.cpf = d.cpf;
+  if (d.percentual !== undefined) updates.percentual = d.percentual != null ? String(d.percentual) : null;
+  if (d.cargo !== undefined) updates.cargo = d.cargo;
+  if (d.decisor !== undefined) updates.decisor = d.decisor;
+  if (d.email !== undefined) updates.email = d.email;
+  if (d.whatsapp !== undefined) updates.whatsapp = d.whatsapp;
+  if (d.origem !== undefined) updates.origem = d.origem;
   if (d.qualificacao !== undefined) updates.qualificacao = d.qualificacao;
   if (d.qualId !== undefined) updates.qualId = d.qualId;
   if (d.dataEntrada !== undefined) updates.dataEntrada = d.dataEntrada;
-  updates.updatedAt = new Date();
 
   const [socio] = await db
     .update(sociosTable)
@@ -81,7 +91,7 @@ router.patch("/clinics/:clinicId/socios/:socioId", async (req, res): Promise<voi
     .returning();
 
   if (!socio) {
-    res.status(404).json({ error: "Partner not found" });
+    res.status(404).json({ error: "Sócio not found" });
     return;
   }
 
@@ -98,7 +108,7 @@ router.delete("/clinics/:clinicId/socios/:socioId", async (req, res): Promise<vo
     .returning();
 
   if (!socio) {
-    res.status(404).json({ error: "Partner not found" });
+    res.status(404).json({ error: "Sócio not found" });
     return;
   }
 

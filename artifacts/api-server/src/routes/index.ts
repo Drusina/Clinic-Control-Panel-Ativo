@@ -14,6 +14,12 @@ import faturasRouter from "./faturas";
 import notificationsRouter from "./notifications";
 import statusHistoryRouter from "./status-history";
 import sociosRouter from "./socios";
+import perfilOperacionalRouter from "./perfil-operacional";
+import parceirosExternosRouter from "./parceiros-externos";
+import sistemasUsoRouter from "./sistemas-uso";
+import docsConstitutivoRouter from "./docs-constitutivos";
+import lgpdTermosRouter from "./lgpd-termos";
+import { autentiquePublicRouter, autentiqueProtectedRouter } from "./autentique";
 
 const router: IRouter = Router();
 
@@ -30,6 +36,13 @@ router.use(requireSuperAdmin, actionsRouter);
 router.use(requireSuperAdmin, risksRouter);
 router.use(requireSuperAdmin, teamRouter);
 router.use(requireSuperAdmin, faturasRouter);
+router.use(requireSuperAdmin, perfilOperacionalRouter);
+router.use(requireSuperAdmin, parceirosExternosRouter);
+router.use(requireSuperAdmin, sistemasUsoRouter);
+router.use(requireSuperAdmin, docsConstitutivoRouter);
+router.use(requireSuperAdmin, lgpdTermosRouter);
+router.use(requireSuperAdmin, autentiqueProtectedRouter);
+router.use(autentiquePublicRouter);
 router.use(notificationsRouter);
 
 export default router;

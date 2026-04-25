@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, kickoffsTable } from "@workspace/db";
-import { UpsertKickoffBody, GetKickoffResponse, UpsertKickoffResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -13,6 +12,9 @@ function mapKickoff(k: typeof kickoffsTable.$inferSelect) {
     modalidade: k.modalidade,
     duracaoMinutos: k.duracaoMinutos,
     facilitador: k.facilitador,
+    participantes: (k.participantes as string[]) ?? [],
+    pauta: k.pauta ?? [],
+    proximosPassos: (k.proximosPassos as Array<{ acao: string; responsavel: string; prazo: string }>) ?? [],
     status: k.status,
     createdAt: k.createdAt.toISOString(),
     updatedAt: k.updatedAt.toISOString(),
@@ -28,19 +30,14 @@ router.get("/clinics/:clinicId/kickoff", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(GetKickoffResponse.parse(mapKickoff(kickoff)));
+  res.json(mapKickoff(kickoff));
 });
 
 router.put("/clinics/:clinicId/kickoff", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
-  const parsed = UpsertKickoffBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const d = req.body;
 
   const existing = await db.select().from(kickoffsTable).where(eq(kickoffsTable.clinicId, clinicId));
-  const d = parsed.data;
 
   if (existing.length > 0) {
     const [kickoff] = await db
@@ -50,13 +47,16 @@ router.put("/clinics/:clinicId/kickoff", async (req, res): Promise<void> => {
         modalidade: d.modalidade ?? null,
         duracaoMinutos: d.duracaoMinutos ?? null,
         facilitador: d.facilitador ?? null,
+        participantes: d.participantes ?? existing[0].participantes,
+        pauta: d.pauta ?? existing[0].pauta,
+        proximosPassos: d.proximosPassos ?? existing[0].proximosPassos,
         status: d.status ?? existing[0].status,
         updatedAt: new Date(),
       })
       .where(eq(kickoffsTable.clinicId, clinicId))
       .returning();
 
-    res.json(UpsertKickoffResponse.parse(mapKickoff(kickoff)));
+    res.json(mapKickoff(kickoff));
   } else {
     const [kickoff] = await db
       .insert(kickoffsTable)
@@ -66,11 +66,14 @@ router.put("/clinics/:clinicId/kickoff", async (req, res): Promise<void> => {
         modalidade: d.modalidade ?? null,
         duracaoMinutos: d.duracaoMinutos ?? null,
         facilitador: d.facilitador ?? null,
+        participantes: d.participantes ?? [],
+        pauta: d.pauta ?? [],
+        proximosPassos: d.proximosPassos ?? [],
         status: d.status ?? "rascunho",
       })
       .returning();
 
-    res.json(UpsertKickoffResponse.parse(mapKickoff(kickoff)));
+    res.json(mapKickoff(kickoff));
   }
 });
 

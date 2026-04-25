@@ -526,6 +526,12 @@ export const GetKickoffParams = zod.object({
   clinicId: zod.coerce.string(),
 });
 
+export const KickoffProximoPasso = zod.object({
+  acao: zod.string(),
+  responsavel: zod.string(),
+  prazo: zod.string(),
+});
+
 export const GetKickoffResponse = zod.object({
   id: zod.string(),
   clinicId: zod.string(),
@@ -533,7 +539,10 @@ export const GetKickoffResponse = zod.object({
   modalidade: zod.string().nullish(),
   duracaoMinutos: zod.number().nullish(),
   facilitador: zod.string().nullish(),
-  status: zod.enum(["rascunho", "realizado", "validado"]),
+  participantes: zod.array(zod.string()),
+  pauta: zod.array(zod.string()),
+  proximosPassos: zod.array(KickoffProximoPasso),
+  status: zod.string(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -550,20 +559,13 @@ export const UpsertKickoffBody = zod.object({
   modalidade: zod.string().nullish(),
   duracaoMinutos: zod.number().nullish(),
   facilitador: zod.string().nullish(),
+  participantes: zod.array(zod.string()).optional(),
+  pauta: zod.array(zod.string()).optional(),
+  proximosPassos: zod.array(KickoffProximoPasso).optional(),
   status: zod.string().nullish(),
 });
 
-export const UpsertKickoffResponse = zod.object({
-  id: zod.string(),
-  clinicId: zod.string(),
-  dataRealizacao: zod.string().nullish(),
-  modalidade: zod.string().nullish(),
-  duracaoMinutos: zod.number().nullish(),
-  facilitador: zod.string().nullish(),
-  status: zod.enum(["rascunho", "realizado", "validado"]),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
-});
+export const UpsertKickoffResponse = GetKickoffResponse;
 
 /**
  * @summary List diagnostics for a clinic
@@ -984,4 +986,211 @@ export const MarkNotificationReadResponse = zod.object({
   lida: zod.boolean(),
   acaoUrl: zod.string().nullish(),
   createdAt: zod.string(),
+});
+
+/**
+ * Sócio extended
+ */
+export const SocioExtended = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  nome: zod.string(),
+  cpf: zod.string().nullish(),
+  percentual: zod.number().nullish(),
+  cargo: zod.string().nullish(),
+  decisor: zod.boolean(),
+  email: zod.string().nullish(),
+  whatsapp: zod.string().nullish(),
+  origem: zod.string(),
+  qualificacao: zod.string().nullish(),
+  qualId: zod.string().nullish(),
+  dataEntrada: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+export const CreateSocioBodyExtended = zod.object({
+  nome: zod.string(),
+  cpf: zod.string().nullish(),
+  percentual: zod.number().nullish(),
+  cargo: zod.string().nullish(),
+  decisor: zod.boolean().optional(),
+  email: zod.string().nullish(),
+  whatsapp: zod.string().nullish(),
+  origem: zod.string().optional(),
+  qualificacao: zod.string().nullish(),
+  qualId: zod.string().nullish(),
+  dataEntrada: zod.string().nullish(),
+});
+
+/**
+ * Perfil Operacional
+ */
+export const GetPerfilOperacionalParams = zod.object({ clinicId: zod.coerce.string() });
+export const PerfilOperacional = zod.object({
+  clinicId: zod.string(),
+  faturamentoMensal: zod.number().nullish(),
+  ticketMedio: zod.number().nullish(),
+  pacientesAtivos: zod.number().nullish(),
+  atendimentosMes: zod.number().nullish(),
+  especialidades: zod.array(zod.string()),
+  horarioFuncionamento: zod.string().nullish(),
+  modeloParticular: zod.number(),
+  modeloConvenio: zod.number(),
+  modeloSus: zod.number(),
+  updatedAt: zod.string(),
+});
+
+export const UpsertPerfilOperacionalBody = zod.object({
+  faturamentoMensal: zod.number().nullish(),
+  ticketMedio: zod.number().nullish(),
+  pacientesAtivos: zod.number().nullish(),
+  atendimentosMes: zod.number().nullish(),
+  especialidades: zod.array(zod.string()).optional(),
+  horarioFuncionamento: zod.string().nullish(),
+  modeloParticular: zod.number().optional(),
+  modeloConvenio: zod.number().optional(),
+  modeloSus: zod.number().optional(),
+});
+
+/**
+ * Parceiros Externos
+ */
+export const ParceirosExternosItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  tipo: zod.string(),
+  nomeEmpresa: zod.string().nullish(),
+  responsavel: zod.string().nullish(),
+  registroProfissional: zod.string().nullish(),
+  telefone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListParceirosExternosResponse = zod.array(ParceirosExternosItem);
+
+export const CreateParceiroExternoBody = zod.object({
+  tipo: zod.string(),
+  nomeEmpresa: zod.string().nullish(),
+  responsavel: zod.string().nullish(),
+  registroProfissional: zod.string().nullish(),
+  telefone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+});
+
+export const UpdateParceiroExternoBody = zod.object({
+  tipo: zod.string().optional(),
+  nomeEmpresa: zod.string().nullish(),
+  responsavel: zod.string().nullish(),
+  registroProfissional: zod.string().nullish(),
+  telefone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+});
+
+/**
+ * Sistemas em Uso
+ */
+export const SistemaUsoItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  nome: zod.string(),
+  fornecedor: zod.string().nullish(),
+  tipo: zod.string().nullish(),
+  apiDisponivel: zod.string().nullish(),
+  responsavelInterno: zod.string().nullish(),
+  criticidade: zod.string().nullish(),
+  integrado: zod.boolean(),
+  createdAt: zod.string(),
+});
+export const ListSistemasUsoResponse = zod.array(SistemaUsoItem);
+
+export const CreateSistemaUsoBody = zod.object({
+  nome: zod.string(),
+  fornecedor: zod.string().nullish(),
+  tipo: zod.string().nullish(),
+  apiDisponivel: zod.string().nullish(),
+  responsavelInterno: zod.string().nullish(),
+  criticidade: zod.string().nullish(),
+  integrado: zod.boolean().optional(),
+});
+
+export const UpdateSistemaUsoBody = zod.object({
+  nome: zod.string().optional(),
+  fornecedor: zod.string().nullish(),
+  tipo: zod.string().nullish(),
+  apiDisponivel: zod.string().nullish(),
+  responsavelInterno: zod.string().nullish(),
+  criticidade: zod.string().nullish(),
+  integrado: zod.boolean().optional(),
+});
+
+/**
+ * Docs Constitutivos
+ */
+export const DocConstitutivoItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  categoria: zod.string(),
+  nome: zod.string(),
+  obrigatorio: zod.boolean(),
+  storagePath: zod.string().nullish(),
+  tamanho: zod.number().nullish(),
+  enviadoEm: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListDocsConstitutivoResponse = zod.array(DocConstitutivoItem);
+
+export const UpdateDocConstitutivoBody = zod.object({
+  storagePath: zod.string().nullish(),
+  tamanho: zod.number().nullish(),
+  enviadoEm: zod.string().nullish(),
+});
+
+/**
+ * LGPD Termos
+ */
+export const LgpdTermoItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  slug: zod.string(),
+  nome: zod.string(),
+  descricao: zod.string().nullish(),
+  status: zod.string(),
+  metodo: zod.string().nullish(),
+  autentiqueDocId: zod.string().nullish(),
+  signatarioNome: zod.string().nullish(),
+  signatarioEmail: zod.string().nullish(),
+  assinadoEm: zod.string().nullish(),
+  storagePath: zod.string().nullish(),
+  enviadoEm: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListLgpdTermosResponse = zod.array(LgpdTermoItem);
+
+export const UpdateLgpdTermoBody = zod.object({
+  status: zod.string().optional(),
+  metodo: zod.string().nullish(),
+  signatarioNome: zod.string().nullish(),
+  signatarioEmail: zod.string().nullish(),
+  storagePath: zod.string().nullish(),
+});
+
+/**
+ * Autentique
+ */
+export const CreateAutentiqueDocumentBody = zod.object({
+  termId: zod.string(),
+  clinicId: zod.string(),
+  signerEmail: zod.string(),
+  signerName: zod.string(),
+});
+
+export const CreateAutentiqueDocumentResponse = zod.object({
+  success: zod.boolean(),
+  documentId: zod.string().nullish(),
+  signatureLink: zod.string().nullish(),
+  message: zod.string().optional(),
 });

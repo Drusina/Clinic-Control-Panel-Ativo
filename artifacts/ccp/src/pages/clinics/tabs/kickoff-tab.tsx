@@ -9,8 +9,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, ExternalLink } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 
 const formSchema = z.object({
   dataRealizacao: z.string().optional().or(z.literal("")),
@@ -72,10 +73,19 @@ export default function KickoffTab({ clinicId }: { clinicId: string }) {
   }
 
   return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Link href={`/kickoff/${clinicId}`}>
+          <Button variant="outline" size="sm">
+            <ExternalLink className="h-4 w-4 mr-2" />
+            Abrir módulo completo de Kick-off
+          </Button>
+        </Link>
+      </div>
     <Card>
       <CardHeader>
-        <CardTitle>Reunião de Kickoff</CardTitle>
-        <CardDescription>Detalhes da reunião inicial de alinhamento com a clínica.</CardDescription>
+        <CardTitle>Resumo do Kickoff</CardTitle>
+        <CardDescription>Detalhes básicos da reunião. Acesse o módulo completo para editar ata, equipe, documentos e LGPD.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -175,5 +185,6 @@ export default function KickoffTab({ clinicId }: { clinicId: string }) {
         </Form>
       </CardContent>
     </Card>
+    </div>
   );
 }

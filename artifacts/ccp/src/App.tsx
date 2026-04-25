@@ -10,6 +10,8 @@ import NewClinic from "@/pages/clinics/new";
 import ClinicDetail from "@/pages/clinics/detail";
 import Notifications from "@/pages/notifications/index";
 import AdminLogin from "@/pages/admin-login";
+import KickoffPage from "@/pages/kickoff/index";
+import KickoffSelectPage from "@/pages/kickoff/select";
 import { SuperAdminGuard } from "@/components/super-admin-guard";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { getStoredToken } from "@/hooks/use-auth";
@@ -73,6 +75,26 @@ function Router() {
         {() => (
           <AppLayout>
             <Notifications />
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/kickoff">
+        <Redirect to="/kickoff/select" />
+      </Route>
+      <Route path="/kickoff/select">
+        <AppLayout>
+          <SuperAdminGuard>
+            <KickoffSelectPage />
+          </SuperAdminGuard>
+        </AppLayout>
+      </Route>
+      <Route path="/kickoff/:clinicId">
+        {(params) => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <KickoffPage />
+            </SuperAdminGuard>
           </AppLayout>
         )}
       </Route>

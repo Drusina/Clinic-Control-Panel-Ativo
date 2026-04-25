@@ -352,7 +352,10 @@ export interface Kickoff {
   duracaoMinutos?: number | null;
   /** @nullable */
   facilitador?: string | null;
-  status: KickoffStatus;
+  participantes: string[];
+  pauta: string[];
+  proximosPassos: KickoffProximoPasso[];
+  status: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -366,6 +369,9 @@ export interface UpsertKickoffBody {
   duracaoMinutos?: number | null;
   /** @nullable */
   facilitador?: string | null;
+  participantes?: string[];
+  pauta?: string[];
+  proximosPassos?: KickoffProximoPasso[];
   /** @nullable */
   status?: string | null;
 }
@@ -698,3 +704,309 @@ export type ListActionsParams = {
    */
   coluna?: string | null;
 };
+
+export interface KickoffProximoPasso {
+  acao: string;
+  responsavel: string;
+  prazo: string;
+}
+
+export interface KickoffExtended {
+  id: string;
+  clinicId: string;
+  /** @nullable */
+  dataRealizacao?: string | null;
+  /** @nullable */
+  modalidade?: string | null;
+  /** @nullable */
+  duracaoMinutos?: number | null;
+  /** @nullable */
+  facilitador?: string | null;
+  participantes: string[];
+  pauta: string[];
+  proximosPassos: KickoffProximoPasso[];
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertKickoffExtendedBody {
+  /** @nullable */
+  dataRealizacao?: string | null;
+  /** @nullable */
+  modalidade?: string | null;
+  /** @nullable */
+  duracaoMinutos?: number | null;
+  /** @nullable */
+  facilitador?: string | null;
+  participantes?: string[];
+  pauta?: string[];
+  proximosPassos?: KickoffProximoPasso[];
+  /** @nullable */
+  status?: string | null;
+}
+
+export interface SocioExtended {
+  id: string;
+  clinicId: string;
+  nome: string;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  percentual?: number | null;
+  /** @nullable */
+  cargo?: string | null;
+  decisor: boolean;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
+  origem: string;
+  /** @nullable */
+  qualificacao?: string | null;
+  /** @nullable */
+  qualId?: string | null;
+  /** @nullable */
+  dataEntrada?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSocioExtendedBody {
+  nome: string;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  percentual?: number | null;
+  /** @nullable */
+  cargo?: string | null;
+  decisor?: boolean;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
+  origem?: string;
+  /** @nullable */
+  qualificacao?: string | null;
+}
+
+export interface UpdateSocioExtendedBody {
+  nome?: string;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  percentual?: number | null;
+  /** @nullable */
+  cargo?: string | null;
+  decisor?: boolean;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
+  origem?: string;
+  /** @nullable */
+  qualificacao?: string | null;
+}
+
+export interface PerfilOperacional {
+  clinicId: string;
+  /** @nullable */
+  faturamentoMensal?: number | null;
+  /** @nullable */
+  ticketMedio?: number | null;
+  /** @nullable */
+  pacientesAtivos?: number | null;
+  /** @nullable */
+  atendimentosMes?: number | null;
+  especialidades: string[];
+  /** @nullable */
+  horarioFuncionamento?: string | null;
+  modeloParticular: number;
+  modeloConvenio: number;
+  modeloSus: number;
+  updatedAt: string;
+}
+
+export interface UpsertPerfilOperacionalBody {
+  /** @nullable */
+  faturamentoMensal?: number | null;
+  /** @nullable */
+  ticketMedio?: number | null;
+  /** @nullable */
+  pacientesAtivos?: number | null;
+  /** @nullable */
+  atendimentosMes?: number | null;
+  especialidades?: string[];
+  /** @nullable */
+  horarioFuncionamento?: string | null;
+  modeloParticular?: number;
+  modeloConvenio?: number;
+  modeloSus?: number;
+}
+
+export interface ParceirosExterno {
+  id: string;
+  clinicId: string;
+  tipo: string;
+  /** @nullable */
+  nomeEmpresa?: string | null;
+  /** @nullable */
+  responsavel?: string | null;
+  /** @nullable */
+  registroProfissional?: string | null;
+  /** @nullable */
+  telefone?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+  createdAt: string;
+}
+
+export interface CreateParceiroExternoBody {
+  tipo: string;
+  /** @nullable */
+  nomeEmpresa?: string | null;
+  /** @nullable */
+  responsavel?: string | null;
+  /** @nullable */
+  registroProfissional?: string | null;
+  /** @nullable */
+  telefone?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+}
+
+export interface UpdateParceiroExternoBody {
+  tipo?: string;
+  /** @nullable */
+  nomeEmpresa?: string | null;
+  /** @nullable */
+  responsavel?: string | null;
+  /** @nullable */
+  registroProfissional?: string | null;
+  /** @nullable */
+  telefone?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+}
+
+export interface SistemaUso {
+  id: string;
+  clinicId: string;
+  nome: string;
+  /** @nullable */
+  fornecedor?: string | null;
+  /** @nullable */
+  tipo?: string | null;
+  /** @nullable */
+  apiDisponivel?: string | null;
+  /** @nullable */
+  responsavelInterno?: string | null;
+  /** @nullable */
+  criticidade?: string | null;
+  integrado: boolean;
+  createdAt: string;
+}
+
+export interface CreateSistemaUsoBody {
+  nome: string;
+  /** @nullable */
+  fornecedor?: string | null;
+  /** @nullable */
+  tipo?: string | null;
+  /** @nullable */
+  apiDisponivel?: string | null;
+  /** @nullable */
+  responsavelInterno?: string | null;
+  /** @nullable */
+  criticidade?: string | null;
+  integrado?: boolean;
+}
+
+export interface UpdateSistemaUsoBody {
+  nome?: string;
+  /** @nullable */
+  fornecedor?: string | null;
+  /** @nullable */
+  tipo?: string | null;
+  /** @nullable */
+  apiDisponivel?: string | null;
+  /** @nullable */
+  responsavelInterno?: string | null;
+  /** @nullable */
+  criticidade?: string | null;
+  integrado?: boolean;
+}
+
+export interface DocConstitutivo {
+  id: string;
+  clinicId: string;
+  categoria: string;
+  nome: string;
+  obrigatorio: boolean;
+  /** @nullable */
+  storagePath?: string | null;
+  /** @nullable */
+  tamanho?: number | null;
+  /** @nullable */
+  enviadoEm?: string | null;
+  createdAt: string;
+}
+
+export interface LgpdTermo {
+  id: string;
+  clinicId: string;
+  slug: string;
+  nome: string;
+  /** @nullable */
+  descricao?: string | null;
+  status: string;
+  /** @nullable */
+  metodo?: string | null;
+  /** @nullable */
+  autentiqueDocId?: string | null;
+  /** @nullable */
+  signatarioNome?: string | null;
+  /** @nullable */
+  signatarioEmail?: string | null;
+  /** @nullable */
+  assinadoEm?: string | null;
+  /** @nullable */
+  storagePath?: string | null;
+  /** @nullable */
+  enviadoEm?: string | null;
+  createdAt: string;
+}
+
+export interface UpdateLgpdTermoBody {
+  status?: string;
+  /** @nullable */
+  metodo?: string | null;
+  /** @nullable */
+  signatarioNome?: string | null;
+  /** @nullable */
+  signatarioEmail?: string | null;
+  /** @nullable */
+  storagePath?: string | null;
+}
+
+export interface CreateAutentiqueDocumentBody {
+  termId: string;
+  clinicId: string;
+  signerEmail: string;
+  signerName: string;
+}
+
+export interface CreateAutentiqueDocumentResponse {
+  success: boolean;
+  /** @nullable */
+  documentId?: string | null;
+  /** @nullable */
+  signatureLink?: string | null;
+  message?: string;
+}

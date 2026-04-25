@@ -22,11 +22,69 @@ function mapTeamMember(t: typeof teamTable.$inferSelect) {
   };
 }
 
+async function dispatchSupabaseInvite(email: string): Promise<boolean> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) return false;
+
+  const res = await fetch(`${supabaseUrl}/auth/v1/invite`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  return res.ok;
+}
+
+async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect): Promise<string> {
+  if (!member.email) return "no_email";
+
+  const supabaseInvited = await dispatchSupabaseInvite(member.email);
+  if (supabaseInvited) return "sent";
+
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) {
+    return "pending";
+  }
+
+  const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
+  const inviteLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}`;
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "IONEX360 <noreply@ionex360.com.br>",
+      to: [member.email],
+      subject: `Você foi convidado para a plataforma IONEX360`,
+      html: `
+        <p>Olá, ${member.nome},</p>
+        <p>Você foi convidado para acessar a plataforma de gestão <strong>IONEX360</strong>.</p>
+        <p>Sua função: <strong>${member.funcao ?? "—"}</strong></p>
+        <p><a href="${inviteLink}" style="background:#1a56db;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">Acessar plataforma</a></p>
+        <p style="color:#6b7280;font-size:12px;margin-top:16px;">Se você não esperava este convite, ignore este e-mail.</p>
+      `,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Resend error: ${err}`);
+  }
+
+  return "sent";
+}
+
 router.get("/clinics/:clinicId/team", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
-
   const members = await db.select().from(teamTable).where(eq(teamTable.clinicId, clinicId));
-
   res.json(members.map(mapTeamMember));
 });
 
@@ -52,6 +110,16 @@ router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
     })
     .returning();
 
+  if (parsed.data.temAcessoPlataforma && parsed.data.email) {
+    try {
+      const status = await dispatchPlatformInvite(member);
+      await db.update(teamTable).set({ inviteStatus: status }).where(eq(teamTable.id, member.id));
+      member.inviteStatus = status;
+    } catch {
+      member.inviteStatus = "error";
+    }
+  }
+
   res.status(201).json(mapTeamMember(member));
 });
 
@@ -63,6 +131,12 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  const [existing] = await db.select().from(teamTable).where(eq(teamTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Team member not found" });
+    return;
+  }
+
   const updates: Partial<typeof teamTable.$inferInsert> = {};
   const d = parsed.data;
   if (d.nome != null) updates.nome = d.nome;
@@ -71,7 +145,26 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
   if (d.vinculo !== undefined) updates.vinculo = d.vinculo;
   if (d.email !== undefined) updates.email = d.email;
   if (d.whatsapp !== undefined) updates.whatsapp = d.whatsapp;
+
+  const enablingAccess = d.temAcessoPlataforma === true && !existing.temAcessoPlataforma;
   if (d.temAcessoPlataforma != null) updates.temAcessoPlataforma = d.temAcessoPlataforma;
+
+  if (enablingAccess) {
+    const emailToUse = d.email ?? existing.email;
+    if (emailToUse) {
+      try {
+        const memberForInvite = { ...existing, ...updates, email: emailToUse } as typeof teamTable.$inferSelect;
+        const status = await dispatchPlatformInvite(memberForInvite);
+        updates.inviteStatus = status;
+      } catch {
+        updates.inviteStatus = "error";
+      }
+    } else {
+      updates.inviteStatus = "no_email";
+    }
+  } else if (d.temAcessoPlataforma === false && existing.temAcessoPlataforma) {
+    updates.inviteStatus = null;
+  }
 
   const [member] = await db.update(teamTable).set(updates).where(eq(teamTable.id, id)).returning();
   if (!member) {

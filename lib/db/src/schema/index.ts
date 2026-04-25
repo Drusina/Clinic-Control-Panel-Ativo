@@ -9,3 +9,8 @@ export * from "./risks";
 export * from "./team";
 export * from "./faturas";
 export * from "./notifications";
+export * from "./perfil_operacional";
+export * from "./parceiros_externos";
+export * from "./sistemas_uso";
+export * from "./docs_constitutivos";
+export * from "./lgpd_termos";
