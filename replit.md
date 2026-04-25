@@ -64,6 +64,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `DELETE /api/clinics/:clinicId/socios/:socioId` — Delete QSA partner
 - `POST /api/clinics/:id/invite-user` — Invite user to clinic (mock, logs activity)
 - `POST /api/clinics/:id/documents?type=proposta|contrato` — Upload PDF to App Storage; saves serving URL to clinic record
+- `DELETE /api/clinics/:id/documents?type=proposta|contrato` — Delete uploaded PDF from App Storage; sets propostaUrl/contratoUrl back to null
 - `GET /api/storage/objects/*` — Serve files from Replit App Storage (GCS-backed, no auth required)
 - `GET /api/storage/public-objects/*` — Serve public objects from PUBLIC_OBJECT_SEARCH_PATHS
 - `POST /api/storage/uploads/request-url` — Request a presigned URL for direct-to-GCS upload

@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Clinic, Fatura, UpdateClinicBody } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, MoreHorizontal, FileText, Send, Upload, ExternalLink, CheckCircle2, AlertCircle } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, FileText, Send, Upload, ExternalLink, CheckCircle2, AlertCircle, Trash2 } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -85,6 +85,8 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
   const [editingFatura, setEditingFatura] = useState<Fatura | null>(null);
   const [uploadingProposta, setUploadingProposta] = useState(false);
   const [uploadingContrato, setUploadingContrato] = useState(false);
+  const [deletingProposta, setDeletingProposta] = useState(false);
+  const [deletingContrato, setDeletingContrato] = useState(false);
   const propostaInputRef = useRef<HTMLInputElement>(null);
   const contratoInputRef = useRef<HTMLInputElement>(null);
 
@@ -151,6 +153,41 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
     } finally {
       if (type === "proposta") setUploadingProposta(false);
       else setUploadingContrato(false);
+    }
+  };
+
+  const handleDocumentDelete = async (type: "proposta" | "contrato") => {
+    if (!clinic) return;
+    const label = type === "proposta" ? "Proposta" : "Contrato";
+    if (!window.confirm(`Tem certeza que deseja remover o arquivo de ${label}? Esta ação não pode ser desfeita.`)) return;
+
+    if (type === "proposta") setDeletingProposta(true);
+    else setDeletingContrato(true);
+
+    try {
+      const token = getStoredToken();
+      const res = await fetch(`/api/clinics/${clinic.id}/documents?type=${type}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        toast({
+          variant: "destructive",
+          title: "Erro ao remover documento",
+          description: err.error ?? "Erro desconhecido",
+        });
+        return;
+      }
+
+      toast({ title: `${label} removida com sucesso` });
+      queryClient.invalidateQueries({ queryKey: getGetClinicQueryKey(clinic.id) });
+    } catch {
+      toast({ variant: "destructive", title: "Erro de conexão ao remover documento" });
+    } finally {
+      if (type === "proposta") setDeletingProposta(false);
+      else setDeletingContrato(false);
     }
   };
 
@@ -457,6 +494,17 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
                         >
                           {uploadingProposta ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                          disabled={deletingProposta}
+                          onClick={() => handleDocumentDelete("proposta")}
+                          data-testid="btn-delete-proposta"
+                        >
+                          {deletingProposta ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                        </Button>
                       </div>
                     ) : (
                       <Button
@@ -512,6 +560,17 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
                           onClick={() => contratoInputRef.current?.click()}
                         >
                           {uploadingContrato ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                          disabled={deletingContrato}
+                          onClick={() => handleDocumentDelete("contrato")}
+                          data-testid="btn-delete-contrato"
+                        >
+                          {deletingContrato ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                         </Button>
                       </div>
                     ) : (

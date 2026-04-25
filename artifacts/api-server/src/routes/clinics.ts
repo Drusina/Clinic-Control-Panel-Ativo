@@ -343,6 +343,67 @@ router.post("/clinics/:id/documents", async (req, res): Promise<void> => {
   res.json({ url: servingUrl, type: docType });
 });
 
+router.delete("/clinics/:id/documents", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  const [clinic] = await db.select().from(clinicsTable).where(eq(clinicsTable.id, id));
+  if (!clinic) {
+    res.status(404).json({ error: "Clinic not found" });
+    return;
+  }
+
+  const docType = req.query.type as string;
+  if (docType !== "proposta" && docType !== "contrato") {
+    res.status(400).json({ error: "Query param 'type' must be 'proposta' or 'contrato'" });
+    return;
+  }
+
+  const existingUrl = docType === "proposta" ? clinic.propostaUrl : clinic.contratoUrl;
+  if (!existingUrl) {
+    res.status(404).json({ error: "Documento não encontrado" });
+    return;
+  }
+
+  let storageDeleted = false;
+  const privateObjectDir = process.env.PRIVATE_OBJECT_DIR;
+  if (privateObjectDir && existingUrl.startsWith("/api/storage/objects/")) {
+    const objectSubPath = existingUrl.replace("/api/storage/objects/", "");
+    const fullGcsPath = `${privateObjectDir}/${objectSubPath}`.replace(/\/+/g, "/");
+    const pathParts = fullGcsPath.replace(/^\//, "").split("/");
+    const bucketName = pathParts[0];
+    const objectName = pathParts.slice(1).join("/");
+    try {
+      const bucket = objectStorageClient.bucket(bucketName);
+      const gcsFile = bucket.file(objectName);
+      const [exists] = await gcsFile.exists();
+      if (exists) {
+        await gcsFile.delete();
+      }
+      storageDeleted = true;
+    } catch (err) {
+      console.error("Failed to delete GCS file:", err);
+    }
+  } else {
+    storageDeleted = true;
+  }
+
+  const updateField = docType === "proposta"
+    ? { propostaUrl: null }
+    : { contratoUrl: null };
+
+  await db.update(clinicsTable).set({ ...updateField, updatedAt: new Date() }).where(eq(clinicsTable.id, id));
+
+  await db.insert(clinicActivityTable).values({
+    clinicId: id,
+    tipo: "documento_removido",
+    titulo: `${docType === "proposta" ? "Proposta" : "Contrato"} removido`,
+    descricao: existingUrl,
+    autorNome: "Super Admin",
+  });
+
+  res.json({ success: true, type: docType, storageDeleted });
+});
+
 router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
