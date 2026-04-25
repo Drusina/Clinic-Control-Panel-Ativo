@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, delegacoesTable } from "@workspace/db";
+import { ICS_PILARES } from "../lib/ics-seed.js";
 import { z } from "zod";
 import { sendEmail, buildDelegationEmail } from "../lib/email.js";
 import { sendDelegationWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
@@ -171,16 +172,6 @@ router.patch("/delegacoes/:id", async (req, res): Promise<void> => {
 
   res.json(mapDelegacao(delegacao));
 });
-
-const ICS_PILARES = [
-  { slug: "estrategia", nome: "Estratégia e Governança", role: "CEO / Gestor Principal" },
-  { slug: "financeiro", nome: "Financeiro e Fluxo de Caixa", role: "Gestor Financeiro" },
-  { slug: "contabil", nome: "Contabilidade e Fiscal", role: "Contador Responsável" },
-  { slug: "marketing", nome: "Vendas, Marketing e Captação", role: "Gestor de Marketing" },
-  { slug: "operacoes", nome: "Processos Operacionais", role: "Coordenador Operacional" },
-  { slug: "pessoas", nome: "Gestão de Pessoas e Cultura", role: "Gestor de Pessoas" },
-  { slug: "tecnologia", nome: "Tecnologia e Sistemas", role: "Responsável de TI" },
-];
 
 router.post("/clinics/:clinicId/delegacoes/seed", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;

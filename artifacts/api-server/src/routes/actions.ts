@@ -7,6 +7,7 @@ import {
   ListActionsQueryParams,
   UpdateActionResponse,
 } from "@workspace/api-zod";
+import { ICS_ACTIONS } from "../lib/ics-seed.js";
 
 const router: IRouter = Router();
 
@@ -113,80 +114,6 @@ router.patch("/actions/:id", async (req, res): Promise<void> => {
   res.json(UpdateActionResponse.parse(mapAction(action)));
 });
 
-const ICS_ACTIONS = [
-  {
-    titulo: "Mapear processos operacionais da clínica",
-    descricao: "Identificar e documentar todos os fluxos operacionais existentes como base para padronização.",
-    pilarSlug: "operacoes",
-    prioridade: "alta",
-    coluna: "backlog",
-    ordem: 1,
-  },
-  {
-    titulo: "Elaborar política de privacidade e proteção de dados (LGPD)",
-    descricao: "Criar documento de política interna de tratamento de dados sensíveis de pacientes.",
-    pilarSlug: "compliance",
-    prioridade: "alta",
-    coluna: "backlog",
-    ordem: 2,
-  },
-  {
-    titulo: "Definir metas mensais de captação de pacientes",
-    descricao: "Estabelecer indicadores e metas de novos atendimentos para cada mês.",
-    pilarSlug: "marketing",
-    prioridade: "media",
-    coluna: "backlog",
-    ordem: 3,
-  },
-  {
-    titulo: "Implantar controle de fluxo de caixa semanal",
-    descricao: "Configurar planilha ou sistema para acompanhamento das entradas e saídas semanais.",
-    pilarSlug: "financeiro",
-    prioridade: "alta",
-    coluna: "todo",
-    ordem: 1,
-  },
-  {
-    titulo: "Criar plano de cargos e salários",
-    descricao: "Estruturar política de remuneração e progressão de carreira para a equipe.",
-    pilarSlug: "pessoas",
-    prioridade: "media",
-    coluna: "todo",
-    ordem: 2,
-  },
-  {
-    titulo: "Configurar sistema de gestão da clínica",
-    descricao: "Implementar e parametrizar o software de prontuário e agendamento.",
-    pilarSlug: "tecnologia",
-    prioridade: "alta",
-    coluna: "doing",
-    ordem: 1,
-  },
-  {
-    titulo: "Estruturar reunião quinzenal de equipe",
-    descricao: "Definir pauta-padrão e frequência das reuniões de alinhamento interno.",
-    pilarSlug: "pessoas",
-    prioridade: "media",
-    coluna: "doing",
-    ordem: 2,
-  },
-  {
-    titulo: "Revisar contratos com fornecedores",
-    descricao: "Analisar termos contratuais e identificar oportunidades de renegociação.",
-    pilarSlug: "contabil",
-    prioridade: "media",
-    coluna: "review",
-    ordem: 1,
-  },
-  {
-    titulo: "Realizar diagnóstico inicial ICS",
-    descricao: "Aplicar questionário de diagnóstico ICS para mapeamento dos pilares da clínica.",
-    pilarSlug: "estrategia",
-    prioridade: "alta",
-    coluna: "done",
-    ordem: 1,
-  },
-];
 
 router.post("/clinics/:clinicId/actions/seed", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;

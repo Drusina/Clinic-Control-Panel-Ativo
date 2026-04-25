@@ -3,6 +3,7 @@ import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
 import { sendEmail, buildInviteEmail } from "../lib/email.js";
 import { objectStorageClient } from "../lib/objectStorage";
+import { seedIcsData } from "../lib/ics-seed.js";
 import {
   CreateClinicBody,
   UpdateClinicBody,
@@ -137,6 +138,12 @@ router.post("/clinics", async (req, res): Promise<void> => {
         dataEntrada: partner.dataEntrada ?? null,
       }))
     );
+  }
+
+  try {
+    await seedIcsData(clinic.id);
+  } catch (err) {
+    console.error(`[ics-seed] Failed to auto-seed ICS data for clinic ${clinic.id}:`, err);
   }
 
   res.status(201).json(GetClinicResponse.parse(mapClinic(clinic)));
