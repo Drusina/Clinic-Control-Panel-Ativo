@@ -1,5 +1,5 @@
 import { eq, and } from "drizzle-orm";
-import { db, delegacoesTable, risksTable, actionsTable } from "@workspace/db";
+import { db, delegacoesTable, risksTable, actionsTable, icsPlanTemplatesTable } from "@workspace/db";
 
 export const ICS_PILARES = [
   { slug: "estrategia", nome: "Estratégia e Governança", role: "CEO / Gestor Principal" },
@@ -153,11 +153,44 @@ export const ICS_ACTIONS = [
   },
 ];
 
-export async function seedIcsData(clinicId: string): Promise<{
+function parseJsonField<T>(raw: string | null | undefined, fallback: T[]): T[] {
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function getTemplateForPlan(plan: string | null | undefined): Promise<{
+  pilares: typeof ICS_PILARES;
+  risks: typeof ICS_RISKS;
+  actions: typeof ICS_ACTIONS;
+}> {
+  if (!plan) {
+    return { pilares: ICS_PILARES, risks: ICS_RISKS, actions: ICS_ACTIONS };
+  }
+
+  const [row] = await db
+    .select()
+    .from(icsPlanTemplatesTable)
+    .where(eq(icsPlanTemplatesTable.plan, plan));
+
+  return {
+    pilares: parseJsonField(row?.pilares, ICS_PILARES) as typeof ICS_PILARES,
+    risks: parseJsonField(row?.risks, ICS_RISKS) as typeof ICS_RISKS,
+    actions: parseJsonField(row?.actions, ICS_ACTIONS) as typeof ICS_ACTIONS,
+  };
+}
+
+export async function seedIcsData(clinicId: string, plan?: string | null): Promise<{
   delegacoes: number;
   risks: number;
   actions: number;
 }> {
+  const template = await getTemplateForPlan(plan);
+
   const [existingDelegacoes, existingRisks, existingActions] = await Promise.all([
     db
       .select()
@@ -171,9 +204,9 @@ export async function seedIcsData(clinicId: string): Promise<{
   const existingRiskNames = new Set(existingRisks.map((r) => r.nome));
   const existingActionTitles = new Set(existingActions.map((a) => a.titulo));
 
-  const pilaresToCreate = ICS_PILARES.filter((p) => !existingSlugs.has(p.slug));
-  const risksToCreate = ICS_RISKS.filter((r) => !existingRiskNames.has(r.nome));
-  const actionsToCreate = ICS_ACTIONS.filter((a) => !existingActionTitles.has(a.titulo));
+  const pilaresToCreate = template.pilares.filter((p) => !existingSlugs.has(p.slug));
+  const risksToCreate = template.risks.filter((r) => !existingRiskNames.has(r.nome));
+  const actionsToCreate = template.actions.filter((a) => !existingActionTitles.has(a.titulo));
 
   const now = new Date();
 

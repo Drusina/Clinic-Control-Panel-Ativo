@@ -15,6 +15,7 @@ import {
   Image,
   FileText,
   BarChart3,
+  Wand2,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -136,7 +137,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
       </div>
-      <div className="px-4 mt-auto">
+      <div className="px-4 mt-auto space-y-1">
+        <Link href="/admin/ics-templates">
+          <Button
+            variant={location.startsWith("/admin/ics-templates") ? "secondary" : "ghost"}
+            aria-current={location.startsWith("/admin/ics-templates") ? "page" : undefined}
+            className={`w-full justify-start gap-3 ${location.startsWith("/admin/ics-templates") ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
+          >
+            <Wand2 className="h-4 w-4" />
+            Templates ICS
+          </Button>
+        </Link>
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-sidebar-foreground/70"

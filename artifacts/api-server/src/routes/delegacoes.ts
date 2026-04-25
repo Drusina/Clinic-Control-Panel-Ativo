@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, delegacoesTable } from "@workspace/db";
-import { ICS_PILARES } from "../lib/ics-seed.js";
+import { db, delegacoesTable, clinicsTable } from "@workspace/db";
+import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { z } from "zod";
 import { sendEmail, buildDelegationEmail } from "../lib/email.js";
 import { sendDelegationWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
@@ -176,6 +176,9 @@ router.patch("/delegacoes/:id", async (req, res): Promise<void> => {
 router.post("/clinics/:clinicId/delegacoes/seed", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
 
+  const [clinic] = await db.select({ plano: clinicsTable.plano }).from(clinicsTable).where(eq(clinicsTable.id, clinicId));
+  const template = await getTemplateForPlan(clinic?.plano);
+
   const existing = await db
     .select()
     .from(delegacoesTable)
@@ -183,7 +186,7 @@ router.post("/clinics/:clinicId/delegacoes/seed", async (req, res): Promise<void
 
   const existingSlugs = new Set(existing.map(d => d.pilarSlug));
 
-  const toCreate = ICS_PILARES.filter(p => !existingSlugs.has(p.slug));
+  const toCreate = template.pilares.filter(p => !existingSlugs.has(p.slug));
 
   if (toCreate.length === 0) {
     res.json({ created: 0, message: "Todos os pilares já possuem delegação N1." });

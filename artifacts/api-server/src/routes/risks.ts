@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, risksTable } from "@workspace/db";
+import { db, risksTable, clinicsTable } from "@workspace/db";
 import { CreateRiskBody, UpdateRiskBody, UpdateRiskResponse } from "@workspace/api-zod";
-import { ICS_RISKS } from "../lib/ics-seed.js";
+import { getTemplateForPlan } from "../lib/ics-seed.js";
 
 const router: IRouter = Router();
 
@@ -103,13 +103,16 @@ router.patch("/risks/:id", async (req, res): Promise<void> => {
 router.post("/clinics/:clinicId/risks/seed", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
 
+  const [clinic] = await db.select({ plano: clinicsTable.plano }).from(clinicsTable).where(eq(clinicsTable.id, clinicId));
+  const template = await getTemplateForPlan(clinic?.plano);
+
   const existing = await db
     .select({ nome: risksTable.nome })
     .from(risksTable)
     .where(eq(risksTable.clinicId, clinicId));
 
   const existingNames = new Set(existing.map(r => r.nome));
-  const toCreate = ICS_RISKS.filter(r => !existingNames.has(r.nome));
+  const toCreate = template.risks.filter(r => !existingNames.has(r.nome));
 
   if (toCreate.length === 0) {
     res.json({ created: 0, message: "Todos os riscos ICS já foram inseridos." });

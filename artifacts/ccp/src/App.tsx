@@ -26,6 +26,7 @@ import ProcessosPage from "@/pages/processos/index";
 import EvidenciasPage from "@/pages/evidencias/index";
 import DocumentosPage from "@/pages/documentos/index";
 import RelatoriosPage from "@/pages/relatorios/index";
+import IcsTemplatesPage from "@/pages/ics-templates/index";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -331,6 +332,16 @@ function Router() {
           <AppLayout>
             <SuperAdminGuard>
               <RelatoriosPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/admin/ics-templates">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <IcsTemplatesPage />
             </SuperAdminGuard>
           </AppLayout>
         )}

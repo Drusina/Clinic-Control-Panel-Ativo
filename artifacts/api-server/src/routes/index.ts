@@ -30,6 +30,7 @@ import documentosRouter from "./documentos";
 import jobsRouter from "./jobs";
 import notificationPreferencesRouter from "./notification-preferences";
 import pushRouter from "./push";
+import icsTemplatesRouter from "./ics-templates";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use(notificationsRouter);
 router.use(requireSuperAdmin, jobsRouter);
 router.use(notificationPreferencesRouter);
 router.use(pushRouter);
+router.use(requireSuperAdmin, icsTemplatesRouter);
 
 export default router;

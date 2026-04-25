@@ -141,7 +141,7 @@ router.post("/clinics", async (req, res): Promise<void> => {
   }
 
   try {
-    await seedIcsData(clinic.id);
+    await seedIcsData(clinic.id, clinic.plano);
   } catch (err) {
     console.error(`[ics-seed] Failed to auto-seed ICS data for clinic ${clinic.id}:`, err);
   }

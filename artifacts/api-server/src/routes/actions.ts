@@ -1,13 +1,13 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, actionsTable } from "@workspace/db";
+import { db, actionsTable, clinicsTable } from "@workspace/db";
 import {
   CreateActionBody,
   UpdateActionBody,
   ListActionsQueryParams,
   UpdateActionResponse,
 } from "@workspace/api-zod";
-import { ICS_ACTIONS } from "../lib/ics-seed.js";
+import { getTemplateForPlan } from "../lib/ics-seed.js";
 
 const router: IRouter = Router();
 
@@ -118,13 +118,16 @@ router.patch("/actions/:id", async (req, res): Promise<void> => {
 router.post("/clinics/:clinicId/actions/seed", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
 
+  const [clinic] = await db.select({ plano: clinicsTable.plano }).from(clinicsTable).where(eq(clinicsTable.id, clinicId));
+  const template = await getTemplateForPlan(clinic?.plano);
+
   const existing = await db
     .select({ titulo: actionsTable.titulo })
     .from(actionsTable)
     .where(eq(actionsTable.clinicId, clinicId));
 
   const existingTitles = new Set(existing.map(a => a.titulo));
-  const toCreate = ICS_ACTIONS.filter(a => !existingTitles.has(a.titulo));
+  const toCreate = template.actions.filter(a => !existingTitles.has(a.titulo));
 
   if (toCreate.length === 0) {
     res.json({ created: 0, message: "Todas as ações ICS já foram inseridas." });
