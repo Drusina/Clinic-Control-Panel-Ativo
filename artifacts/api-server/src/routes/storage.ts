@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
 import { z } from "zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
-import { requireSuperAdmin, verifyToken, extractToken } from "../middleware/auth";
+import { requireSuperAdmin, verifyToken, extractToken, signToken } from "../middleware/auth";
 import { db, documentAccessLogTable } from "@workspace/db";
 
 const RequestUploadUrlBody = z.object({
@@ -121,20 +121,97 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
   }
 });
 
+const SIGNED_URL_TTL_SECONDS = 60;
+
 /**
  * GET /storage/objects/*
  *
  * Serve object entities from PRIVATE_OBJECT_DIR.
- * These are served from a separate path from /public-objects and can optionally
- * be protected with authentication or ACL checks based on the use case.
+ *
+ * Two modes:
+ *   1. ?signed=true  — Requires Bearer auth. Returns a JSON { url } with a
+ *      short-lived signed URL that can be opened directly (no auth header needed).
+ *   2. ?sig=TOKEN    — Validates the signed token and streams the file without
+ *      requiring a Bearer auth header. Returns 403 if the token is expired or invalid.
+ *   3. (default)     — Requires Bearer auth and streams the file directly.
  */
-router.get("/storage/objects/*path", requireSuperAdmin, async (req: Request, res: Response) => {
-  try {
-    const raw = req.params.path;
-    const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
-    const objectPath = `/objects/${wildcardPath}`;
-    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+router.get("/storage/objects/*path", async (req: Request, res: Response) => {
+  const raw = req.params.path;
+  const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
+  const objectPath = `/objects/${wildcardPath}`;
 
+  const { signed, sig } = req.query as { signed?: string; sig?: string };
+
+  if (sig) {
+    const claims = verifyToken(sig);
+    if (
+      !claims ||
+      claims.purpose !== "signed_object_url" ||
+      claims.path !== objectPath
+    ) {
+      res.status(403).json({ error: "Forbidden: invalid or expired signed URL" });
+      return;
+    }
+
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+      const response = await objectStorageService.downloadObject(objectFile);
+
+      res.status(response.status);
+      response.headers.forEach((value, key) => res.setHeader(key, value));
+
+      res.on("finish", () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          void logDocumentAccess(req, objectPath);
+        }
+      });
+
+      if (response.body) {
+        const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
+        nodeStream.pipe(res);
+      } else {
+        res.end();
+      }
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        log.warn({ err: error }, "Object not found");
+        res.status(404).json({ error: "Object not found" });
+        return;
+      }
+      log.error({ err: error }, "Error serving object");
+      res.status(500).json({ error: "Failed to serve object" });
+    }
+    return;
+  }
+
+  const token = extractToken(req);
+  if (!token) {
+    res.status(401).json({ error: "Unauthorized: missing token" });
+    return;
+  }
+  const payload = verifyToken(token);
+  if (!payload || payload.role !== "super_admin") {
+    res.status(403).json({ error: "Forbidden: super_admin role required" });
+    return;
+  }
+
+  if (signed === "true") {
+    try {
+      const sigToken = signToken(
+        { purpose: "signed_object_url", path: objectPath },
+        SIGNED_URL_TTL_SECONDS,
+      );
+      const url = `/api/storage/objects/${wildcardPath}?sig=${encodeURIComponent(sigToken)}`;
+      res.json({ url });
+    } catch (error) {
+      log.error({ err: error }, "Error generating signed URL");
+      res.status(500).json({ error: "Failed to generate signed URL" });
+    }
+    return;
+  }
+
+  try {
+    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
     const response = await objectStorageService.downloadObject(objectFile);
 
     res.status(response.status);

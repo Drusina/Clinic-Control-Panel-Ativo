@@ -108,17 +108,17 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
     }
     const token = getStoredToken();
     try {
-      const res = await fetch(url, {
+      const signedReqUrl = new URL(url, window.location.origin);
+      signedReqUrl.searchParams.set("signed", "true");
+      const signedRes = await fetch(signedReqUrl.toString(), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) {
+      if (!signedRes.ok) {
         toast({ variant: "destructive", title: "Não foi possível abrir o documento" });
         return;
       }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, "_blank", "noopener,noreferrer");
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      const { url: signedUrl } = await signedRes.json() as { url: string };
+      window.open(signedUrl, "_blank", "noopener,noreferrer");
     } catch {
       toast({ variant: "destructive", title: "Erro ao abrir o documento" });
     }
