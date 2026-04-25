@@ -433,7 +433,7 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
             <div className="text-center py-4"><Loader2 className="h-5 w-5 animate-spin mx-auto text-primary" /></div>
           ) : socios && socios.length > 0 ? (
             <div className="space-y-2">
-              {socios.map((socio) => (
+              {socios.map((socio: Socio) => (
                 <div key={socio.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
                   <div className="flex items-center gap-3">
                     <UserCircle className="h-5 w-5 text-muted-foreground" />

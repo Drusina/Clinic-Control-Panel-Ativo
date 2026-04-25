@@ -7,7 +7,7 @@ import {
   useDeleteTeamMember,
   useInviteClinicUser,
 } from "@workspace/api-client-react";
-import type { TeamMember, UpdateTeamMemberBody } from "@workspace/api-client-react";
+import type { TeamMember, UpdateTeamMemberBody, InviteUserResponse } from "@workspace/api-client-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -99,7 +99,7 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
     inviteUser.mutate(
       { id: clinicId, data: { email: values.email, role: values.role } },
       {
-        onSuccess: (resp) => {
+        onSuccess: (resp: InviteUserResponse) => {
           toast({ title: "Convite enviado", description: resp.message });
           queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
           setIsInviteOpen(false);

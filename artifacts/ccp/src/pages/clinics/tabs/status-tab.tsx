@@ -4,7 +4,7 @@ import {
   useGetClinicStatusHistory,
   getGetClinicStatusHistoryQueryKey,
 } from "@workspace/api-client-react";
-import type { Clinic } from "@workspace/api-client-react";
+import type { Clinic, StatusHistory } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -256,7 +256,7 @@ export default function StatusTab({ clinic }: { clinic: Clinic }) {
             <div className="relative">
               <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
               <div className="space-y-4 pl-10">
-                {statusHistory.map((entry, i) => (
+                {statusHistory.map((entry: StatusHistory, i: number) => (
                   <div key={entry.id} className="relative">
                     <div className={`absolute -left-6 top-1 h-3 w-3 rounded-full border-2 border-background ${
                       i === 0 ? "bg-primary" : "bg-muted-foreground"
