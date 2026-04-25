@@ -140,10 +140,36 @@ router.post("/clinics", async (req, res): Promise<void> => {
     );
   }
 
+  let seedResult: { delegacoes: number; risks: number; actions: number } | null = null;
+  let seedError: unknown = null;
+
   try {
-    await seedIcsData(clinic.id, clinic.plano);
+    seedResult = await seedIcsData(clinic.id, clinic.plano);
   } catch (err) {
+    seedError = err;
     console.error(`[ics-seed] Failed to auto-seed ICS data for clinic ${clinic.id}:`, err);
+  }
+
+  try {
+    if (seedResult !== null) {
+      await db.insert(clinicActivityTable).values({
+        clinicId: clinic.id,
+        tipo: "ics_seed_auto",
+        titulo: "Dados ICS inicializados automaticamente",
+        descricao: `Delegações: ${seedResult.delegacoes}, Riscos: ${seedResult.risks}, Ações: ${seedResult.actions}`,
+        autorNome: "Sistema",
+      });
+    } else {
+      await db.insert(clinicActivityTable).values({
+        clinicId: clinic.id,
+        tipo: "ics_seed_warning",
+        titulo: "Falha na inicialização automática dos dados ICS",
+        descricao: seedError instanceof Error ? seedError.message : "Erro desconhecido. Use o botão de reprocessamento manual.",
+        autorNome: "Sistema",
+      });
+    }
+  } catch (logErr) {
+    console.error(`[ics-seed] Failed to log seed outcome for clinic ${clinic.id}:`, logErr);
   }
 
   res.status(201).json(GetClinicResponse.parse(mapClinic(clinic)));
