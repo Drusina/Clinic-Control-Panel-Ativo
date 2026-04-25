@@ -13,6 +13,7 @@ export const risksTable = pgTable("riscos", {
   probabilidade: integer("probabilidade").notNull(),
   impacto: integer("impacto").notNull(),
   severidade: integer("severidade").notNull(),
+  pilarSlug: text("pilar_slug"),
   responsavel: text("responsavel"),
   acoesMitigadoras: text("acoes_mitigadoras"),
   status: text("status").notNull().default("identificado"),

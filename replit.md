@@ -102,3 +102,44 @@ Full 150-question diagnostic wizard with 8 pillars, autosave, score calculation,
 
 ### 8 Pillars (slugs)
 estrategia, financeiro, contabil, marketing, operacoes, pessoas, tecnologia, compliance
+
+## M5 — Delegação, Mapa de Riscos & Kanban
+
+### New Pages (Standalone Modules)
+- `/delegacao/select` → clinic selector, `/delegacao/:clinicId` → two-level delegation table for 8 pillars
+- `/riscos/select` → clinic selector, `/riscos/:clinicId` → 5×5 risk matrix + ranked list
+- `/acao/select` → clinic selector, `/acao/:clinicId` → drag-and-drop Kanban board (5 columns)
+
+### Navigation
+- Added "OPERACIONAL" collapsible section in sidebar with: Delegação, Mapa de Riscos, Plano de Ação
+
+### Delegação Module
+- Table of 8 ICS pillars with expandable rows for N2 sub-delegations
+- N1 delegation: select team member (or type name), set deadline, saves to `delegacoes` table
+- N2 sub-delegation: set question range (questaoInicio, questaoFim) + responsible
+- Status management: nao_delegado, pendente, andamento, concluido, atrasado
+- Email notification via Resend if RESEND_API_KEY is set
+
+### Mapa de Riscos (Risk Matrix)
+- 5×5 CSS grid colored by severity: green (≤6), yellow (7–14), red (≥15)
+- Numbered badges in cells, hover tooltip shows risk name/responsible
+- Ranked list sidebar sorted by severidade (prob × impacto) descending
+- Click badge highlights corresponding ranked list item and vice versa
+- "+ Novo Risco" modal with Probabilidade/Impacto sliders and live severity preview
+- Status management: identificado, em_tratamento, mitigado, aceito
+
+### Kanban Board (Plano de Ação)
+- 5 columns: Backlog, A Fazer, Em Andamento, Revisão, Concluído
+- Drag-and-drop with @dnd-kit/core; dropping a card updates `acoes.coluna` in DB
+- Priority color bar on cards (red=alta, yellow=media, green=baixa)
+- Filter bar: by responsável, pilar, prioridade
+- Card detail dialog: edit all fields including description
+
+### New DB Table
+- `delegacoes` — clinic_id, pilar_slug, pilar_nome, nivel (1 or 2), responsavel_nome, responsavel_email, prazo, status, questao_inicio, questao_fim, parent_id, observacoes
+
+### New API Endpoints
+- `GET /api/clinics/:clinicId/delegacoes` — List delegations
+- `POST /api/clinics/:clinicId/delegacoes` — Create delegation (N1 or N2)
+- `PATCH /api/delegacoes/:id` — Update delegation (status, responsible, etc.)
+- `DELETE /api/delegacoes/:id` — Remove delegation

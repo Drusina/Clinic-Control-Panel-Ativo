@@ -78,6 +78,7 @@ export default function DiagnosticoWizard() {
   const diagnosticoId = params.id;
   const [, navigate] = useLocation();
   const qc = useQueryClient();
+  const pilarDeepLink = new URLSearchParams(window.location.search).get("pilar");
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>({});
@@ -107,10 +108,18 @@ export default function DiagnosticoWizard() {
     }
     setLocalAnswers(map);
 
+    if (pilarDeepLink) {
+      const pilarIdx = perguntas.findIndex((p) => p.pilarSlug === pilarDeepLink);
+      if (pilarIdx !== -1) {
+        setCurrentIndex(pilarIdx);
+        return;
+      }
+    }
+
     const firstUnanswered = perguntas.findIndex((p) => !map[p.id]);
     if (firstUnanswered !== -1) setCurrentIndex(firstUnanswered);
     else if (perguntas.length > 0) setCurrentIndex(perguntas.length - 1);
-  }, [respostasData, perguntas]);
+  }, [respostasData, perguntas, pilarDeepLink]);
 
   const saveAnswer = useCallback(
     async (perguntaId: string, valor: string) => {

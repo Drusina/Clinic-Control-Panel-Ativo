@@ -14,6 +14,7 @@ function mapRisk(r: typeof risksTable.$inferSelect) {
     probabilidade: r.probabilidade,
     impacto: r.impacto,
     severidade: r.severidade,
+    pilarSlug: r.pilarSlug,
     responsavel: r.responsavel,
     acoesMitigadoras: r.acoesMitigadoras,
     status: r.status,
@@ -41,7 +42,7 @@ router.post("/clinics/:clinicId/risks", async (req, res): Promise<void> => {
     return;
   }
 
-  const { nome, descricao, probabilidade, impacto, responsavel, acoesMitigadoras } = parsed.data;
+  const { nome, descricao, probabilidade, impacto, pilarSlug, responsavel, acoesMitigadoras } = parsed.data;
   const severidade = probabilidade * impacto;
 
   const [risk] = await db
@@ -53,6 +54,7 @@ router.post("/clinics/:clinicId/risks", async (req, res): Promise<void> => {
       probabilidade,
       impacto,
       severidade,
+      pilarSlug: pilarSlug ?? null,
       responsavel: responsavel ?? null,
       acoesMitigadoras: acoesMitigadoras ?? null,
     })
@@ -86,6 +88,7 @@ router.patch("/risks/:id", async (req, res): Promise<void> => {
   };
   if (d.nome != null) updates.nome = d.nome;
   if (d.descricao !== undefined) updates.descricao = d.descricao;
+  if (d.pilarSlug !== undefined) updates.pilarSlug = d.pilarSlug;
   if (d.responsavel !== undefined) updates.responsavel = d.responsavel;
   if (d.acoesMitigadoras !== undefined) updates.acoesMitigadoras = d.acoesMitigadoras;
   if (d.status != null) updates.status = d.status;

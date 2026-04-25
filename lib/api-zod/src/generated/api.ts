@@ -679,6 +679,8 @@ export const CreateActionBody = zod.object({
   responsavelNome: zod.string().nullish(),
   prazo: zod.string().nullish(),
   prioridade: zod.string().nullish(),
+  pilarSlug: zod.string().nullish(),
+  evidencias: zod.string().nullish(),
   coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
 });
 
@@ -695,6 +697,8 @@ export const UpdateActionBody = zod.object({
   responsavelNome: zod.string().nullish(),
   prazo: zod.string().nullish(),
   prioridade: zod.string().nullish(),
+  pilarSlug: zod.string().nullish(),
+  evidencias: zod.string().nullish(),
   coluna: zod.string().nullish(),
   ordem: zod.number().nullish(),
 });
@@ -714,6 +718,8 @@ export const UpdateActionResponse = zod.object({
       zod.literal(null),
     ])
     .nullish(),
+  pilarSlug: zod.string().nullish(),
+  evidencias: zod.string().nullish(),
   coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]),
   ordem: zod.number(),
   concluidoEm: zod.string().nullish(),
@@ -762,6 +768,7 @@ export const CreateRiskBody = zod.object({
   descricao: zod.string().nullish(),
   probabilidade: zod.number(),
   impacto: zod.number(),
+  pilarSlug: zod.string().nullish(),
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
 });
@@ -778,6 +785,7 @@ export const UpdateRiskBody = zod.object({
   descricao: zod.string().nullish(),
   probabilidade: zod.number().nullish(),
   impacto: zod.number().nullish(),
+  pilarSlug: zod.string().nullish(),
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
   status: zod.string().nullish(),
@@ -791,6 +799,7 @@ export const UpdateRiskResponse = zod.object({
   probabilidade: zod.number(),
   impacto: zod.number(),
   severidade: zod.number(),
+  pilarSlug: zod.string().nullish(),
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
   status: zod.enum(["identificado", "em_mitigacao", "mitigado", "aceito"]),

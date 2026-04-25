@@ -1,0 +1,211 @@
+import { Router, type IRouter } from "express";
+import { eq, and } from "drizzle-orm";
+import { db, delegacoesTable } from "@workspace/db";
+import { z } from "zod";
+
+const router: IRouter = Router();
+
+function mapDelegacao(d: typeof delegacoesTable.$inferSelect) {
+  return {
+    id: d.id,
+    clinicId: d.clinicId,
+    pilarSlug: d.pilarSlug,
+    pilarNome: d.pilarNome,
+    nivel: d.nivel,
+    responsavelNome: d.responsavelNome,
+    responsavelEmail: d.responsavelEmail,
+    prazo: d.prazo,
+    status: d.status,
+    questaoInicio: d.questaoInicio,
+    questaoFim: d.questaoFim,
+    parentId: d.parentId,
+    observacoes: d.observacoes,
+    createdAt: d.createdAt.toISOString(),
+    updatedAt: d.updatedAt.toISOString(),
+  };
+}
+
+const CreateDelegacaoBody = z.object({
+  pilarSlug: z.string(),
+  pilarNome: z.string(),
+  nivel: z.number().int().min(1).max(2).optional().default(1),
+  responsavelNome: z.string().optional(),
+  responsavelEmail: z.string().email().optional(),
+  prazo: z.string().optional(),
+  status: z.enum(["nao_delegado", "pendente", "andamento", "concluido", "atrasado"]).optional().default("pendente"),
+  questaoInicio: z.number().int().optional(),
+  questaoFim: z.number().int().optional(),
+  parentId: z.string().uuid().optional(),
+  observacoes: z.string().optional(),
+});
+
+const UpdateDelegacaoBody = z.object({
+  responsavelNome: z.string().optional(),
+  responsavelEmail: z.string().email().optional(),
+  prazo: z.string().optional(),
+  status: z.enum(["nao_delegado", "pendente", "andamento", "concluido", "atrasado"]).optional(),
+  questaoInicio: z.number().int().optional(),
+  questaoFim: z.number().int().optional(),
+  observacoes: z.string().optional(),
+});
+
+router.get("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+
+  const delegacoes = await db
+    .select()
+    .from(delegacoesTable)
+    .where(eq(delegacoesTable.clinicId, clinicId))
+    .orderBy(delegacoesTable.nivel, delegacoesTable.createdAt);
+
+  res.json(delegacoes.map(mapDelegacao));
+});
+
+router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  const parsed = CreateDelegacaoBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { pilarSlug, pilarNome, nivel, responsavelNome, responsavelEmail, prazo, status, questaoInicio, questaoFim, parentId, observacoes } = parsed.data;
+
+  const [delegacao] = await db
+    .insert(delegacoesTable)
+    .values({
+      clinicId,
+      pilarSlug,
+      pilarNome,
+      nivel,
+      responsavelNome: responsavelNome ?? null,
+      responsavelEmail: responsavelEmail ?? null,
+      prazo: prazo ?? null,
+      status,
+      questaoInicio: questaoInicio ?? null,
+      questaoFim: questaoFim ?? null,
+      parentId: parentId ?? null,
+      observacoes: observacoes ?? null,
+    })
+    .returning();
+
+  if (responsavelEmail && process.env.RESEND_API_KEY) {
+    const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
+    const link = `${appUrl}/diagnostico?pilar=${encodeURIComponent(pilarSlug)}`;
+    fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "IONEX360 <noreply@ionex360.com.br>",
+        to: [responsavelEmail],
+        subject: `Você foi designado responsável pelo pilar ${pilarNome}`,
+        html: `<p>Olá, ${responsavelNome ?? ""},</p><p>Você foi delegado como responsável pelo pilar <strong>${pilarNome}</strong> no diagnóstico ICS.</p><p><a href="${link}">Acessar diagnóstico</a></p>`,
+      }),
+    }).catch(() => {});
+  }
+
+  res.status(201).json(mapDelegacao(delegacao));
+});
+
+router.patch("/delegacoes/:id", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = UpdateDelegacaoBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const updates: Partial<typeof delegacoesTable.$inferInsert> = { updatedAt: new Date() };
+  const d = parsed.data;
+  if (d.responsavelNome !== undefined) updates.responsavelNome = d.responsavelNome;
+  if (d.responsavelEmail !== undefined) updates.responsavelEmail = d.responsavelEmail;
+  if (d.prazo !== undefined) updates.prazo = d.prazo;
+  if (d.status !== undefined) updates.status = d.status;
+  if (d.questaoInicio !== undefined) updates.questaoInicio = d.questaoInicio;
+  if (d.questaoFim !== undefined) updates.questaoFim = d.questaoFim;
+  if (d.observacoes !== undefined) updates.observacoes = d.observacoes;
+
+  const [delegacao] = await db
+    .update(delegacoesTable)
+    .set(updates)
+    .where(eq(delegacoesTable.id, id))
+    .returning();
+
+  if (!delegacao) {
+    res.status(404).json({ error: "Delegation not found" });
+    return;
+  }
+
+  res.json(mapDelegacao(delegacao));
+});
+
+const ICS_PILARES = [
+  { slug: "estrategia", nome: "Estratégia e Governança", role: "CEO / Gestor Principal" },
+  { slug: "financeiro", nome: "Financeiro e Fluxo de Caixa", role: "Gestor Financeiro" },
+  { slug: "contabil", nome: "Contabilidade e Fiscal", role: "Contador Responsável" },
+  { slug: "marketing", nome: "Vendas, Marketing e Captação", role: "Gestor de Marketing" },
+  { slug: "operacoes", nome: "Processos Operacionais", role: "Coordenador Operacional" },
+  { slug: "pessoas", nome: "Gestão de Pessoas e Cultura", role: "Gestor de Pessoas" },
+  { slug: "tecnologia", nome: "Tecnologia e Sistemas", role: "Responsável de TI" },
+];
+
+router.post("/clinics/:clinicId/delegacoes/seed", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+
+  const existing = await db
+    .select()
+    .from(delegacoesTable)
+    .where(and(eq(delegacoesTable.clinicId, clinicId), eq(delegacoesTable.nivel, 1)));
+
+  const existingSlugs = new Set(existing.map(d => d.pilarSlug));
+
+  const toCreate = ICS_PILARES.filter(p => !existingSlugs.has(p.slug));
+
+  if (toCreate.length === 0) {
+    res.json({ created: 0, message: "Todos os pilares já possuem delegação N1." });
+    return;
+  }
+
+  const created = await db
+    .insert(delegacoesTable)
+    .values(
+      toCreate.map(p => ({
+        clinicId,
+        pilarSlug: p.slug,
+        pilarNome: p.nome,
+        nivel: 1,
+        responsavelNome: p.role,
+        responsavelEmail: null,
+        prazo: null,
+        status: "pendente" as const,
+        questaoInicio: null,
+        questaoFim: null,
+        parentId: null,
+        observacoes: null,
+      }))
+    )
+    .returning();
+
+  res.status(201).json({ created: created.length, delegacoes: created.map(mapDelegacao) });
+});
+
+router.delete("/delegacoes/:id", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  const [delegacao] = await db
+    .delete(delegacoesTable)
+    .where(eq(delegacoesTable.id, id))
+    .returning();
+
+  if (!delegacao) {
+    res.status(404).json({ error: "Delegation not found" });
+    return;
+  }
+
+  res.sendStatus(204);
+});
+
+export default router;

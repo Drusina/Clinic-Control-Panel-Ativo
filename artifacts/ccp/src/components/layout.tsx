@@ -7,13 +7,22 @@ import {
   Menu,
   Activity,
   ClipboardList,
+  Users,
+  ShieldAlert,
+  KanbanSquare,
+  ChevronDown,
 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useGetDashboardSummary } from "@workspace/api-client-react";
+import { cn } from "@/lib/utils";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const [operacionalOpen, setOperacionalOpen] = useState(
+    location.startsWith("/delegacao") || location.startsWith("/riscos") || location.startsWith("/acao")
+  );
 
   const navigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -22,16 +31,22 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Notificações", href: "/notifications", icon: Bell },
   ];
 
+  const operacionalNav = [
+    { name: "Delegação", href: "/delegacao/select", icon: Users },
+    { name: "Mapa de Riscos", href: "/riscos/select", icon: ShieldAlert },
+    { name: "Plano de Ação", href: "/acao/select", icon: KanbanSquare },
+  ];
+
   const SidebarContent = () => (
     <div className="flex h-full flex-col gap-4 py-4">
       <div className="px-6 py-2 flex items-center gap-2">
         <Activity className="h-6 w-6 text-primary" />
         <span className="text-xl font-bold tracking-tight text-sidebar-primary">IONEX<span className="text-sidebar-foreground">360</span></span>
       </div>
-      <div className="flex-1 px-4">
+      <div className="flex-1 px-4 overflow-y-auto">
         <nav className="flex flex-col gap-1">
           {navigation.map((item) => {
-            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href.split("/select")[0]));
             return (
               <Link key={item.name} href={item.href}>
                 <Button
@@ -44,6 +59,34 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          <div className="mt-2">
+            <button
+              onClick={() => setOperacionalOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider hover:text-sidebar-foreground/70 transition-colors"
+            >
+              <span>Operacional</span>
+              <ChevronDown className={cn("h-3 w-3 transition-transform", operacionalOpen ? "rotate-180" : "")} />
+            </button>
+            {operacionalOpen && (
+              <div className="flex flex-col gap-1">
+                {operacionalNav.map((item) => {
+                  const isActive = location.startsWith(item.href.split("/select")[0]);
+                  return (
+                    <Link key={item.name} href={item.href}>
+                      <Button
+                        variant={isActive ? "secondary" : "ghost"}
+                        className={`w-full justify-start gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.name}
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </nav>
       </div>
       <div className="px-4 mt-auto">

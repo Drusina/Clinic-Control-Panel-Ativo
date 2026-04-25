@@ -1,5 +1,6 @@
 export * from "./clinics";
 export * from "./clinic_activity";
+export * from "./delegacoes";
 export * from "./clinic_status_history";
 export * from "./socios";
 export * from "./kickoffs";

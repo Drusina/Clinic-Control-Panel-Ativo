@@ -19,6 +19,9 @@ import { getStoredToken } from "@/hooks/use-auth";
 import DiagnosticoSelectPage from "@/pages/diagnostico/select";
 import DiagnosticoWizard from "@/pages/diagnostico/wizard";
 import DiagnosticoResultado from "@/pages/diagnostico/resultado";
+import DelegacaoPage from "@/pages/delegacao/index";
+import RiscosPage from "@/pages/riscos/index";
+import AcaoPage from "@/pages/acao/index";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -34,6 +37,8 @@ async function fetchLatestActive() {
 
 function DiagnosticoEntrypoint() {
   const [, navigate] = useLocation();
+  const pilarParam = new URLSearchParams(window.location.search).get("pilar");
+
   const { data, isLoading } = useQuery({
     queryKey: ["diagnostico-latest-active"],
     queryFn: fetchLatestActive,
@@ -42,12 +47,13 @@ function DiagnosticoEntrypoint() {
 
   useEffect(() => {
     if (isLoading) return;
+    const pilarQuery = pilarParam ? `?pilar=${encodeURIComponent(pilarParam)}` : "";
     if (data?.id) {
-      navigate(`/diagnostico/${data.id}`, { replace: true });
+      navigate(`/diagnostico/${data.id}${pilarQuery}`, { replace: true });
     } else {
-      navigate("/diagnostico/select", { replace: true });
+      navigate(`/diagnostico/select${pilarQuery}`, { replace: true });
     }
-  }, [isLoading, data, navigate]);
+  }, [isLoading, data, navigate, pilarParam]);
 
   return null;
 }
@@ -167,6 +173,72 @@ function Router() {
           <AppLayout>
             <SuperAdminGuard>
               <DiagnosticoWizard />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/delegacao">
+        <Redirect to="/delegacao/select" />
+      </Route>
+      <Route path="/delegacao/select">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <DelegacaoPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/delegacao/:clinicId">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <DelegacaoPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/riscos">
+        <Redirect to="/riscos/select" />
+      </Route>
+      <Route path="/riscos/select">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <RiscosPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/riscos/:clinicId">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <RiscosPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/acao">
+        <Redirect to="/acao/select" />
+      </Route>
+      <Route path="/acao/select">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <AcaoPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/acao/:clinicId">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <AcaoPage />
             </SuperAdminGuard>
           </AppLayout>
         )}

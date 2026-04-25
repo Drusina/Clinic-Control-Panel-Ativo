@@ -13,6 +13,8 @@ export const actionsTable = pgTable("acoes", {
   responsavelNome: text("responsavel_nome"),
   prazo: date("prazo"),
   prioridade: text("prioridade"),
+  pilarSlug: text("pilar_slug"),
+  evidencias: text("evidencias"),
   coluna: text("coluna").notNull().default("backlog"),
   ordem: integer("ordem").notNull().default(0),
   concluidoEm: timestamp("concluido_em", { withTimezone: true }),

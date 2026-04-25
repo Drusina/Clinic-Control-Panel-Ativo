@@ -19,6 +19,8 @@ function mapAction(a: typeof actionsTable.$inferSelect) {
     responsavelNome: a.responsavelNome,
     prazo: a.prazo,
     prioridade: a.prioridade,
+    pilarSlug: a.pilarSlug,
+    evidencias: a.evidencias,
     coluna: a.coluna,
     ordem: a.ordem,
     concluidoEm: a.concluidoEm?.toISOString() ?? null,
@@ -64,6 +66,8 @@ router.post("/clinics/:clinicId/actions", async (req, res): Promise<void> => {
       responsavelNome: parsed.data.responsavelNome ?? null,
       prazo: parsed.data.prazo ?? null,
       prioridade: parsed.data.prioridade ?? null,
+      pilarSlug: parsed.data.pilarSlug ?? null,
+      evidencias: parsed.data.evidencias ?? null,
       coluna: parsed.data.coluna ?? "backlog",
     })
     .returning();
@@ -86,6 +90,8 @@ router.patch("/actions/:id", async (req, res): Promise<void> => {
   if (d.responsavelNome !== undefined) updates.responsavelNome = d.responsavelNome;
   if (d.prazo !== undefined) updates.prazo = d.prazo;
   if (d.prioridade !== undefined) updates.prioridade = d.prioridade;
+  if (d.pilarSlug !== undefined) updates.pilarSlug = d.pilarSlug;
+  if (d.evidencias !== undefined) updates.evidencias = d.evidencias;
   if (d.coluna != null) {
     updates.coluna = d.coluna;
     if (d.coluna === "done") updates.concluidoEm = new Date();

@@ -22,6 +22,7 @@ import sistemasUsoRouter from "./sistemas-uso";
 import docsConstitutivoRouter from "./docs-constitutivos";
 import lgpdTermosRouter from "./lgpd-termos";
 import { autentiquePublicRouter, autentiqueProtectedRouter } from "./autentique";
+import delegacoesRouter from "./delegacoes";
 
 const router: IRouter = Router();
 
@@ -46,6 +47,7 @@ router.use(requireSuperAdmin, sistemasUsoRouter);
 router.use(requireSuperAdmin, docsConstitutivoRouter);
 router.use(requireSuperAdmin, lgpdTermosRouter);
 router.use(requireSuperAdmin, autentiqueProtectedRouter);
+router.use(requireSuperAdmin, delegacoesRouter);
 router.use(autentiquePublicRouter);
 router.use(notificationsRouter);
 
