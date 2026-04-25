@@ -24,3 +24,4 @@ export * from "./user_preferences";
 export * from "./push_subscriptions";
 export * from "./server_config";
 export * from "./ics_plan_templates";
+export * from "./document_access_log";

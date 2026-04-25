@@ -16,6 +16,8 @@ import {
   FlaskConical,
   Trash2,
   Save,
+  FileDown,
+  RefreshCw,
 } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
 
@@ -29,6 +31,15 @@ interface ConfigEntry {
   configured: boolean;
   source: "db" | "env" | null;
   displayValue: string | null;
+}
+
+interface DocumentAccessLogEntry {
+  id: string;
+  objectPath: string;
+  accessedBy: string;
+  role: string;
+  ipAddress: string | null;
+  createdAt: string;
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -169,6 +180,88 @@ interface TestResult {
   error?: string;
 }
 
+function DocumentAccessLogSection() {
+  const { data: entries = [], isLoading, refetch, isFetching } = useQuery<DocumentAccessLogEntry[]>({
+    queryKey: ["document-access-log"],
+    queryFn: () => apiFetch("/api/admin/document-access-log?limit=50"),
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileDown className="h-4 w-4 text-muted-foreground" />
+              Log de Acesso a Documentos
+            </CardTitle>
+            <CardDescription className="text-sm">
+              Registro de todos os acessos a documentos privados (Proposta, Contrato, etc.).
+            </CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
+            {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading && (
+          <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+            <Loader2 className="h-4 w-4 animate-spin" /> Carregando registros…
+          </div>
+        )}
+        {!isLoading && entries.length === 0 && (
+          <p className="text-sm text-muted-foreground py-4 text-center">Nenhum acesso registrado ainda.</p>
+        )}
+        {!isLoading && entries.length > 0 && (
+          <div className="overflow-x-auto -mx-2">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b">
+                  <th className="pb-2 px-2 font-medium">Data/Hora</th>
+                  <th className="pb-2 px-2 font-medium">Usuário</th>
+                  <th className="pb-2 px-2 font-medium">Papel</th>
+                  <th className="pb-2 px-2 font-medium">Documento</th>
+                  <th className="pb-2 px-2 font-medium">IP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id} className="border-b last:border-0 hover:bg-muted/30">
+                    <td className="py-2 px-2 whitespace-nowrap text-muted-foreground">
+                      {new Date(entry.createdAt).toLocaleString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </td>
+                    <td className="py-2 px-2 font-mono">{entry.accessedBy}</td>
+                    <td className="py-2 px-2">
+                      <Badge variant="outline" className="text-xs">
+                        {entry.role}
+                      </Badge>
+                    </td>
+                    <td className="py-2 px-2 font-mono max-w-[200px] truncate" title={entry.objectPath}>
+                      {entry.objectPath}
+                    </td>
+                    <td className="py-2 px-2 text-muted-foreground">{entry.ipAddress ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!isLoading && entries.length === 50 && (
+          <p className="text-xs text-muted-foreground mt-3 text-center">Exibindo os 50 acessos mais recentes.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminConfiguracoesPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -286,6 +379,8 @@ export default function AdminConfiguracoesPage() {
           </Card>
         </>
       )}
+
+      <DocumentAccessLogSection />
     </div>
   );
 }

@@ -32,6 +32,7 @@ import notificationPreferencesRouter from "./notification-preferences";
 import pushRouter from "./push";
 import icsTemplatesRouter from "./ics-templates";
 import serverConfigRouter from "./server-config";
+import documentAccessLogRouter from "./document-access-log";
 
 const router: IRouter = Router();
 
@@ -68,5 +69,6 @@ router.use(notificationPreferencesRouter);
 router.use(pushRouter);
 router.use(requireSuperAdmin, icsTemplatesRouter);
 router.use(requireSuperAdmin, serverConfigRouter);
+router.use(requireSuperAdmin, documentAccessLogRouter);
 
 export default router;

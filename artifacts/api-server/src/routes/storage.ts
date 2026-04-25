@@ -2,7 +2,8 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
 import { z } from "zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
-import { requireSuperAdmin } from "../middleware/auth";
+import { requireSuperAdmin, verifyToken, extractToken } from "../middleware/auth";
+import { db, documentAccessLogTable } from "@workspace/db";
 
 const RequestUploadUrlBody = z.object({
   name: z.string(),
@@ -27,6 +28,31 @@ const log = {
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
+
+function getClientIp(req: Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string") return forwarded.split(",")[0].trim();
+  return req.socket?.remoteAddress ?? "unknown";
+}
+
+async function logDocumentAccess(req: Request, objectPath: string): Promise<void> {
+  try {
+    const token = extractToken(req);
+    const payload = token ? verifyToken(token) : null;
+    const accessedBy = (payload?.sub as string | undefined) ?? "unknown";
+    const role = (payload?.role as string | undefined) ?? "unknown";
+    const ipAddress = getClientIp(req);
+
+    await db.insert(documentAccessLogTable).values({
+      objectPath,
+      accessedBy,
+      role,
+      ipAddress,
+    });
+  } catch (err) {
+    log.error({ err }, "Failed to write document access log");
+  }
+}
 
 /**
  * POST /storage/uploads/request-url
@@ -113,6 +139,12 @@ router.get("/storage/objects/*path", requireSuperAdmin, async (req: Request, res
 
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
+
+    res.on("finish", () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        void logDocumentAccess(req, objectPath);
+      }
+    });
 
     if (response.body) {
       const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
