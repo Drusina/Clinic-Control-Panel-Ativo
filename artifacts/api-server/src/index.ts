@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { runExpiryCheck } from "./lib/expiry-check.js";
 import { initVapid, isPushConfigured } from "./lib/push.js";
+import { startScheduler, stopScheduler } from "./lib/scheduler.js";
 
 const rawPort = process.env["PORT"];
 
@@ -17,16 +17,14 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-async function scheduledExpiryCheck(): Promise<void> {
-  try {
-    const { sent, skipped, total } = await runExpiryCheck();
-    logger.info({ sent, skipped, total }, "Expiry check completed");
-  } catch (err) {
-    logger.error({ err }, "Expiry check failed");
-  }
+async function shutdown(signal: string): Promise<void> {
+  logger.info({ signal }, "Shutdown signal received, stopping scheduler");
+  await stopScheduler().catch((e) => logger.error({ err: e }, "Error stopping scheduler"));
+  process.exit(0);
 }
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+process.on("SIGTERM", () => { shutdown("SIGTERM"); });
+process.on("SIGINT", () => { shutdown("SIGINT"); });
 
 app.listen(port, async (err) => {
   if (err) {
@@ -43,7 +41,9 @@ app.listen(port, async (err) => {
     logger.warn("VAPID push notifications not configured — push will be disabled");
   }
 
-  setInterval(() => {
-    scheduledExpiryCheck();
-  }, MS_PER_DAY);
+  try {
+    await startScheduler();
+  } catch (e) {
+    logger.error({ err: e }, "Job scheduler failed to start — scheduled digests will not run");
+  }
 });
