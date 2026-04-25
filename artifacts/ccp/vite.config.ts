@@ -41,6 +41,9 @@ export default defineConfig({
       devOptions: {
         enabled: false,
       },
+      injectManifest: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      },
       manifest: {
         name: "IONEX360",
         short_name: "IONEX",
@@ -93,6 +96,27 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom"],
+          "vendor-router": ["wouter"],
+          "vendor-query": ["@tanstack/react-query"],
+          "vendor-charts": ["recharts"],
+          "vendor-pdf": ["jspdf", "@react-pdf/renderer"],
+          "vendor-flow": ["reactflow"],
+          "vendor-ui": [
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-select",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-toast",
+            "@radix-ui/react-tooltip",
+            "@radix-ui/react-alert-dialog",
+          ],
+        },
+      },
+    },
   },
   server: {
     port,
