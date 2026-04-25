@@ -5,6 +5,7 @@ import { db, lgpdTermosTable, teamTable } from "@workspace/db";
 import { sendEmail, buildSigningRequestEmail, buildSigningConfirmationEmail } from "../lib/email.js";
 import { sendApprovalWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
+import { getConfig } from "../lib/config.js";
 
 const publicRouter: IRouter = Router();
 const protectedRouter: IRouter = Router();
@@ -103,10 +104,10 @@ protectedRouter.post("/autentique/create-document", async (req, res): Promise<vo
     return;
   }
 
-  const autentiqueToken = process.env.AUTENTIQUE_TOKEN;
+  const autentiqueToken = await getConfig("autentique_token");
   if (!autentiqueToken) {
     res.status(503).json({
-      error: "Autentique não está configurado neste ambiente. Configure AUTENTIQUE_TOKEN para habilitar o aceite digital.",
+      error: "Autentique não está configurado. Acesse Configurações → Integrações para adicionar o token.",
     });
     return;
   }
@@ -126,8 +127,8 @@ protectedRouter.post("/autentique/create-document", async (req, res): Promise<vo
     const pdfBuffer = Buffer.from(pdfBytes);
 
     let storagePath: string | null = null;
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = await getConfig("supabase_url");
+    const serviceRoleKey = await getConfig("supabase_service_role_key");
     if (supabaseUrl && serviceRoleKey) {
       const objectPath = `clinics/${clinicId}/lgpd/${termo.slug}.pdf`;
       const uploadRes = await fetch(
@@ -174,13 +175,14 @@ protectedRouter.post("/autentique/create-document", async (req, res): Promise<vo
       signers: [
         { email: signerEmail, action: "SIGN", positions: [] },
       ],
+      file: null,
     };
 
     const formData = new FormData();
-    formData.append("query", mutation);
-    formData.append("variables", JSON.stringify(variables));
+    formData.append("operations", JSON.stringify({ query: mutation, variables }));
+    formData.append("map", JSON.stringify({ "0": ["variables.file"] }));
     formData.append(
-      "file",
+      "0",
       new Blob([pdfBuffer], { type: "application/pdf" }),
       `${termo.slug}.pdf`
     );
@@ -246,7 +248,7 @@ protectedRouter.post("/autentique/create-document", async (req, res): Promise<vo
 
 publicRouter.post("/autentique/webhook", async (req, res): Promise<void> => {
   try {
-    const webhookSecret = process.env.AUTENTIQUE_WEBHOOK_SECRET;
+    const webhookSecret = await getConfig("autentique_webhook_secret");
     const incomingSecret = req.headers["x-autentique-secret"] as string | undefined;
 
     if (webhookSecret) {
@@ -255,7 +257,7 @@ publicRouter.post("/autentique/webhook", async (req, res): Promise<void> => {
         return;
       }
     } else if (process.env.NODE_ENV === "production") {
-      res.status(503).json({ error: "AUTENTIQUE_WEBHOOK_SECRET not configured" });
+      res.status(503).json({ error: "AUTENTIQUE_WEBHOOK_SECRET não configurado. Acesse Configurações → Integrações." });
       return;
     }
 

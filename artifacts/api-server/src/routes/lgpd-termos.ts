@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, lgpdTermosTable } from "@workspace/db";
+import { getConfig } from "../lib/config.js";
 
 const PatchLgpdTermoBody = z.object({
   status: z.string().optional(),
@@ -140,11 +141,11 @@ router.post("/clinics/:clinicId/lgpd-termos/:termoId/upload-pdf", async (req, re
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   const termoId = Array.isArray(req.params.termoId) ? req.params.termoId[0] : req.params.termoId;
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = await getConfig("supabase_url");
+  const serviceRoleKey = await getConfig("supabase_service_role_key");
 
   if (!supabaseUrl || !serviceRoleKey) {
-    res.status(501).json({ error: "Supabase Storage não configurado." });
+    res.status(501).json({ error: "Supabase Storage não configurado. Acesse Configurações → Integrações." });
     return;
   }
 

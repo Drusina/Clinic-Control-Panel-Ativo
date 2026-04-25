@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, docsConstitutivoTable } from "@workspace/db";
+import { getConfig } from "../lib/config.js";
 
 const router: IRouter = Router();
 
@@ -86,11 +87,11 @@ router.post("/clinics/:clinicId/docs-constitutivos/:docId/upload", async (req, r
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   const docId = Array.isArray(req.params.docId) ? req.params.docId[0] : req.params.docId;
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = await getConfig("supabase_url");
+  const serviceRoleKey = await getConfig("supabase_service_role_key");
 
   if (!supabaseUrl || !serviceRoleKey) {
-    res.status(501).json({ error: "Supabase Storage não configurado." });
+    res.status(501).json({ error: "Supabase Storage não configurado. Acesse Configurações → Integrações." });
     return;
   }
 
@@ -151,11 +152,11 @@ router.get("/clinics/:clinicId/docs-constitutivos/:docId/signed-url", async (req
     return;
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = await getConfig("supabase_url");
+  const serviceRoleKey = await getConfig("supabase_service_role_key");
 
   if (!supabaseUrl || !serviceRoleKey) {
-    res.json({ url: `${process.env.SUPABASE_URL}/storage/v1/object/public/clinic-docs/${doc.storagePath}` });
+    res.status(501).json({ error: "Supabase Storage não configurado. Acesse Configurações → Integrações." });
     return;
   }
 

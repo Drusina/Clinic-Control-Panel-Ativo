@@ -16,6 +16,7 @@ import {
   FileText,
   BarChart3,
   Wand2,
+  Plug,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Wand2 className="h-4 w-4" />
             Templates ICS
+          </Button>
+        </Link>
+        <Link href="/admin/configuracoes">
+          <Button
+            variant={location.startsWith("/admin/configuracoes") ? "secondary" : "ghost"}
+            aria-current={location.startsWith("/admin/configuracoes") ? "page" : undefined}
+            className={`w-full justify-start gap-3 ${location.startsWith("/admin/configuracoes") ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
+          >
+            <Plug className="h-4 w-4" />
+            Integrações
           </Button>
         </Link>
         <Button
