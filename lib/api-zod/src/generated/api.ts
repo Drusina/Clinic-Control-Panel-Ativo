@@ -60,6 +60,22 @@ export const GetDashboardRecentActivityResponse = zod.array(
 );
 
 /**
+ * @summary Get recently completed diagnostics overview for all clinics
+ */
+export const GetDashboardDiagnosticsResponseItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  clinicNome: zod.string(),
+  versao: zod.number(),
+  concluidoEm: zod.string(),
+  scoreGlobal: zod.number().nullish(),
+  scoresPilares: zod.object({}).passthrough().nullish(),
+});
+export const GetDashboardDiagnosticsResponse = zod.array(
+  GetDashboardDiagnosticsResponseItem,
+);
+
+/**
  * @summary List all clinics
  */
 export const ListClinicsQueryParams = zod.object({

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, count, sum, and } from "drizzle-orm";
+import { eq, count, sum, desc } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, actionsTable, diagnosticsTable, notificationsTable, faturasTable } from "@workspace/db";
 import {
   GetDashboardSummaryResponse,
@@ -98,6 +98,38 @@ router.get("/dashboard/recent-activity", async (_req, res): Promise<void> => {
       }))
     )
   );
+});
+
+router.get("/dashboard/diagnostics", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      id: diagnosticsTable.id,
+      clinicId: diagnosticsTable.clinicId,
+      clinicNome: clinicsTable.nome,
+      versao: diagnosticsTable.versao,
+      concluidoEm: diagnosticsTable.concluidoEm,
+      scoreGlobal: diagnosticsTable.scoreGlobal,
+      scoresPilares: diagnosticsTable.scoresPilares,
+    })
+    .from(diagnosticsTable)
+    .innerJoin(clinicsTable, eq(diagnosticsTable.clinicId, clinicsTable.id))
+    .where(eq(diagnosticsTable.status, "concluido"))
+    .orderBy(desc(diagnosticsTable.concluidoEm))
+    .limit(50);
+
+  const mapped = rows
+    .filter((r) => r.concluidoEm != null)
+    .map((r) => ({
+      id: r.id,
+      clinicId: r.clinicId,
+      clinicNome: r.clinicNome,
+      versao: r.versao ?? 1,
+      concluidoEm: r.concluidoEm!.toISOString(),
+      scoreGlobal: r.scoreGlobal != null ? Number(r.scoreGlobal) : null,
+      scoresPilares: r.scoresPilares as Record<string, number> | null,
+    }));
+
+  res.json(mapped);
 });
 
 export default router;

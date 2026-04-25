@@ -89,6 +89,21 @@ paths:
                 items:
                   $ref: "#/components/schemas/Activity"
 
+  /dashboard/diagnostics:
+    get:
+      operationId: getDashboardDiagnostics
+      tags: [dashboard]
+      summary: Get recently completed diagnostics overview for all clinics
+      responses:
+        "200":
+          description: Diagnostics overview
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiagnosticsOverviewItem"
+
   # ─── CLINICS ────────────────────────────────────────────────────────────────
   /clinics:
     get:
@@ -1033,6 +1048,30 @@ components:
         - status
         - count
         - valor
+
+    DiagnosticsOverviewItem:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        clinicNome:
+          type: string
+        versao:
+          type: integer
+        concluidoEm:
+          type: string
+        scoreGlobal:
+          type: ["number", "null"]
+        scoresPilares:
+          type: ["object", "null"]
+      required:
+        - id
+        - clinicId
+        - clinicNome
+        - versao
+        - concluidoEm
 
     # ─── CLINIC ─────────────────────────────────────────────────────────────
     Clinic:

@@ -34,6 +34,7 @@ import type {
   DiagnosticPillar,
   DiagnosticQuestion,
   DiagnosticResposta,
+  DiagnosticsOverviewItem,
   Fatura,
   HealthStatus,
   InviteUserBody,
@@ -359,6 +360,85 @@ export function useGetDashboardRecentActivity<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDashboardRecentActivityQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get recently completed diagnostics overview for all clinics
+ */
+export const getGetDashboardDiagnosticsUrl = () => {
+  return `/api/dashboard/diagnostics`;
+};
+
+export const getDashboardDiagnostics = async (
+  options?: RequestInit,
+): Promise<DiagnosticsOverviewItem[]> => {
+  return customFetch<DiagnosticsOverviewItem[]>(
+    getGetDashboardDiagnosticsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetDashboardDiagnosticsQueryKey = () => {
+  return [`/api/dashboard/diagnostics`] as const;
+};
+
+export const getGetDashboardDiagnosticsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardDiagnostics>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardDiagnostics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetDashboardDiagnosticsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDashboardDiagnostics>>
+  > = ({ signal }) => getDashboardDiagnostics({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardDiagnostics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDashboardDiagnosticsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDashboardDiagnostics>>
+>;
+export type GetDashboardDiagnosticsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get recently completed diagnostics overview for all clinics
+ */
+
+export function useGetDashboardDiagnostics<
+  TData = Awaited<ReturnType<typeof getDashboardDiagnostics>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardDiagnostics>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDashboardDiagnosticsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

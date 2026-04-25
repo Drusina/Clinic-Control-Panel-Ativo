@@ -29,6 +29,25 @@ export interface PipelineItem {
   valor: number;
 }
 
+/**
+ * @nullable
+ */
+export type DiagnosticsOverviewItemScoresPilares = {
+  [key: string]: unknown;
+} | null;
+
+export interface DiagnosticsOverviewItem {
+  id: string;
+  clinicId: string;
+  clinicNome: string;
+  versao: number;
+  concluidoEm: string;
+  /** @nullable */
+  scoreGlobal?: number | null;
+  /** @nullable */
+  scoresPilares?: DiagnosticsOverviewItemScoresPilares;
+}
+
 export type ClinicPlano = (typeof ClinicPlano)[keyof typeof ClinicPlano];
 
 export const ClinicPlano = {
