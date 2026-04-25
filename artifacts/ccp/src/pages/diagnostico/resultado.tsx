@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,9 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, TrendingUp, AlertTriangle, CheckCircle2, Zap, ChevronDown, ChevronUp, Plus, ArrowLeft } from "lucide-react";
+import { Loader2, Sparkles, TrendingUp, AlertTriangle, CheckCircle2, Zap, ChevronDown, ChevronUp, Plus, ArrowLeft, FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getStoredToken } from "@/hooks/use-auth";
+import jsPDF from "jspdf";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -54,11 +55,19 @@ interface DiagnosticData {
   scoreGlobal: number;
   scoresPilares: Record<string, number>;
   metasPilares?: Record<string, number>;
+  iniciadoEm?: string;
+  createdAt?: string;
   insightsIa?: {
     pontos_fortes: Array<{ pilar: string; titulo: string; descricao: string }>;
     pontos_criticos: Array<{ pilar: string; titulo: string; descricao: string; impacto: string }>;
     acoes_sugeridas: Array<{ pilar: string; titulo: string; descricao: string; prioridade: string; prazo: string }>;
   };
+}
+
+interface ClinicData {
+  id: string;
+  nome: string;
+  fantasia?: string | null;
 }
 
 function ScoreDelta({ score, meta }: { score: number; meta?: number }) {
@@ -72,12 +81,54 @@ function ScoreDelta({ score, meta }: { score: number; meta?: number }) {
   );
 }
 
+async function svgElementToDataUrl(svgEl: SVGSVGElement): Promise<string> {
+  const clone = svgEl.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+  const rect = svgEl.getBoundingClientRect();
+  const w = Math.round(rect.width) || 600;
+  const h = Math.round(rect.height) || 400;
+  clone.setAttribute("width", String(w));
+  clone.setAttribute("height", String(h));
+
+  const svgStr = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = w * 2;
+      canvas.height = h * 2;
+      const ctx = canvas.getContext("2d")!;
+      ctx.scale(2, 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to load SVG as image"));
+    };
+    img.src = url;
+  });
+}
+
+function wrapText(doc: jsPDF, text: string, maxWidth: number): string[] {
+  return doc.splitTextToSize(text, maxWidth) as string[];
+}
+
 export default function DiagnosticoResultado() {
   const params = useParams<{ id: string }>();
   const diagnosticoId = params.id;
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const radarRef = useRef<HTMLDivElement>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const [expandedSections, setExpandedSections] = useState({
     fortes: true,
@@ -90,6 +141,12 @@ export default function DiagnosticoResultado() {
     queryKey: ["diagnostic", diagnosticoId],
     queryFn: () => apiFetch(`/diagnostics/${diagnosticoId}`),
     enabled: !!diagnosticoId,
+  });
+
+  const { data: clinic } = useQuery<ClinicData>({
+    queryKey: ["clinic", diagnostic?.clinicId],
+    queryFn: () => apiFetch(`/clinics/${diagnostic!.clinicId}`),
+    enabled: !!diagnostic?.clinicId,
   });
 
   const analyzesMut = useMutation({
@@ -125,6 +182,325 @@ export default function DiagnosticoResultado() {
       toast({ title: "Erro ao criar tarefa", variant: "destructive" });
     } finally {
       setCreatingAction(null);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!diagnostic) return;
+    setExportingPdf(true);
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = 210;
+      const pageH = 297;
+      const marginL = 18;
+      const marginR = 18;
+      const contentW = pageW - marginL - marginR;
+      let y = 18;
+
+      const clinicName = clinic?.fantasia || clinic?.nome || "Clínica";
+      const diagnosticDate = diagnostic.iniciadoEm
+        ? new Date(diagnostic.iniciadoEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+        : diagnostic.createdAt
+        ? new Date(diagnostic.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+        : "Data não disponível";
+
+      doc.setFillColor(79, 70, 229);
+      doc.rect(0, 0, pageW, 14, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text("IONEX360", marginL, 9.5);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text("Diagnostico 360 - Relatorio de Resultados", pageW - marginR, 9.5, { align: "right" });
+
+      y = 26;
+      doc.setTextColor(30, 30, 30);
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text(clinicName, marginL, y);
+      y += 7;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Diagnostico 360 - Versao ${diagnostic.versao} | ${diagnosticDate}`, marginL, y);
+      doc.text(`Status: ${diagnostic.status === "concluido" ? "Concluido" : diagnostic.status === "em_andamento" ? "Em andamento" : diagnostic.status}`, pageW - marginR, y, { align: "right" });
+      y += 5;
+      doc.setDrawColor(220, 220, 220);
+      doc.line(marginL, y, pageW - marginR, y);
+      y += 8;
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 30, 30);
+      doc.text("Score Global", marginL, y);
+      y += 6;
+      doc.setFontSize(32);
+      doc.setTextColor(79, 70, 229);
+      doc.text(`${diagnostic.scoreGlobal?.toFixed(1) ?? "--"} / 5,0`, marginL, y);
+      y += 4;
+
+      const barX = marginL;
+      const barY = y;
+      const barW = contentW;
+      const barH = 4;
+      const fillW = ((diagnostic.scoreGlobal ?? 0) / 5) * barW;
+      doc.setFillColor(230, 230, 250);
+      doc.roundedRect(barX, barY, barW, barH, 2, 2, "F");
+      if (fillW > 0) {
+        doc.setFillColor(79, 70, 229);
+        doc.roundedRect(barX, barY, fillW, barH, 2, 2, "F");
+      }
+      y += barH + 10;
+
+      doc.setTextColor(30, 30, 30);
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Radar por Pilar", marginL, y);
+      y += 5;
+
+      const radarImgH = 70;
+      let chartAdded = false;
+      if (radarRef.current) {
+        const svgEl = radarRef.current.querySelector("svg");
+        if (svgEl) {
+          try {
+            const dataUrl = await svgElementToDataUrl(svgEl as SVGSVGElement);
+            const svgRect = svgEl.getBoundingClientRect();
+            const svgAspect = svgRect.width > 0 ? svgRect.width / svgRect.height : 1.6;
+            const radarImgW = Math.min(contentW, radarImgH * svgAspect);
+            const radarX = marginL + (contentW - radarImgW) / 2;
+            doc.addImage(dataUrl, "PNG", radarX, y, radarImgW, radarImgH);
+            y += radarImgH + 8;
+            chartAdded = true;
+          } catch {
+            doc.setFontSize(8);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(160, 160, 160);
+            doc.text("[Grafico radar nao disponivel]", marginL, y + 6);
+            y += 12;
+            toast({ title: "Aviso", description: "O gráfico radar não pôde ser incluído no PDF.", variant: "destructive" });
+          }
+        }
+      }
+      if (!chartAdded) {
+        y += 4;
+      }
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 30, 30);
+      doc.text("Scores por Pilar", marginL, y);
+      y += 6;
+
+      const scores = diagnostic.scoresPilares ?? {};
+      const metas = diagnostic.metasPilares ?? {};
+      const pilarRows = PILAR_ORDER.filter((slug) => scores[slug] != null);
+
+      const colWidths = [contentW * 0.52, contentW * 0.16, contentW * 0.16, contentW * 0.16];
+      const headers = ["Pilar", "Score", "Meta", "Delta"];
+      const headerX = [marginL, marginL + colWidths[0], marginL + colWidths[0] + colWidths[1], marginL + colWidths[0] + colWidths[1] + colWidths[2]];
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(120, 120, 120);
+      doc.text(headers[0], headerX[0], y);
+      doc.text(headers[1], headerX[1] + colWidths[1], y, { align: "right" });
+      doc.text(headers[2], headerX[2] + colWidths[2], y, { align: "right" });
+      doc.text(headers[3], headerX[3] + colWidths[3], y, { align: "right" });
+      y += 2;
+      doc.setDrawColor(200, 200, 200);
+      doc.line(marginL, y, pageW - marginR, y);
+      y += 4;
+
+      doc.setFont("helvetica", "normal");
+      for (const slug of pilarRows) {
+        const info = PILAR_INFO[slug] ?? { nome: slug, color: "#888" };
+        const score = scores[slug] ?? 0;
+        const meta = metas[slug] ?? 4;
+        const delta = score - meta;
+
+        const rgb = hexToRgb(info.color);
+        doc.setFillColor(rgb.r, rgb.g, rgb.b);
+        doc.circle(headerX[0] + 1.5, y - 1.5, 1.5, "F");
+
+        doc.setTextColor(30, 30, 30);
+        doc.setFontSize(8.5);
+        doc.text(info.nome, headerX[0] + 5, y);
+
+        doc.setFont("helvetica", "bold");
+        doc.text(score.toFixed(1), headerX[1] + colWidths[1], y, { align: "right" });
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(120, 120, 120);
+        doc.text(meta.toFixed(1), headerX[2] + colWidths[2], y, { align: "right" });
+
+        if (delta >= 0) {
+          doc.setTextColor(22, 163, 74);
+        } else {
+          doc.setTextColor(220, 38, 38);
+        }
+        doc.text(`${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`, headerX[3] + colWidths[3], y, { align: "right" });
+
+        y += 5;
+        doc.setDrawColor(240, 240, 240);
+        doc.line(marginL, y - 1, pageW - marginR, y - 1);
+      }
+
+      const insights = diagnostic.insightsIa;
+      if (insights) {
+        if (y > pageH - 60) {
+          doc.addPage();
+          y = 20;
+        } else {
+          y += 6;
+        }
+
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(30, 30, 30);
+        doc.text("Insights por IA", marginL, y);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(130, 130, 130);
+        doc.text("Analise estrategica gerada pelo Claude (Anthropic)", marginL, y + 5);
+        y += 12;
+
+        const ensureSpace = (needed: number) => {
+          if (y + needed > pageH - 15) {
+            doc.addPage();
+            y = 20;
+          }
+        };
+
+        if (insights.pontos_fortes.length > 0) {
+          ensureSpace(14);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(22, 101, 52);
+          doc.text(`Pontos Fortes (${insights.pontos_fortes.length})`, marginL, y);
+          y += 6;
+
+          for (const item of insights.pontos_fortes) {
+            const pilarLabel = PILAR_INFO[item.pilar]?.short ?? item.pilar;
+            const titleLine = `${item.titulo} [${pilarLabel}]`;
+            const descLines = wrapText(doc, item.descricao, contentW - 6);
+            const blockH = 5 + descLines.length * 4 + 4;
+            ensureSpace(blockH);
+
+            doc.setFillColor(240, 253, 244);
+            doc.setDrawColor(187, 247, 208);
+            doc.roundedRect(marginL, y - 3, contentW, blockH, 2, 2, "FD");
+
+            doc.setFontSize(8.5);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(22, 101, 52);
+            doc.text(titleLine, marginL + 3, y + 1);
+            y += 5;
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(50, 50, 50);
+            doc.setFontSize(8);
+            for (const line of descLines) {
+              doc.text(line, marginL + 3, y);
+              y += 4;
+            }
+            y += 3;
+          }
+          y += 2;
+        }
+
+        if (insights.pontos_criticos.length > 0) {
+          ensureSpace(14);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(153, 27, 27);
+          doc.text(`Pontos Criticos (${insights.pontos_criticos.length})`, marginL, y);
+          y += 6;
+
+          for (const item of insights.pontos_criticos) {
+            const pilarLabel = PILAR_INFO[item.pilar]?.short ?? item.pilar;
+            const impactoLabel = item.impacto === "alto" ? "Alto" : item.impacto === "medio" ? "Medio" : "Baixo";
+            const titleLine = `${item.titulo} [${pilarLabel}] - Impacto ${impactoLabel}`;
+            const descLines = wrapText(doc, item.descricao, contentW - 6);
+            const blockH = 5 + descLines.length * 4 + 4;
+            ensureSpace(blockH);
+
+            doc.setFillColor(255, 241, 242);
+            doc.setDrawColor(254, 202, 202);
+            doc.roundedRect(marginL, y - 3, contentW, blockH, 2, 2, "FD");
+
+            doc.setFontSize(8.5);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(153, 27, 27);
+            doc.text(titleLine, marginL + 3, y + 1);
+            y += 5;
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(50, 50, 50);
+            doc.setFontSize(8);
+            for (const line of descLines) {
+              doc.text(line, marginL + 3, y);
+              y += 4;
+            }
+            y += 3;
+          }
+          y += 2;
+        }
+
+        if (insights.acoes_sugeridas.length > 0) {
+          ensureSpace(14);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(91, 33, 182);
+          doc.text(`Acoes Sugeridas (${insights.acoes_sugeridas.length})`, marginL, y);
+          y += 6;
+
+          for (const item of insights.acoes_sugeridas) {
+            const pilarLabel = PILAR_INFO[item.pilar]?.short ?? item.pilar;
+            const prioLabel = item.prioridade === "alta" ? "Alta" : item.prioridade === "media" ? "Media" : "Baixa";
+            const prazoLabel = item.prazo === "curto" ? "Curto prazo" : item.prazo === "medio" ? "Medio prazo" : "Longo prazo";
+            const titleLine = `${item.titulo} [${pilarLabel}] - ${prioLabel} prioridade | ${prazoLabel}`;
+            const descLines = wrapText(doc, item.descricao, contentW - 6);
+            const blockH = 5 + descLines.length * 4 + 4;
+            ensureSpace(blockH);
+
+            doc.setFillColor(245, 243, 255);
+            doc.setDrawColor(221, 214, 254);
+            doc.roundedRect(marginL, y - 3, contentW, blockH, 2, 2, "FD");
+
+            doc.setFontSize(8.5);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(91, 33, 182);
+            doc.text(titleLine, marginL + 3, y + 1);
+            y += 5;
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(50, 50, 50);
+            doc.setFontSize(8);
+            for (const line of descLines) {
+              doc.text(line, marginL + 3, y);
+              y += 4;
+            }
+            y += 3;
+          }
+        }
+      }
+
+      const totalPages = doc.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(180, 180, 180);
+        doc.text(`IONEX360 | Diagnostico 360 | Gerado em ${new Date().toLocaleDateString("pt-BR")}`, marginL, pageH - 8);
+        doc.text(`${p} / ${totalPages}`, pageW - marginR, pageH - 8, { align: "right" });
+      }
+
+      const safeName = clinicName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+      doc.save(`diagnostico_${safeName}_v${diagnostic.versao}.pdf`);
+      toast({ title: "PDF exportado com sucesso!" });
+    } catch (err) {
+      console.error("PDF export error:", err);
+      toast({ title: "Erro ao exportar PDF", description: String(err), variant: "destructive" });
+    } finally {
+      setExportingPdf(false);
     }
   };
 
@@ -165,10 +541,23 @@ export default function DiagnosticoResultado() {
         <Button variant="outline" size="icon" onClick={() => navigate("/diagnostico")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">Resultado do Diagnóstico 360°</h1>
           <p className="text-sm text-muted-foreground">Versão {diagnostic.versao} · {diagnostic.status}</p>
         </div>
+        <Button
+          variant="outline"
+          onClick={handleExportPdf}
+          disabled={exportingPdf || !diagnostic.scoreGlobal}
+          className="gap-2"
+        >
+          {exportingPdf ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <FileDown className="h-4 w-4" />
+          )}
+          {exportingPdf ? "Gerando PDF..." : "Exportar PDF"}
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -187,30 +576,32 @@ export default function DiagnosticoResultado() {
                 Nenhum score disponível. Complete o diagnóstico primeiro.
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={320}>
-                <RadarChart data={radarData}>
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="pilar" tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(val) => [Number(val).toFixed(1), ""]} />
-                  <Legend />
-                  <Radar
-                    name="Score ICS"
-                    dataKey="score"
-                    stroke="#6366f1"
-                    fill="#6366f1"
-                    fillOpacity={0.3}
-                    dot={{ r: 3 }}
-                  />
-                  <Radar
-                    name="Meta"
-                    dataKey="meta"
-                    stroke="#d97706"
-                    fill="none"
-                    strokeDasharray="5 5"
-                    dot={false}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
+              <div ref={radarRef}>
+                <ResponsiveContainer width="100%" height={320}>
+                  <RadarChart data={radarData}>
+                    <PolarGrid />
+                    <PolarAngleAxis dataKey="pilar" tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(val) => [Number(val).toFixed(1), ""]} />
+                    <Legend />
+                    <Radar
+                      name="Score ICS"
+                      dataKey="score"
+                      stroke="#6366f1"
+                      fill="#6366f1"
+                      fillOpacity={0.3}
+                      dot={{ r: 3 }}
+                    />
+                    <Radar
+                      name="Meta"
+                      dataKey="meta"
+                      stroke="#d97706"
+                      fill="none"
+                      strokeDasharray="5 5"
+                      dot={false}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -523,4 +914,11 @@ export default function DiagnosticoResultado() {
       )}
     </div>
   );
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) }
+    : { r: 128, g: 128, b: 128 };
 }
