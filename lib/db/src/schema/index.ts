@@ -21,3 +21,5 @@ export * from "./processos";
 export * from "./evidencias";
 export * from "./documentos";
 export * from "./user_preferences";
+export * from "./push_subscriptions";
+export * from "./server_config";

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { sendEmail, buildDelegationEmail } from "../lib/email.js";
 import { sendDelegationWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
+import { sendPushToClinic } from "../lib/push.js";
 
 const router: IRouter = Router();
 
@@ -91,6 +92,15 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
       observacoes: observacoes ?? null,
     })
     .returning();
+
+  const delegationPushPayload = {
+    title: "Nova delegação criada",
+    body: `${responsavelNome ?? "Responsável"} — pilar "${pilarNome}".`,
+    url: `/delegacao/select`,
+    tag: `delegacao-${pilarSlug}`,
+  };
+
+  sendPushToClinic(clinicId, delegationPushPayload).catch(() => {});
 
   if (responsavelEmail) {
     const recipientPrefs = await getRecipientPrefs(responsavelEmail);

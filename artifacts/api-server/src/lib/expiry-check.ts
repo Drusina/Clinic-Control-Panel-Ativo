@@ -2,6 +2,7 @@ import { db, documentosTable, clinicsTable } from "@workspace/db";
 import { lte, gte, and, ne, isNotNull, inArray } from "drizzle-orm";
 import { sendEmail, buildExpiryDigestEmail } from "./email.js";
 import { getRecipientPrefs } from "./preferences.js";
+import { sendPushToClinic } from "./push.js";
 
 export async function runExpiryCheck(): Promise<{ sent: number; skipped: number; total: number }> {
   const now = new Date();
@@ -48,15 +49,8 @@ export async function runExpiryCheck(): Promise<{ sent: number; skipped: number;
   let skipped = 0;
 
   for (const clinic of clinics) {
-    if (!clinic.email) continue;
     const docs = byClinic.get(clinic.id) ?? [];
     if (docs.length === 0) continue;
-
-    const recipientPrefs = await getRecipientPrefs(clinic.email);
-    if (!recipientPrefs.emailEnabled) {
-      skipped++;
-      continue;
-    }
 
     const docItems = docs.map((d) => {
       const validadeDate = new Date((d.validade ?? "") + "T00:00:00");
@@ -68,6 +62,24 @@ export async function runExpiryCheck(): Promise<{ sent: number; skipped: number;
         diasRestantes: Math.max(diff, 0),
       };
     });
+
+    sendPushToClinic(clinic.id, {
+      title: "Documentos próximos ao vencimento",
+      body: `${clinic.nome}: ${docs.length} documento(s) vencem em até 30 dias.`,
+      url: "/documentos",
+      tag: `expiry-${clinic.id}`,
+    }).catch(() => {});
+
+    if (!clinic.email) {
+      skipped++;
+      continue;
+    }
+
+    const recipientPrefs = await getRecipientPrefs(clinic.email);
+    if (!recipientPrefs.emailEnabled) {
+      skipped++;
+      continue;
+    }
 
     const html = buildExpiryDigestEmail({
       clinicName: clinic.nome,
@@ -81,6 +93,7 @@ export async function runExpiryCheck(): Promise<{ sent: number; skipped: number;
       html,
     });
     if (ok) sent++;
+
   }
 
   return { sent, skipped, total: clinics.length };

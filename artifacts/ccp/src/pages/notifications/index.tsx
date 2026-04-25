@@ -1,11 +1,75 @@
 import { useListNotifications, getListNotificationsQueryKey, useMarkNotificationRead } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bell, CheckCircle, Info, AlertTriangle, Loader2 } from "lucide-react";
+import { Bell, CheckCircle, Info, AlertTriangle, Loader2, BellRing, BellOff } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { usePushSubscription } from "@/hooks/usePushSubscription";
+
+function PushSubscriptionBanner() {
+  const { permission, isSubscribed, isLoading, subscribe, unsubscribe } = usePushSubscription();
+  const { toast } = useToast();
+
+  if (permission === "unsupported") return null;
+  if (permission === "denied") {
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-muted-foreground">
+        <BellOff className="h-4 w-4 shrink-0 text-destructive" />
+        <span>Notificações push bloqueadas. Altere as permissões do navegador para habilitar.</span>
+      </div>
+    );
+  }
+
+  if (isSubscribed) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+        <div className="flex items-center gap-2 text-sm">
+          <BellRing className="h-4 w-4 text-primary" />
+          <span className="text-foreground font-medium">Notificações push ativadas</span>
+          <span className="text-muted-foreground">— você será avisado mesmo com o app fechado.</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isLoading}
+          onClick={async () => {
+            const ok = await unsubscribe();
+            if (ok) toast({ title: "Notificações push desativadas" });
+          }}
+        >
+          {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Desativar"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
+      <div className="flex items-center gap-2 text-sm">
+        <Bell className="h-4 w-4 text-muted-foreground" />
+        <span className="text-foreground font-medium">Ativar notificações push</span>
+        <span className="text-muted-foreground hidden sm:inline">— receba alertas mesmo com o app fechado.</span>
+      </div>
+      <Button
+        size="sm"
+        disabled={isLoading}
+        onClick={async () => {
+          const ok = await subscribe();
+          if (ok) {
+            toast({ title: "Notificações push ativadas!" });
+          } else if (typeof Notification !== "undefined" && Notification.permission === "denied") {
+            toast({ variant: "destructive", title: "Permissão negada", description: "Altere as permissões do navegador." });
+          }
+        }}
+      >
+        {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <BellRing className="h-3 w-3 mr-1" />}
+        Ativar
+      </Button>
+    </div>
+  );
+}
 
 export default function Notifications() {
   const queryClient = useQueryClient();
@@ -76,6 +140,8 @@ export default function Notifications() {
           </Button>
         )}
       </div>
+
+      <PushSubscriptionBanner />
 
       <div className="space-y-4">
         {notifications && notifications.length > 0 ? (

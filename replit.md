@@ -183,3 +183,40 @@ estrategia, financeiro, contabil, marketing, operacoes, pessoas, tecnologia, com
 - UI: `NotificationPreferencesModal` component in `artifacts/ccp/src/components/notification-preferences-modal.tsx`
 - Settings button in sidebar opens modal; preferences stored in localStorage for super admin
 - Env vars required: `RESEND_API_KEY`, `APP_URL`, `WHATSAPP_TOKEN` (optional), `WHATSAPP_PHONE_ID` (optional)
+
+## M8 — Web Push Notifications
+
+### Overview
+Browser Push Notifications via the Web Push API allow the super admin to receive browser alerts even when the app is closed. Team member push is deferred to task #33 (requires team member auth portal).
+
+### Backend (`artifacts/api-server`)
+- **Library**: `web-push` npm package
+- **VAPID keys**: Auto-generated on first server start via `initVapid()`; stored in `server_config` DB table — never in env vars or source code
+- **`src/lib/push.ts`**: `sendPushToEmail(email, payload)` and `sendPushToClinic(clinicId, payload)` helpers; gracefully no-ops if VAPID not configured; auto-removes expired subscriptions (410/404)
+- **`src/routes/push.ts`**: Three auth-gated endpoints:
+  - `GET /api/push/vapid-public-key` — returns public VAPID key
+  - `POST /api/push/subscribe` — stores subscription keyed by `req.user.sub`; validates clinicId exists in DB before storing; rejects clinic-scoped subscriptions for non-super-admin tokens
+  - `DELETE /api/push/subscribe` — removes subscription by user key + endpoint
+- **DB schema**: `push_subscriptions` table — fields: `id`, `email` (= JWT sub), `clinic_id`, `team_member_id` (FK → equipe_interna, nullable; populated when team member auth is introduced in #33), `subscription` (jsonb), `created_at`
+- **Delegation integration**: on delegation creation, `sendPushToClinic(clinicId, ...)` fires immediately (outside email/WhatsApp preference gate); click URL → `/delegacao/select`
+- **Expiry integration**: `runExpiryCheck()` calls `sendPushToClinic(clinic.id, ...)` for each clinic with expiring docs (outside email preference gate); click URL → `/documentos`
+- **`sendPushToClinic` recipient model**: finds subscriptions WHERE `clinic_id = provided_id OR clinic_id IS NULL`; deduplicates by endpoint so global subscribers don't receive duplicates; this means a subscriber who registered globally (clinicId=null via notifications page) receives push for ALL clinics, while a clinic-specific subscriber (future task #33) receives only their clinic's notifications
+
+### Frontend (`artifacts/ccp`)
+- **`src/sw.ts`**: Unified service worker (vite-plugin-pwa `injectManifest` strategy) — workbox precaching + NetworkFirst for API routes + `push` event handler + `notificationclick` handler; compiled by vite-plugin-pwa as single SW (no separate SW conflict)
+- **`src/hooks/usePushSubscription.ts`**: React hook — `subscribe()`, `unsubscribe()`, `permission`, `isSubscribed`, `isLoading`; sends auth Bearer token; no email in body (identity from server token)
+- **`src/pages/notifications/index.tsx`**: `PushSubscriptionBanner` — enable/disable button; handles denied/unsupported states
+
+### Notification Click Behavior
+- Delegation events → `/delegacao/select`
+- Expiry events → `/documentos`
+Clicks focus an open PWA window or open a new one.
+
+### Subscriber Identity Model
+The super admin subscribes with `email = "super_admin"` (JWT `sub` claim). Subscriptions for team members require task #33 (team member auth portal). `sendPushToEmail(responsavelEmail)` is a no-op until team members can authenticate and subscribe.
+
+### Security Notes
+- VAPID keys stored in `server_config` DB table — never in `.replit`
+- All push API endpoints require `requireAuth` middleware
+- Subscriber identity derived server-side from JWT `sub` claim only
+- clinicId validated against `clinics` table before storing; non-super-admin tokens rejected for clinic-scoped subscriptions

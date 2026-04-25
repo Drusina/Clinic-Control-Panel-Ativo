@@ -29,6 +29,7 @@ import evidenciasRouter from "./evidencias";
 import documentosRouter from "./documentos";
 import jobsRouter from "./jobs";
 import notificationPreferencesRouter from "./notification-preferences";
+import pushRouter from "./push";
 
 const router: IRouter = Router();
 
@@ -62,5 +63,6 @@ router.use(autentiquePublicRouter);
 router.use(notificationsRouter);
 router.use(requireSuperAdmin, jobsRouter);
 router.use(notificationPreferencesRouter);
+router.use(pushRouter);
 
 export default router;

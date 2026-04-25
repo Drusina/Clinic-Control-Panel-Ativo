@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runExpiryCheck } from "./lib/expiry-check.js";
+import { initVapid, isPushConfigured } from "./lib/push.js";
 
 const rawPort = process.env["PORT"];
 
@@ -27,13 +28,20 @@ async function scheduledExpiryCheck(): Promise<void> {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-app.listen(port, (err) => {
+app.listen(port, async (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
 
   logger.info({ port }, "Server listening");
+
+  await initVapid().catch((e) => logger.error({ err: e }, "VAPID init failed"));
+  if (isPushConfigured()) {
+    logger.info("VAPID push notifications initialized");
+  } else {
+    logger.warn("VAPID push notifications not configured — push will be disabled");
+  }
 
   setInterval(() => {
     scheduledExpiryCheck();
