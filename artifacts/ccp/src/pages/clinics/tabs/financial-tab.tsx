@@ -43,6 +43,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -87,6 +97,7 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
   const [uploadingContrato, setUploadingContrato] = useState(false);
   const [deletingProposta, setDeletingProposta] = useState(false);
   const [deletingContrato, setDeletingContrato] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<"proposta" | "contrato" | null>(null);
   const propostaInputRef = useRef<HTMLInputElement>(null);
   const contratoInputRef = useRef<HTMLInputElement>(null);
 
@@ -159,7 +170,6 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
   const handleDocumentDelete = async (type: "proposta" | "contrato") => {
     if (!clinic) return;
     const label = type === "proposta" ? "Proposta" : "Contrato";
-    if (!window.confirm(`Tem certeza que deseja remover o arquivo de ${label}? Esta ação não pode ser desfeita.`)) return;
 
     if (type === "proposta") setDeletingProposta(true);
     else setDeletingContrato(true);
@@ -500,7 +510,7 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
                           type="button"
                           className="h-7 px-2 text-xs text-destructive hover:text-destructive"
                           disabled={deletingProposta}
-                          onClick={() => handleDocumentDelete("proposta")}
+                          onClick={() => setDeleteTarget("proposta")}
                           data-testid="btn-delete-proposta"
                         >
                           {deletingProposta ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
@@ -567,7 +577,7 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
                           type="button"
                           className="h-7 px-2 text-xs text-destructive hover:text-destructive"
                           disabled={deletingContrato}
-                          onClick={() => handleDocumentDelete("contrato")}
+                          onClick={() => setDeleteTarget("contrato")}
                           data-testid="btn-delete-contrato"
                         >
                           {deletingContrato ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
@@ -812,6 +822,31 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
           </Form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover {deleteTarget === "proposta" ? "Proposta" : "Contrato"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover o arquivo de {deleteTarget === "proposta" ? "Proposta" : "Contrato"}? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) {
+                  handleDocumentDelete(deleteTarget);
+                  setDeleteTarget(null);
+                }
+              }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
