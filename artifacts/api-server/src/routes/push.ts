@@ -37,7 +37,9 @@ router.post("/push/subscribe", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const userKey = String((req as AuthedRequest).user.sub ?? "unknown");
+  const authedReq = req as AuthedRequest;
+  const userKey = String(authedReq.user.sub ?? "unknown");
+  const userRole = String(authedReq.user.role ?? "");
 
   const parsed = SubscribeBody.safeParse(req.body);
   if (!parsed.success) {
@@ -45,31 +47,49 @@ router.post("/push/subscribe", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const { clinicId, subscription } = parsed.data;
+  const { clinicId: requestedClinicId, subscription } = parsed.data;
 
-  if (clinicId) {
-    const isSuperAdmin = userKey === "super_admin";
-    if (!isSuperAdmin) {
-      res.status(403).json({ error: "Clinic-scoped subscriptions require super admin" });
-      return;
+  let effectiveClinicId: string | null = null;
+
+  if (userRole === "team_member") {
+    effectiveClinicId = null;
+  } else if (userKey === "super_admin") {
+    if (requestedClinicId) {
+      const clinic = await db
+        .select({ id: clinicsTable.id })
+        .from(clinicsTable)
+        .where(eq(clinicsTable.id, requestedClinicId))
+        .limit(1);
+      if (clinic.length === 0) {
+        res.status(404).json({ error: "Clinic not found" });
+        return;
+      }
+      effectiveClinicId = requestedClinicId;
     }
-    const clinic = await db
-      .select({ id: clinicsTable.id })
-      .from(clinicsTable)
-      .where(eq(clinicsTable.id, clinicId))
-      .limit(1);
-    if (clinic.length === 0) {
-      res.status(404).json({ error: "Clinic not found" });
-      return;
-    }
+  } else if (requestedClinicId) {
+    res.status(403).json({ error: "Clinic-scoped subscriptions require super admin or team member access" });
+    return;
   }
 
-  const teamMember = await db
-    .select({ id: teamTable.id })
-    .from(teamTable)
-    .where(eq(teamTable.email, userKey))
-    .limit(1);
-  const teamMemberId = teamMember[0]?.id ?? null;
+  let teamMemberId: string | null = null;
+  if (userRole === "team_member") {
+    const tokenTeamMemberId = authedReq.user.teamMemberId as string | null | undefined;
+    if (tokenTeamMemberId) {
+      const [found] = await db
+        .select({ id: teamTable.id })
+        .from(teamTable)
+        .where(eq(teamTable.id, tokenTeamMemberId))
+        .limit(1);
+      teamMemberId = found?.id ?? null;
+    }
+  } else {
+    const teamMember = await db
+      .select({ id: teamTable.id })
+      .from(teamTable)
+      .where(eq(teamTable.email, userKey))
+      .limit(1);
+    teamMemberId = teamMember[0]?.id ?? null;
+  }
 
   const existingForUser = await db
     .select()
@@ -87,7 +107,7 @@ router.post("/push/subscribe", requireAuth, async (req, res): Promise<void> => {
 
   await db.insert(pushSubscriptionsTable).values({
     email: userKey,
-    clinicId: clinicId ?? null,
+    clinicId: effectiveClinicId,
     teamMemberId,
     subscription,
   });

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, teamTable } from "@workspace/db";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
+import { signInviteToken } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -40,19 +41,61 @@ async function dispatchSupabaseInvite(email: string): Promise<boolean> {
   return res.ok;
 }
 
+async function sendPushSetupEmail(member: typeof teamTable.$inferSelect, resendKey: string): Promise<void> {
+  const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
+  let inviteToken: string;
+  try {
+    inviteToken = signInviteToken(member.id);
+  } catch {
+    return;
+  }
+  const conviteLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}&tok=${encodeURIComponent(inviteToken)}`;
+
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "IONEX360 <noreply@ionex360.com.br>",
+      to: [member.email!],
+      subject: `[IONEX360] Ative suas notificações push`,
+      html: `
+        <p>Olá, ${member.nome},</p>
+        <p>Você pode ativar notificações push para receber alertas de delegações em tempo real, mesmo com o navegador fechado.</p>
+        <p><a href="${conviteLink}" style="background:#1a56db;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">Ativar notificações push</a></p>
+        <p style="color:#6b7280;font-size:12px;margin-top:16px;">Se você não esperava este e-mail, ignore-o.</p>
+      `,
+    }),
+  }).catch(() => {});
+}
+
 async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect): Promise<string> {
   if (!member.email) return "no_email";
 
-  const supabaseInvited = await dispatchSupabaseInvite(member.email);
-  if (supabaseInvited) return "sent";
-
   const resendKey = process.env.RESEND_API_KEY;
+  const supabaseInvited = await dispatchSupabaseInvite(member.email);
+
+  if (supabaseInvited) {
+    if (resendKey) {
+      sendPushSetupEmail(member, resendKey).catch(() => {});
+    }
+    return "sent";
+  }
+
   if (!resendKey) {
     return "pending";
   }
 
   const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
-  const inviteLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}`;
+  let inviteToken: string;
+  try {
+    inviteToken = signInviteToken(member.id);
+  } catch {
+    return "pending";
+  }
+  const inviteLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}&tok=${encodeURIComponent(inviteToken)}`;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",

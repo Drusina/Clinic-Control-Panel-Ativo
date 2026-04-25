@@ -13,20 +13,25 @@ function base64urlDecode(data: string): string {
   return Buffer.from(data, "base64url").toString("utf-8");
 }
 
-const TOKEN_TTL_SECONDS = 8 * 60 * 60;
+const SESSION_TTL_SECONDS = 8 * 60 * 60;
+const INVITE_TTL_SECONDS = 30 * 24 * 60 * 60;
 
-export function signToken(payload: Record<string, unknown>): string {
+export function signToken(payload: Record<string, unknown>, ttlSeconds = SESSION_TTL_SECONDS): string {
   const secret = getSecret();
   if (!secret) throw new Error("SUPER_ADMIN_SECRET is not configured");
   const now = Math.floor(Date.now() / 1000);
   const header = base64urlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const body = base64urlEncode(
-    JSON.stringify({ ...payload, iat: now, exp: now + TOKEN_TTL_SECONDS })
+    JSON.stringify({ ...payload, iat: now, exp: now + ttlSeconds })
   );
   const sig = createHmac("sha256", secret)
     .update(`${header}.${body}`)
     .digest("base64url");
   return `${header}.${body}.${sig}`;
+}
+
+export function signInviteToken(memberId: string): string {
+  return signToken({ purpose: "team_invite", memberId }, INVITE_TTL_SECONDS);
 }
 
 export function verifyToken(token: string): Record<string, unknown> | null {

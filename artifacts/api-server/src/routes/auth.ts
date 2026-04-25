@@ -1,6 +1,9 @@
 import { Router, type IRouter } from "express";
 import type { Request } from "express";
 import { signToken, verifyToken, extractToken } from "../middleware/auth";
+import { db } from "@workspace/db";
+import { teamTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -51,6 +54,70 @@ router.post("/auth/login", (req, res): void => {
   res.json({ token, role: "super_admin" });
 });
 
+router.post("/auth/convite", async (req, res): Promise<void> => {
+  const { memberId, inviteToken } = req.body as { memberId?: string; inviteToken?: string };
+
+  if (!memberId || !inviteToken) {
+    res.status(400).json({ error: "memberId e inviteToken são obrigatórios" });
+    return;
+  }
+
+  const tokenPayload = verifyToken(inviteToken);
+  if (
+    !tokenPayload ||
+    tokenPayload.purpose !== "team_invite" ||
+    tokenPayload.memberId !== memberId
+  ) {
+    res.status(401).json({ error: "Token de convite inválido ou expirado" });
+    return;
+  }
+
+  const [member] = await db
+    .select()
+    .from(teamTable)
+    .where(eq(teamTable.id, memberId))
+    .limit(1);
+
+  if (!member) {
+    res.status(404).json({ error: "Membro não encontrado" });
+    return;
+  }
+
+  if (!member.temAcessoPlataforma) {
+    res.status(403).json({ error: "Acesso à plataforma não habilitado para este membro" });
+    return;
+  }
+
+  if (!member.email) {
+    res.status(403).json({ error: "Este membro não possui e-mail cadastrado e não pode acessar a plataforma" });
+    return;
+  }
+
+  const sessionToken = signToken({
+    role: "team_member",
+    sub: member.email,
+    email: member.email,
+    clinicId: member.clinicId,
+    teamMemberId: member.id,
+    nome: member.nome,
+  });
+
+  await db
+    .update(teamTable)
+    .set({ lastAccessAt: new Date() })
+    .where(eq(teamTable.id, member.id));
+
+  res.json({
+    token: sessionToken,
+    role: "team_member",
+    nome: member.nome,
+    funcao: member.funcao,
+    email: member.email,
+    clinicId: member.clinicId,
+    teamMemberId: member.id,
+  });
+});
+
 router.get("/auth/me", (req, res): void => {
   const token = extractToken(req);
   if (!token) {
@@ -62,7 +129,13 @@ router.get("/auth/me", (req, res): void => {
     res.json({ role: null });
     return;
   }
-  res.json({ role: payload.role ?? null });
+  res.json({
+    role: payload.role ?? null,
+    clinicId: payload.clinicId ?? null,
+    nome: payload.nome ?? null,
+    email: payload.sub ?? null,
+    teamMemberId: payload.teamMemberId ?? null,
+  });
 });
 
 export default router;

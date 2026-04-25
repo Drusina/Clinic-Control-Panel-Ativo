@@ -29,6 +29,7 @@ import DocumentosPage from "@/pages/documentos/index";
 import RelatoriosPage from "@/pages/relatorios/index";
 import IcsTemplatesPage from "@/pages/ics-templates/index";
 import AdminConfiguracoesPage from "@/pages/admin-configuracoes/index";
+import ConvitePage from "@/pages/convite/index";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -73,6 +74,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/admin/login" component={AdminLogin} />
+
+      <Route path="/convite" component={ConvitePage} />
 
       <Route path="/">
         {() => (

@@ -1,6 +1,6 @@
 import webpush from "web-push";
 import { db, pushSubscriptionsTable, serverConfigTable } from "@workspace/db";
-import { eq, or, isNull, sql } from "drizzle-orm";
+import { eq, or, isNull, sql, and } from "drizzle-orm";
 
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT ?? "mailto:noreply@ionex360.com.br";
 
@@ -99,9 +99,12 @@ export async function sendPushToClinic(clinicId: string, payload: PushPayload): 
     .select()
     .from(pushSubscriptionsTable)
     .where(
-      or(
-        eq(pushSubscriptionsTable.clinicId, clinicId),
-        isNull(pushSubscriptionsTable.clinicId)
+      and(
+        isNull(pushSubscriptionsTable.teamMemberId),
+        or(
+          eq(pushSubscriptionsTable.clinicId, clinicId),
+          isNull(pushSubscriptionsTable.clinicId)
+        )
       )
     );
 
