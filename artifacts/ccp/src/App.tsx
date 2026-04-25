@@ -80,7 +80,9 @@ function Router() {
       <Route path="/">
         {() => (
           <AppLayout>
-            <Dashboard />
+            <SuperAdminGuard>
+              <Dashboard />
+            </SuperAdminGuard>
           </AppLayout>
         )}
       </Route>
