@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireSuperAdmin } from "../middleware/auth";
 import healthRouter from "./health";
+import storageRouter from "./storage";
 import authRouter from "./auth";
 import clinicsRouter from "./clinics";
 import dashboardRouter from "./dashboard";
@@ -32,6 +33,7 @@ import notificationPreferencesRouter from "./notification-preferences";
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(storageRouter);
 router.use(authRouter);
 router.use(requireSuperAdmin, dashboardRouter);
 router.use(requireSuperAdmin, clinicsRouter);

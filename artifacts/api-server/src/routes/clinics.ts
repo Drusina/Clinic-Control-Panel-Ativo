@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
 import { sendEmail, buildInviteEmail } from "../lib/email.js";
+import { objectStorageClient } from "../lib/objectStorage";
 import {
   CreateClinicBody,
   UpdateClinicBody,
@@ -279,16 +280,27 @@ router.post("/clinics/:id/documents", async (req, res): Promise<void> => {
     return;
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    res.status(501).json({ error: "Supabase Storage não está configurado. Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY." });
+  const contentType = req.headers["content-type"] ?? "";
+  if (!contentType.startsWith("application/pdf")) {
+    res.status(400).json({ error: "Apenas arquivos PDF são aceitos (Content-Type: application/pdf)" });
     return;
   }
 
+  const privateObjectDir = process.env.PRIVATE_OBJECT_DIR;
+  if (!privateObjectDir) {
+    res.status(501).json({ error: "Object storage não está configurado. PRIVATE_OBJECT_DIR ausente." });
+    return;
+  }
+
+  const MAX_FILE_SIZE = 20 * 1024 * 1024;
   const chunks: Buffer[] = [];
+  let totalSize = 0;
   for await (const chunk of req) {
+    totalSize += (chunk as Buffer).length;
+    if (totalSize > MAX_FILE_SIZE) {
+      res.status(413).json({ error: "Arquivo muito grande. Limite de 20 MB." });
+      return;
+    }
     chunks.push(chunk as Buffer);
   }
   const fileBuffer = Buffer.concat(chunks);
@@ -298,28 +310,25 @@ router.post("/clinics/:id/documents", async (req, res): Promise<void> => {
     return;
   }
 
-  const fileName = `${id}/${docType}-${Date.now()}.pdf`;
-  const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/clinic-docs/${fileName}`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/pdf",
-      "x-upsert": "true",
-    },
-    body: fileBuffer,
+  const objectSubPath = `clinic-docs/${id}/${docType}-${Date.now()}.pdf`;
+  const fullGcsPath = `${privateObjectDir}/${objectSubPath}`.replace(/\/+/g, "/");
+
+  const pathParts = fullGcsPath.replace(/^\//, "").split("/");
+  const bucketName = pathParts[0];
+  const objectName = pathParts.slice(1).join("/");
+
+  const bucket = objectStorageClient.bucket(bucketName);
+  const gcsFile = bucket.file(objectName);
+
+  await gcsFile.save(fileBuffer, {
+    metadata: { contentType: "application/pdf" },
   });
 
-  if (!uploadRes.ok) {
-    const errBody = await uploadRes.text();
-    res.status(uploadRes.status).json({ error: `Erro ao fazer upload: ${errBody}` });
-    return;
-  }
-
-  const publicUrl = `${supabaseUrl}/storage/v1/object/public/clinic-docs/${fileName}`;
+  const servingUrl = `/api/storage/objects/${objectSubPath}`;
 
   const updateField = docType === "proposta"
-    ? { propostaUrl: publicUrl }
-    : { contratoUrl: publicUrl };
+    ? { propostaUrl: servingUrl }
+    : { contratoUrl: servingUrl };
 
   await db.update(clinicsTable).set({ ...updateField, updatedAt: new Date() }).where(eq(clinicsTable.id, id));
 
@@ -327,11 +336,11 @@ router.post("/clinics/:id/documents", async (req, res): Promise<void> => {
     clinicId: id,
     tipo: "documento_enviado",
     titulo: `${docType === "proposta" ? "Proposta" : "Contrato"} enviado`,
-    descricao: fileName,
+    descricao: objectSubPath,
     autorNome: "Super Admin",
   });
 
-  res.json({ url: publicUrl, type: docType });
+  res.json({ url: servingUrl, type: docType });
 });
 
 router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {

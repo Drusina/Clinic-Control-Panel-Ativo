@@ -88,6 +88,29 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
   const propostaInputRef = useRef<HTMLInputElement>(null);
   const contratoInputRef = useRef<HTMLInputElement>(null);
 
+  const openDocument = async (url: string) => {
+    if (!url.startsWith("/api/storage/objects/")) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const token = getStoredToken();
+    try {
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Não foi possível abrir o documento" });
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao abrir o documento" });
+    }
+  };
+
   const handleDocumentUpload = async (file: File, type: "proposta" | "contrato") => {
     if (!clinic) return;
     if (file.type !== "application/pdf") {
@@ -415,11 +438,15 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
                         <Badge variant="secondary" className="gap-1 text-green-600 border-green-300">
                           <CheckCircle2 className="h-3 w-3" /> Proposta enviada
                         </Badge>
-                        <a href={clinic.propostaUrl} target="_blank" rel="noopener noreferrer">
-                          <Button variant="ghost" size="sm" type="button" className="h-7 px-2 text-xs">
-                            <ExternalLink className="h-3 w-3 mr-1" /> Ver
-                          </Button>
-                        </a>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => openDocument(clinic.propostaUrl!)}
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" /> Ver
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -467,11 +494,15 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
                         <Badge variant="secondary" className="gap-1 text-green-600 border-green-300">
                           <CheckCircle2 className="h-3 w-3" /> Contrato enviado
                         </Badge>
-                        <a href={clinic.contratoUrl} target="_blank" rel="noopener noreferrer">
-                          <Button variant="ghost" size="sm" type="button" className="h-7 px-2 text-xs">
-                            <ExternalLink className="h-3 w-3 mr-1" /> Ver
-                          </Button>
-                        </a>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => openDocument(clinic.contratoUrl!)}
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" /> Ver
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"

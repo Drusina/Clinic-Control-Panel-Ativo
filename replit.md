@@ -41,7 +41,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ### Clinic Detail (`/clinics/:id`) — 11 Tabs
 1. **Cadastro** — Editable form for all clinic fields + QSA (socios) CRUD
-2. **Financeiro & Contrato** — Contract values (implantação, MRR, forma de pagamento, reajuste index, Autentique button) + Faturas table
+2. **Financeiro & Contrato** — Contract values (implantação, MRR, forma de pagamento, reajuste index, Autentique button) + PDF upload for Proposta/Contrato + Faturas table
 3. **Status** — Lifecycle state machine (prospect → proposta → contrato → trial → ativa → suspensa/desativada), status history timeline, confirmation dialogs for suspend/deactivate
 4. **Usuários** — Platform user management with invite-by-email dialog
 5. **Atividade** — Activity timeline
@@ -63,6 +63,16 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `PUT /api/clinics/:clinicId/socios/:socioId` — Update QSA partner
 - `DELETE /api/clinics/:clinicId/socios/:socioId` — Delete QSA partner
 - `POST /api/clinics/:id/invite-user` — Invite user to clinic (mock, logs activity)
+- `POST /api/clinics/:id/documents?type=proposta|contrato` — Upload PDF to App Storage; saves serving URL to clinic record
+- `GET /api/storage/objects/*` — Serve files from Replit App Storage (GCS-backed, no auth required)
+- `GET /api/storage/public-objects/*` — Serve public objects from PUBLIC_OBJECT_SEARCH_PATHS
+- `POST /api/storage/uploads/request-url` — Request a presigned URL for direct-to-GCS upload
+
+### Object Storage (App Storage)
+- Provisioned bucket: see `DEFAULT_OBJECT_STORAGE_BUCKET_ID` secret
+- Files stored under `PRIVATE_OBJECT_DIR/clinic-docs/{clinicId}/{type}-{timestamp}.pdf`
+- Serving URL stored in `clinics.proposta_url` / `clinics.contrato_url` as `/api/storage/objects/clinic-docs/...`
+- Server files: `artifacts/api-server/src/lib/objectStorage.ts` (GCS client), `artifacts/api-server/src/routes/storage.ts` (routes)
 
 ## M4 — Diagnóstico 360° + AI Insights
 
