@@ -526,12 +526,6 @@ export const GetKickoffParams = zod.object({
   clinicId: zod.coerce.string(),
 });
 
-export const KickoffProximoPasso = zod.object({
-  acao: zod.string(),
-  responsavel: zod.string(),
-  prazo: zod.string(),
-});
-
 export const GetKickoffResponse = zod.object({
   id: zod.string(),
   clinicId: zod.string(),
@@ -539,10 +533,7 @@ export const GetKickoffResponse = zod.object({
   modalidade: zod.string().nullish(),
   duracaoMinutos: zod.number().nullish(),
   facilitador: zod.string().nullish(),
-  participantes: zod.array(zod.string()),
-  pauta: zod.array(zod.string()),
-  proximosPassos: zod.array(KickoffProximoPasso),
-  status: zod.string(),
+  status: zod.enum(["rascunho", "realizado", "validado"]),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -559,13 +550,20 @@ export const UpsertKickoffBody = zod.object({
   modalidade: zod.string().nullish(),
   duracaoMinutos: zod.number().nullish(),
   facilitador: zod.string().nullish(),
-  participantes: zod.array(zod.string()).optional(),
-  pauta: zod.array(zod.string()).optional(),
-  proximosPassos: zod.array(KickoffProximoPasso).optional(),
   status: zod.string().nullish(),
 });
 
-export const UpsertKickoffResponse = GetKickoffResponse;
+export const UpsertKickoffResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  dataRealizacao: zod.string().nullish(),
+  modalidade: zod.string().nullish(),
+  duracaoMinutos: zod.number().nullish(),
+  facilitador: zod.string().nullish(),
+  status: zod.enum(["rascunho", "realizado", "validado"]),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
 
 /**
  * @summary List diagnostics for a clinic
@@ -633,6 +631,90 @@ export const CompleteDiagnosticResponse = zod.object({
 });
 
 /**
+ * @summary Recalculate scores for a diagnostic based on current responses
+ */
+export const CalculateDiagnosticScoresParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CalculateDiagnosticScoresResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  versao: zod.number(),
+  status: zod.enum(["em_andamento", "concluido", "arquivado"]),
+  iniciadoEm: zod.string(),
+  concluidoEm: zod.string().nullish(),
+  scoreGlobal: zod.number().nullish(),
+  scoresPilares: zod.object({}).passthrough().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary List all diagnostic pillars
+ */
+export const ListDiagnosticPillarsResponseItem = zod.object({
+  slug: zod.string(),
+  nome: zod.string(),
+  ordem: zod.number(),
+  questionCount: zod.number(),
+});
+export const ListDiagnosticPillarsResponse = zod.array(
+  ListDiagnosticPillarsResponseItem,
+);
+
+/**
+ * @summary Get questions for a specific pillar
+ */
+export const GetDiagnosticPillarQuestionsParams = zod.object({
+  pillarSlug: zod.coerce.string(),
+});
+
+export const GetDiagnosticPillarQuestionsResponseItem = zod.object({
+  id: zod.string(),
+  pilarSlug: zod.string(),
+  pilarNome: zod.string(),
+  pilarOrdem: zod.number(),
+  texto: zod.string(),
+  tipo: zod.enum(["sim_nao", "escala_1_5", "texto_livre", "numerico"]),
+  peso: zod.number(),
+  ordem: zod.number(),
+  dica: zod.string().nullish(),
+  valorMin: zod.number().nullish(),
+  valorMax: zod.number().nullish(),
+  inverso: zod.boolean(),
+});
+export const GetDiagnosticPillarQuestionsResponse = zod.array(
+  GetDiagnosticPillarQuestionsResponseItem,
+);
+
+/**
+ * @summary Batch save multiple responses for a diagnostic
+ */
+export const BatchSaveDiagnosticRespostasParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const BatchSaveDiagnosticRespostasBody = zod.object({
+  respostas: zod.array(
+    zod.object({
+      perguntaId: zod.string(),
+      valor: zod.string(),
+    }),
+  ),
+});
+
+export const BatchSaveDiagnosticRespostasResponseItem = zod.object({
+  id: zod.string(),
+  diagnosticoId: zod.string(),
+  perguntaId: zod.string(),
+  valor: zod.string(),
+  respondidoEm: zod.string(),
+});
+export const BatchSaveDiagnosticRespostasResponse = zod.array(
+  BatchSaveDiagnosticRespostasResponseItem,
+);
+
+/**
  * @summary List action plan items for a clinic
  */
 export const ListActionsParams = zod.object({
@@ -679,9 +761,9 @@ export const CreateActionBody = zod.object({
   responsavelNome: zod.string().nullish(),
   prazo: zod.string().nullish(),
   prioridade: zod.string().nullish(),
+  coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
   pilarSlug: zod.string().nullish(),
   evidencias: zod.string().nullish(),
-  coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
 });
 
 /**
@@ -697,10 +779,10 @@ export const UpdateActionBody = zod.object({
   responsavelNome: zod.string().nullish(),
   prazo: zod.string().nullish(),
   prioridade: zod.string().nullish(),
-  pilarSlug: zod.string().nullish(),
-  evidencias: zod.string().nullish(),
   coluna: zod.string().nullish(),
   ordem: zod.number().nullish(),
+  pilarSlug: zod.string().nullish(),
+  evidencias: zod.string().nullish(),
 });
 
 export const UpdateActionResponse = zod.object({
@@ -718,8 +800,6 @@ export const UpdateActionResponse = zod.object({
       zod.literal(null),
     ])
     .nullish(),
-  pilarSlug: zod.string().nullish(),
-  evidencias: zod.string().nullish(),
   coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]),
   ordem: zod.number(),
   concluidoEm: zod.string().nullish(),
@@ -768,9 +848,9 @@ export const CreateRiskBody = zod.object({
   descricao: zod.string().nullish(),
   probabilidade: zod.number(),
   impacto: zod.number(),
-  pilarSlug: zod.string().nullish(),
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
+  pilarSlug: zod.string().nullish(),
 });
 
 /**
@@ -785,10 +865,10 @@ export const UpdateRiskBody = zod.object({
   descricao: zod.string().nullish(),
   probabilidade: zod.number().nullish(),
   impacto: zod.number().nullish(),
-  pilarSlug: zod.string().nullish(),
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
   status: zod.string().nullish(),
+  pilarSlug: zod.string().nullish(),
 });
 
 export const UpdateRiskResponse = zod.object({
@@ -799,7 +879,6 @@ export const UpdateRiskResponse = zod.object({
   probabilidade: zod.number(),
   impacto: zod.number(),
   severidade: zod.number(),
-  pilarSlug: zod.string().nullish(),
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
   status: zod.enum(["identificado", "em_mitigacao", "mitigado", "aceito"]),
@@ -995,211 +1074,4 @@ export const MarkNotificationReadResponse = zod.object({
   lida: zod.boolean(),
   acaoUrl: zod.string().nullish(),
   createdAt: zod.string(),
-});
-
-/**
- * Sócio extended
- */
-export const SocioExtended = zod.object({
-  id: zod.string(),
-  clinicId: zod.string(),
-  nome: zod.string(),
-  cpf: zod.string().nullish(),
-  percentual: zod.number().nullish(),
-  cargo: zod.string().nullish(),
-  decisor: zod.boolean(),
-  email: zod.string().nullish(),
-  whatsapp: zod.string().nullish(),
-  origem: zod.string(),
-  qualificacao: zod.string().nullish(),
-  qualId: zod.string().nullish(),
-  dataEntrada: zod.string().nullish(),
-  createdAt: zod.string(),
-  updatedAt: zod.string(),
-});
-
-export const CreateSocioBodyExtended = zod.object({
-  nome: zod.string(),
-  cpf: zod.string().nullish(),
-  percentual: zod.number().nullish(),
-  cargo: zod.string().nullish(),
-  decisor: zod.boolean().optional(),
-  email: zod.string().nullish(),
-  whatsapp: zod.string().nullish(),
-  origem: zod.string().optional(),
-  qualificacao: zod.string().nullish(),
-  qualId: zod.string().nullish(),
-  dataEntrada: zod.string().nullish(),
-});
-
-/**
- * Perfil Operacional
- */
-export const GetPerfilOperacionalParams = zod.object({ clinicId: zod.coerce.string() });
-export const PerfilOperacional = zod.object({
-  clinicId: zod.string(),
-  faturamentoMensal: zod.number().nullish(),
-  ticketMedio: zod.number().nullish(),
-  pacientesAtivos: zod.number().nullish(),
-  atendimentosMes: zod.number().nullish(),
-  especialidades: zod.array(zod.string()),
-  horarioFuncionamento: zod.string().nullish(),
-  modeloParticular: zod.number(),
-  modeloConvenio: zod.number(),
-  modeloSus: zod.number(),
-  updatedAt: zod.string(),
-});
-
-export const UpsertPerfilOperacionalBody = zod.object({
-  faturamentoMensal: zod.number().nullish(),
-  ticketMedio: zod.number().nullish(),
-  pacientesAtivos: zod.number().nullish(),
-  atendimentosMes: zod.number().nullish(),
-  especialidades: zod.array(zod.string()).optional(),
-  horarioFuncionamento: zod.string().nullish(),
-  modeloParticular: zod.number().optional(),
-  modeloConvenio: zod.number().optional(),
-  modeloSus: zod.number().optional(),
-});
-
-/**
- * Parceiros Externos
- */
-export const ParceirosExternosItem = zod.object({
-  id: zod.string(),
-  clinicId: zod.string(),
-  tipo: zod.string(),
-  nomeEmpresa: zod.string().nullish(),
-  responsavel: zod.string().nullish(),
-  registroProfissional: zod.string().nullish(),
-  telefone: zod.string().nullish(),
-  email: zod.string().nullish(),
-  observacoes: zod.string().nullish(),
-  createdAt: zod.string(),
-});
-export const ListParceirosExternosResponse = zod.array(ParceirosExternosItem);
-
-export const CreateParceiroExternoBody = zod.object({
-  tipo: zod.string(),
-  nomeEmpresa: zod.string().nullish(),
-  responsavel: zod.string().nullish(),
-  registroProfissional: zod.string().nullish(),
-  telefone: zod.string().nullish(),
-  email: zod.string().nullish(),
-  observacoes: zod.string().nullish(),
-});
-
-export const UpdateParceiroExternoBody = zod.object({
-  tipo: zod.string().optional(),
-  nomeEmpresa: zod.string().nullish(),
-  responsavel: zod.string().nullish(),
-  registroProfissional: zod.string().nullish(),
-  telefone: zod.string().nullish(),
-  email: zod.string().nullish(),
-  observacoes: zod.string().nullish(),
-});
-
-/**
- * Sistemas em Uso
- */
-export const SistemaUsoItem = zod.object({
-  id: zod.string(),
-  clinicId: zod.string(),
-  nome: zod.string(),
-  fornecedor: zod.string().nullish(),
-  tipo: zod.string().nullish(),
-  apiDisponivel: zod.string().nullish(),
-  responsavelInterno: zod.string().nullish(),
-  criticidade: zod.string().nullish(),
-  integrado: zod.boolean(),
-  createdAt: zod.string(),
-});
-export const ListSistemasUsoResponse = zod.array(SistemaUsoItem);
-
-export const CreateSistemaUsoBody = zod.object({
-  nome: zod.string(),
-  fornecedor: zod.string().nullish(),
-  tipo: zod.string().nullish(),
-  apiDisponivel: zod.string().nullish(),
-  responsavelInterno: zod.string().nullish(),
-  criticidade: zod.string().nullish(),
-  integrado: zod.boolean().optional(),
-});
-
-export const UpdateSistemaUsoBody = zod.object({
-  nome: zod.string().optional(),
-  fornecedor: zod.string().nullish(),
-  tipo: zod.string().nullish(),
-  apiDisponivel: zod.string().nullish(),
-  responsavelInterno: zod.string().nullish(),
-  criticidade: zod.string().nullish(),
-  integrado: zod.boolean().optional(),
-});
-
-/**
- * Docs Constitutivos
- */
-export const DocConstitutivoItem = zod.object({
-  id: zod.string(),
-  clinicId: zod.string(),
-  categoria: zod.string(),
-  nome: zod.string(),
-  obrigatorio: zod.boolean(),
-  storagePath: zod.string().nullish(),
-  tamanho: zod.number().nullish(),
-  enviadoEm: zod.string().nullish(),
-  createdAt: zod.string(),
-});
-export const ListDocsConstitutivoResponse = zod.array(DocConstitutivoItem);
-
-export const UpdateDocConstitutivoBody = zod.object({
-  storagePath: zod.string().nullish(),
-  tamanho: zod.number().nullish(),
-  enviadoEm: zod.string().nullish(),
-});
-
-/**
- * LGPD Termos
- */
-export const LgpdTermoItem = zod.object({
-  id: zod.string(),
-  clinicId: zod.string(),
-  slug: zod.string(),
-  nome: zod.string(),
-  descricao: zod.string().nullish(),
-  status: zod.string(),
-  metodo: zod.string().nullish(),
-  autentiqueDocId: zod.string().nullish(),
-  signatarioNome: zod.string().nullish(),
-  signatarioEmail: zod.string().nullish(),
-  assinadoEm: zod.string().nullish(),
-  storagePath: zod.string().nullish(),
-  enviadoEm: zod.string().nullish(),
-  createdAt: zod.string(),
-});
-export const ListLgpdTermosResponse = zod.array(LgpdTermoItem);
-
-export const UpdateLgpdTermoBody = zod.object({
-  status: zod.string().optional(),
-  metodo: zod.string().nullish(),
-  signatarioNome: zod.string().nullish(),
-  signatarioEmail: zod.string().nullish(),
-  storagePath: zod.string().nullish(),
-});
-
-/**
- * Autentique
- */
-export const CreateAutentiqueDocumentBody = zod.object({
-  termId: zod.string(),
-  clinicId: zod.string(),
-  signerEmail: zod.string(),
-  signerName: zod.string(),
-});
-
-export const CreateAutentiqueDocumentResponse = zod.object({
-  success: zod.boolean(),
-  documentId: zod.string().nullish(),
-  signatureLink: zod.string().nullish(),
-  message: zod.string().optional(),
 });

@@ -63,7 +63,7 @@ export default function KickoffSelectPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-base">{clinic.nome}</CardTitle>
-                    <CardDescription>{[clinic.cidade, clinic.estado].filter(Boolean).join(", ") || "Localização não informada"}</CardDescription>
+                    <CardDescription>{[clinic.cidade, clinic.uf].filter(Boolean).join(", ") || "Localização não informada"}</CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs capitalize">{clinic.status}</Badge>

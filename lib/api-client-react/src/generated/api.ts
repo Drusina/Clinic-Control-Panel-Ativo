@@ -19,6 +19,7 @@ import type {
 import type {
   Action,
   Activity,
+  BatchSaveRespostasBody,
   Clinic,
   ClinicListResponse,
   CreateActionBody,
@@ -30,6 +31,9 @@ import type {
   CreateTeamMemberBody,
   DashboardSummary,
   Diagnostic,
+  DiagnosticPillar,
+  DiagnosticQuestion,
+  DiagnosticResposta,
   Fatura,
   HealthStatus,
   InviteUserBody,
@@ -2099,6 +2103,352 @@ export const useCompleteDiagnostic = <
   TContext
 > => {
   return useMutation(getCompleteDiagnosticMutationOptions(options));
+};
+
+/**
+ * @summary Recalculate scores for a diagnostic based on current responses
+ */
+export const getCalculateDiagnosticScoresUrl = (id: string) => {
+  return `/api/diagnostics/${id}/calculate-scores`;
+};
+
+export const calculateDiagnosticScores = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Diagnostic> => {
+  return customFetch<Diagnostic>(getCalculateDiagnosticScoresUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getCalculateDiagnosticScoresMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof calculateDiagnosticScores>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof calculateDiagnosticScores>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["calculateDiagnosticScores"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof calculateDiagnosticScores>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return calculateDiagnosticScores(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CalculateDiagnosticScoresMutationResult = NonNullable<
+  Awaited<ReturnType<typeof calculateDiagnosticScores>>
+>;
+
+export type CalculateDiagnosticScoresMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Recalculate scores for a diagnostic based on current responses
+ */
+export const useCalculateDiagnosticScores = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof calculateDiagnosticScores>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof calculateDiagnosticScores>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getCalculateDiagnosticScoresMutationOptions(options));
+};
+
+/**
+ * @summary List all diagnostic pillars
+ */
+export const getListDiagnosticPillarsUrl = () => {
+  return `/api/diagnostic/pillars`;
+};
+
+export const listDiagnosticPillars = async (
+  options?: RequestInit,
+): Promise<DiagnosticPillar[]> => {
+  return customFetch<DiagnosticPillar[]>(getListDiagnosticPillarsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListDiagnosticPillarsQueryKey = () => {
+  return [`/api/diagnostic/pillars`] as const;
+};
+
+export const getListDiagnosticPillarsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDiagnosticPillars>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDiagnosticPillars>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListDiagnosticPillarsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listDiagnosticPillars>>
+  > = ({ signal }) => listDiagnosticPillars({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDiagnosticPillars>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDiagnosticPillarsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDiagnosticPillars>>
+>;
+export type ListDiagnosticPillarsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all diagnostic pillars
+ */
+
+export function useListDiagnosticPillars<
+  TData = Awaited<ReturnType<typeof listDiagnosticPillars>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDiagnosticPillars>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDiagnosticPillarsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get questions for a specific pillar
+ */
+export const getGetDiagnosticPillarQuestionsUrl = (pillarSlug: string) => {
+  return `/api/diagnostic/pillars/${pillarSlug}/questions`;
+};
+
+export const getDiagnosticPillarQuestions = async (
+  pillarSlug: string,
+  options?: RequestInit,
+): Promise<DiagnosticQuestion[]> => {
+  return customFetch<DiagnosticQuestion[]>(
+    getGetDiagnosticPillarQuestionsUrl(pillarSlug),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetDiagnosticPillarQuestionsQueryKey = (pillarSlug: string) => {
+  return [`/api/diagnostic/pillars/${pillarSlug}/questions`] as const;
+};
+
+export const getGetDiagnosticPillarQuestionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDiagnosticPillarQuestions>>,
+  TError = ErrorType<unknown>,
+>(
+  pillarSlug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDiagnosticPillarQuestions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetDiagnosticPillarQuestionsQueryKey(pillarSlug);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDiagnosticPillarQuestions>>
+  > = ({ signal }) =>
+    getDiagnosticPillarQuestions(pillarSlug, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!pillarSlug,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDiagnosticPillarQuestions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDiagnosticPillarQuestionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDiagnosticPillarQuestions>>
+>;
+export type GetDiagnosticPillarQuestionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get questions for a specific pillar
+ */
+
+export function useGetDiagnosticPillarQuestions<
+  TData = Awaited<ReturnType<typeof getDiagnosticPillarQuestions>>,
+  TError = ErrorType<unknown>,
+>(
+  pillarSlug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDiagnosticPillarQuestions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDiagnosticPillarQuestionsQueryOptions(
+    pillarSlug,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Batch save multiple responses for a diagnostic
+ */
+export const getBatchSaveDiagnosticRespostasUrl = (id: string) => {
+  return `/api/diagnostics/${id}/respostas/batch`;
+};
+
+export const batchSaveDiagnosticRespostas = async (
+  id: string,
+  batchSaveRespostasBody: BatchSaveRespostasBody,
+  options?: RequestInit,
+): Promise<DiagnosticResposta[]> => {
+  return customFetch<DiagnosticResposta[]>(
+    getBatchSaveDiagnosticRespostasUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(batchSaveRespostasBody),
+    },
+  );
+};
+
+export const getBatchSaveDiagnosticRespostasMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof batchSaveDiagnosticRespostas>>,
+    TError,
+    { id: string; data: BodyType<BatchSaveRespostasBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof batchSaveDiagnosticRespostas>>,
+  TError,
+  { id: string; data: BodyType<BatchSaveRespostasBody> },
+  TContext
+> => {
+  const mutationKey = ["batchSaveDiagnosticRespostas"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof batchSaveDiagnosticRespostas>>,
+    { id: string; data: BodyType<BatchSaveRespostasBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return batchSaveDiagnosticRespostas(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BatchSaveDiagnosticRespostasMutationResult = NonNullable<
+  Awaited<ReturnType<typeof batchSaveDiagnosticRespostas>>
+>;
+export type BatchSaveDiagnosticRespostasMutationBody =
+  BodyType<BatchSaveRespostasBody>;
+export type BatchSaveDiagnosticRespostasMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Batch save multiple responses for a diagnostic
+ */
+export const useBatchSaveDiagnosticRespostas = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof batchSaveDiagnosticRespostas>>,
+    TError,
+    { id: string; data: BodyType<BatchSaveRespostasBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof batchSaveDiagnosticRespostas>>,
+  TError,
+  { id: string; data: BodyType<BatchSaveRespostasBody> },
+  TContext
+> => {
+  return useMutation(getBatchSaveDiagnosticRespostasMutationOptions(options));
 };
 
 /**

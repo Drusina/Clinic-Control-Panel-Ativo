@@ -531,6 +531,88 @@ paths:
               schema:
                 $ref: "#/components/schemas/Diagnostic"
 
+  /diagnostics/{id}/calculate-scores:
+    post:
+      operationId: calculateDiagnosticScores
+      tags: [diagnostics]
+      summary: Recalculate scores for a diagnostic based on current responses
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated diagnostic with recalculated scores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diagnostic"
+
+  /diagnostic/pillars:
+    get:
+      operationId: listDiagnosticPillars
+      tags: [diagnostics]
+      summary: List all diagnostic pillars
+      responses:
+        "200":
+          description: List of pillars
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiagnosticPillar"
+
+  /diagnostic/pillars/{pillarSlug}/questions:
+    get:
+      operationId: getDiagnosticPillarQuestions
+      tags: [diagnostics]
+      summary: Get questions for a specific pillar
+      parameters:
+        - name: pillarSlug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Questions for the pillar
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiagnosticQuestion"
+
+  /diagnostics/{id}/respostas/batch:
+    post:
+      operationId: batchSaveDiagnosticRespostas
+      tags: [diagnostics]
+      summary: Batch save multiple responses for a diagnostic
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchSaveRespostasBody"
+      responses:
+        "200":
+          description: Saved responses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiagnosticResposta"
+
   # ─── ACTIONS (KANBAN) ────────────────────────────────────────────────────────
   /clinics/{clinicId}/actions:
     get:
@@ -1400,6 +1482,100 @@ components:
         - iniciadoEm
         - createdAt
 
+    DiagnosticPillar:
+      type: object
+      properties:
+        slug:
+          type: string
+        nome:
+          type: string
+        ordem:
+          type: integer
+        questionCount:
+          type: integer
+      required:
+        - slug
+        - nome
+        - ordem
+        - questionCount
+
+    DiagnosticQuestion:
+      type: object
+      properties:
+        id:
+          type: string
+        pilarSlug:
+          type: string
+        pilarNome:
+          type: string
+        pilarOrdem:
+          type: integer
+        texto:
+          type: string
+        tipo:
+          type: string
+          enum: [sim_nao, escala_1_5, texto_livre, numerico]
+        peso:
+          type: number
+        ordem:
+          type: integer
+        dica:
+          type: ["string", "null"]
+        valorMin:
+          type: ["number", "null"]
+        valorMax:
+          type: ["number", "null"]
+        inverso:
+          type: boolean
+      required:
+        - id
+        - pilarSlug
+        - pilarNome
+        - pilarOrdem
+        - texto
+        - tipo
+        - peso
+        - ordem
+        - inverso
+
+    DiagnosticResposta:
+      type: object
+      properties:
+        id:
+          type: string
+        diagnosticoId:
+          type: string
+        perguntaId:
+          type: string
+        valor:
+          type: string
+        respondidoEm:
+          type: string
+      required:
+        - id
+        - diagnosticoId
+        - perguntaId
+        - valor
+        - respondidoEm
+
+    BatchSaveRespostasBody:
+      type: object
+      properties:
+        respostas:
+          type: array
+          items:
+            type: object
+            properties:
+              perguntaId:
+                type: string
+              valor:
+                type: string
+            required:
+              - perguntaId
+              - valor
+      required:
+        - respostas
+
     # ─── ACTION ─────────────────────────────────────────────────────────────
     Action:
       type: object
@@ -1455,6 +1631,10 @@ components:
         coluna:
           type: string
           enum: [backlog, todo, doing, review, done]
+        pilarSlug:
+          type: ["string", "null"]
+        evidencias:
+          type: ["string", "null"]
       required:
         - titulo
 
@@ -1475,6 +1655,10 @@ components:
           type: ["string", "null"]
         ordem:
           type: ["integer", "null"]
+        pilarSlug:
+          type: ["string", "null"]
+        evidencias:
+          type: ["string", "null"]
 
     # ─── RISK ───────────────────────────────────────────────────────────────
     Risk:
@@ -1528,6 +1712,8 @@ components:
           type: ["string", "null"]
         acoesMitigadoras:
           type: ["string", "null"]
+        pilarSlug:
+          type: ["string", "null"]
       required:
         - nome
         - probabilidade
@@ -1549,6 +1735,8 @@ components:
         acoesMitigadoras:
           type: ["string", "null"]
         status:
+          type: ["string", "null"]
+        pilarSlug:
           type: ["string", "null"]
 
     # ─── TEAM ───────────────────────────────────────────────────────────────

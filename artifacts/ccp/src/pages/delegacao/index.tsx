@@ -228,8 +228,8 @@ export default function DelegacaoPage() {
       prazo: existing.prazo ?? "",
       status: existing.status,
       observacoes: existing.observacoes ?? "",
-      questaoInicio: existing.questaoInicio ?? "",
-      questaoFim: existing.questaoFim ?? "",
+      questaoInicio: existing.questaoInicio != null ? String(existing.questaoInicio) : "",
+      questaoFim: existing.questaoFim != null ? String(existing.questaoFim) : "",
     });
     setDialogOpen(true);
   };

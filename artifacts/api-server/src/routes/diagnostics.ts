@@ -5,6 +5,7 @@ import {
   ListDiagnosticsResponse,
   CompleteDiagnosticResponse,
 } from "@workspace/api-zod";
+import { recalculateScores } from "../lib/score-calculator";
 
 const router: IRouter = Router();
 
@@ -86,24 +87,35 @@ router.get("/diagnostics/:id", async (req, res): Promise<void> => {
   res.json(mapDiagnostic(diagnostic));
 });
 
+router.post("/diagnostics/:id/calculate-scores", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  const existing = await db.select().from(diagnosticsTable).where(eq(diagnosticsTable.id, id));
+  if (!existing.length) {
+    res.status(404).json({ error: "Diagnostic not found" });
+    return;
+  }
+
+  await recalculateScores(id);
+
+  const [diagnostic] = await db.select().from(diagnosticsTable).where(eq(diagnosticsTable.id, id));
+  res.json(mapDiagnostic(diagnostic));
+});
+
 router.post("/diagnostics/:id/complete", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
-  const pilares = ["estrategia", "financeiro", "operacoes", "pessoas", "tecnologia", "marketing"];
-  const scores: Record<string, number> = {};
-  pilares.forEach((p) => {
-    scores[p] = Math.round((3 + Math.random() * 2) * 10) / 10;
-  });
-  const scoreGlobal = Math.round((Object.values(scores).reduce((a, b) => a + b, 0) / pilares.length) * 10) / 10;
+  const existing = await db.select().from(diagnosticsTable).where(eq(diagnosticsTable.id, id));
+  if (!existing.length) {
+    res.status(404).json({ error: "Diagnostic not found" });
+    return;
+  }
+
+  await recalculateScores(id);
 
   const [diagnostic] = await db
     .update(diagnosticsTable)
-    .set({
-      status: "concluido",
-      concluidoEm: new Date(),
-      scoreGlobal: scoreGlobal.toString(),
-      scoresPilares: scores,
-    })
+    .set({ status: "concluido", concluidoEm: new Date() })
     .where(eq(diagnosticsTable.id, id))
     .returning();
 

@@ -7,7 +7,7 @@ import { requireSuperAdmin } from "../middleware/auth.js";
 const router: IRouter = Router();
 
 router.get("/preferences/notifications/:memberId", requireSuperAdmin, async (req, res): Promise<void> => {
-  const { memberId } = req.params;
+  const memberId = req.params.memberId as string;
   const [member] = await db
     .select({ notificationPreferences: teamTable.notificationPreferences })
     .from(teamTable)
@@ -26,7 +26,7 @@ router.get("/preferences/notifications/:memberId", requireSuperAdmin, async (req
 });
 
 router.patch("/preferences/notifications/:memberId", requireSuperAdmin, async (req, res): Promise<void> => {
-  const { memberId } = req.params;
+  const memberId = req.params.memberId as string;
   const parsed = z
     .object({
       emailEnabled: z.boolean().optional(),
@@ -50,7 +50,8 @@ router.patch("/preferences/notifications/:memberId", requireSuperAdmin, async (r
     return;
   }
 
-  const current = member.notificationPreferences ?? {};
+  const current: Partial<{ emailEnabled: boolean; whatsappEnabled: boolean }> =
+    member.notificationPreferences ?? {};
   const updated = {
     emailEnabled: parsed.data.emailEnabled ?? current.emailEnabled ?? true,
     whatsappEnabled: parsed.data.whatsappEnabled ?? current.whatsappEnabled ?? true,

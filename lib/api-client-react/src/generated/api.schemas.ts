@@ -352,10 +352,7 @@ export interface Kickoff {
   duracaoMinutos?: number | null;
   /** @nullable */
   facilitador?: string | null;
-  participantes: string[];
-  pauta: string[];
-  proximosPassos: KickoffProximoPasso[];
-  status: string;
+  status: KickoffStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -369,9 +366,6 @@ export interface UpsertKickoffBody {
   duracaoMinutos?: number | null;
   /** @nullable */
   facilitador?: string | null;
-  participantes?: string[];
-  pauta?: string[];
-  proximosPassos?: KickoffProximoPasso[];
   /** @nullable */
   status?: string | null;
 }
@@ -403,6 +397,58 @@ export interface Diagnostic {
   /** @nullable */
   scoresPilares?: DiagnosticScoresPilares;
   createdAt: string;
+}
+
+export interface DiagnosticPillar {
+  slug: string;
+  nome: string;
+  ordem: number;
+  questionCount: number;
+}
+
+export type DiagnosticQuestionTipo =
+  (typeof DiagnosticQuestionTipo)[keyof typeof DiagnosticQuestionTipo];
+
+export const DiagnosticQuestionTipo = {
+  sim_nao: "sim_nao",
+  escala_1_5: "escala_1_5",
+  texto_livre: "texto_livre",
+  numerico: "numerico",
+} as const;
+
+export interface DiagnosticQuestion {
+  id: string;
+  pilarSlug: string;
+  pilarNome: string;
+  pilarOrdem: number;
+  texto: string;
+  tipo: DiagnosticQuestionTipo;
+  peso: number;
+  ordem: number;
+  /** @nullable */
+  dica?: string | null;
+  /** @nullable */
+  valorMin?: number | null;
+  /** @nullable */
+  valorMax?: number | null;
+  inverso: boolean;
+}
+
+export interface DiagnosticResposta {
+  id: string;
+  diagnosticoId: string;
+  perguntaId: string;
+  valor: string;
+  respondidoEm: string;
+}
+
+export type BatchSaveRespostasBodyRespostasItem = {
+  perguntaId: string;
+  valor: string;
+};
+
+export interface BatchSaveRespostasBody {
+  respostas: BatchSaveRespostasBodyRespostasItem[];
 }
 
 /**
@@ -470,6 +516,10 @@ export interface CreateActionBody {
   /** @nullable */
   prioridade?: string | null;
   coluna?: CreateActionBodyColuna;
+  /** @nullable */
+  pilarSlug?: string | null;
+  /** @nullable */
+  evidencias?: string | null;
 }
 
 export interface UpdateActionBody {
@@ -487,6 +537,10 @@ export interface UpdateActionBody {
   coluna?: string | null;
   /** @nullable */
   ordem?: number | null;
+  /** @nullable */
+  pilarSlug?: string | null;
+  /** @nullable */
+  evidencias?: string | null;
 }
 
 export type RiskStatus = (typeof RiskStatus)[keyof typeof RiskStatus];
@@ -525,6 +579,8 @@ export interface CreateRiskBody {
   responsavel?: string | null;
   /** @nullable */
   acoesMitigadoras?: string | null;
+  /** @nullable */
+  pilarSlug?: string | null;
 }
 
 export interface UpdateRiskBody {
@@ -542,6 +598,8 @@ export interface UpdateRiskBody {
   acoesMitigadoras?: string | null;
   /** @nullable */
   status?: string | null;
+  /** @nullable */
+  pilarSlug?: string | null;
 }
 
 export interface TeamMember {
@@ -704,309 +762,3 @@ export type ListActionsParams = {
    */
   coluna?: string | null;
 };
-
-export interface KickoffProximoPasso {
-  acao: string;
-  responsavel: string;
-  prazo: string;
-}
-
-export interface KickoffExtended {
-  id: string;
-  clinicId: string;
-  /** @nullable */
-  dataRealizacao?: string | null;
-  /** @nullable */
-  modalidade?: string | null;
-  /** @nullable */
-  duracaoMinutos?: number | null;
-  /** @nullable */
-  facilitador?: string | null;
-  participantes: string[];
-  pauta: string[];
-  proximosPassos: KickoffProximoPasso[];
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface UpsertKickoffExtendedBody {
-  /** @nullable */
-  dataRealizacao?: string | null;
-  /** @nullable */
-  modalidade?: string | null;
-  /** @nullable */
-  duracaoMinutos?: number | null;
-  /** @nullable */
-  facilitador?: string | null;
-  participantes?: string[];
-  pauta?: string[];
-  proximosPassos?: KickoffProximoPasso[];
-  /** @nullable */
-  status?: string | null;
-}
-
-export interface SocioExtended {
-  id: string;
-  clinicId: string;
-  nome: string;
-  /** @nullable */
-  cpf?: string | null;
-  /** @nullable */
-  percentual?: number | null;
-  /** @nullable */
-  cargo?: string | null;
-  decisor: boolean;
-  /** @nullable */
-  email?: string | null;
-  /** @nullable */
-  whatsapp?: string | null;
-  origem: string;
-  /** @nullable */
-  qualificacao?: string | null;
-  /** @nullable */
-  qualId?: string | null;
-  /** @nullable */
-  dataEntrada?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateSocioExtendedBody {
-  nome: string;
-  /** @nullable */
-  cpf?: string | null;
-  /** @nullable */
-  percentual?: number | null;
-  /** @nullable */
-  cargo?: string | null;
-  decisor?: boolean;
-  /** @nullable */
-  email?: string | null;
-  /** @nullable */
-  whatsapp?: string | null;
-  origem?: string;
-  /** @nullable */
-  qualificacao?: string | null;
-}
-
-export interface UpdateSocioExtendedBody {
-  nome?: string;
-  /** @nullable */
-  cpf?: string | null;
-  /** @nullable */
-  percentual?: number | null;
-  /** @nullable */
-  cargo?: string | null;
-  decisor?: boolean;
-  /** @nullable */
-  email?: string | null;
-  /** @nullable */
-  whatsapp?: string | null;
-  origem?: string;
-  /** @nullable */
-  qualificacao?: string | null;
-}
-
-export interface PerfilOperacional {
-  clinicId: string;
-  /** @nullable */
-  faturamentoMensal?: number | null;
-  /** @nullable */
-  ticketMedio?: number | null;
-  /** @nullable */
-  pacientesAtivos?: number | null;
-  /** @nullable */
-  atendimentosMes?: number | null;
-  especialidades: string[];
-  /** @nullable */
-  horarioFuncionamento?: string | null;
-  modeloParticular: number;
-  modeloConvenio: number;
-  modeloSus: number;
-  updatedAt: string;
-}
-
-export interface UpsertPerfilOperacionalBody {
-  /** @nullable */
-  faturamentoMensal?: number | null;
-  /** @nullable */
-  ticketMedio?: number | null;
-  /** @nullable */
-  pacientesAtivos?: number | null;
-  /** @nullable */
-  atendimentosMes?: number | null;
-  especialidades?: string[];
-  /** @nullable */
-  horarioFuncionamento?: string | null;
-  modeloParticular?: number;
-  modeloConvenio?: number;
-  modeloSus?: number;
-}
-
-export interface ParceirosExterno {
-  id: string;
-  clinicId: string;
-  tipo: string;
-  /** @nullable */
-  nomeEmpresa?: string | null;
-  /** @nullable */
-  responsavel?: string | null;
-  /** @nullable */
-  registroProfissional?: string | null;
-  /** @nullable */
-  telefone?: string | null;
-  /** @nullable */
-  email?: string | null;
-  /** @nullable */
-  observacoes?: string | null;
-  createdAt: string;
-}
-
-export interface CreateParceiroExternoBody {
-  tipo: string;
-  /** @nullable */
-  nomeEmpresa?: string | null;
-  /** @nullable */
-  responsavel?: string | null;
-  /** @nullable */
-  registroProfissional?: string | null;
-  /** @nullable */
-  telefone?: string | null;
-  /** @nullable */
-  email?: string | null;
-  /** @nullable */
-  observacoes?: string | null;
-}
-
-export interface UpdateParceiroExternoBody {
-  tipo?: string;
-  /** @nullable */
-  nomeEmpresa?: string | null;
-  /** @nullable */
-  responsavel?: string | null;
-  /** @nullable */
-  registroProfissional?: string | null;
-  /** @nullable */
-  telefone?: string | null;
-  /** @nullable */
-  email?: string | null;
-  /** @nullable */
-  observacoes?: string | null;
-}
-
-export interface SistemaUso {
-  id: string;
-  clinicId: string;
-  nome: string;
-  /** @nullable */
-  fornecedor?: string | null;
-  /** @nullable */
-  tipo?: string | null;
-  /** @nullable */
-  apiDisponivel?: string | null;
-  /** @nullable */
-  responsavelInterno?: string | null;
-  /** @nullable */
-  criticidade?: string | null;
-  integrado: boolean;
-  createdAt: string;
-}
-
-export interface CreateSistemaUsoBody {
-  nome: string;
-  /** @nullable */
-  fornecedor?: string | null;
-  /** @nullable */
-  tipo?: string | null;
-  /** @nullable */
-  apiDisponivel?: string | null;
-  /** @nullable */
-  responsavelInterno?: string | null;
-  /** @nullable */
-  criticidade?: string | null;
-  integrado?: boolean;
-}
-
-export interface UpdateSistemaUsoBody {
-  nome?: string;
-  /** @nullable */
-  fornecedor?: string | null;
-  /** @nullable */
-  tipo?: string | null;
-  /** @nullable */
-  apiDisponivel?: string | null;
-  /** @nullable */
-  responsavelInterno?: string | null;
-  /** @nullable */
-  criticidade?: string | null;
-  integrado?: boolean;
-}
-
-export interface DocConstitutivo {
-  id: string;
-  clinicId: string;
-  categoria: string;
-  nome: string;
-  obrigatorio: boolean;
-  /** @nullable */
-  storagePath?: string | null;
-  /** @nullable */
-  tamanho?: number | null;
-  /** @nullable */
-  enviadoEm?: string | null;
-  createdAt: string;
-}
-
-export interface LgpdTermo {
-  id: string;
-  clinicId: string;
-  slug: string;
-  nome: string;
-  /** @nullable */
-  descricao?: string | null;
-  status: string;
-  /** @nullable */
-  metodo?: string | null;
-  /** @nullable */
-  autentiqueDocId?: string | null;
-  /** @nullable */
-  signatarioNome?: string | null;
-  /** @nullable */
-  signatarioEmail?: string | null;
-  /** @nullable */
-  assinadoEm?: string | null;
-  /** @nullable */
-  storagePath?: string | null;
-  /** @nullable */
-  enviadoEm?: string | null;
-  createdAt: string;
-}
-
-export interface UpdateLgpdTermoBody {
-  status?: string;
-  /** @nullable */
-  metodo?: string | null;
-  /** @nullable */
-  signatarioNome?: string | null;
-  /** @nullable */
-  signatarioEmail?: string | null;
-  /** @nullable */
-  storagePath?: string | null;
-}
-
-export interface CreateAutentiqueDocumentBody {
-  termId: string;
-  clinicId: string;
-  signerEmail: string;
-  signerName: string;
-}
-
-export interface CreateAutentiqueDocumentResponse {
-  success: boolean;
-  /** @nullable */
-  documentId?: string | null;
-  /** @nullable */
-  signatureLink?: string | null;
-  message?: string;
-}
