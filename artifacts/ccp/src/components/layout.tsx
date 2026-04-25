@@ -6,7 +6,7 @@ import {
   Settings, 
   Menu,
   Activity,
-  Search
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -18,6 +18,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const navigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Clínicas", href: "/admin/clinicas", icon: Building2 },
+    { name: "Diagnóstico 360°", href: "/diagnostico/select", icon: ClipboardList },
     { name: "Notificações", href: "/notifications", icon: Bell },
   ];
 

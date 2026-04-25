@@ -1,5 +1,6 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -15,6 +16,41 @@ import KickoffSelectPage from "@/pages/kickoff/select";
 import { SuperAdminGuard } from "@/components/super-admin-guard";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { getStoredToken } from "@/hooks/use-auth";
+import DiagnosticoSelectPage from "@/pages/diagnostico/select";
+import DiagnosticoWizard from "@/pages/diagnostico/wizard";
+import DiagnosticoResultado from "@/pages/diagnostico/resultado";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function fetchLatestActive() {
+  const token = getStoredToken();
+  if (!token) return null;
+  const res = await fetch(`${BASE}/api/diagnostics/latest-active`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+function DiagnosticoEntrypoint() {
+  const [, navigate] = useLocation();
+  const { data, isLoading } = useQuery({
+    queryKey: ["diagnostico-latest-active"],
+    queryFn: fetchLatestActive,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (data?.id) {
+      navigate(`/diagnostico/${data.id}`, { replace: true });
+    } else {
+      navigate("/diagnostico/select", { replace: true });
+    }
+  }, [isLoading, data, navigate]);
+
+  return null;
+}
 
 setAuthTokenGetter(getStoredToken);
 
@@ -94,6 +130,43 @@ function Router() {
           <AppLayout>
             <SuperAdminGuard>
               <KickoffPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/diagnostico">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <DiagnosticoEntrypoint />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/diagnostico/select">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <DiagnosticoSelectPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/diagnostico/:id/resultado">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <DiagnosticoResultado />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/diagnostico/:id">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <DiagnosticoWizard />
             </SuperAdminGuard>
           </AppLayout>
         )}

@@ -1,8 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db, diagnosticsTable } from "@workspace/db";
 import {
-  GetDiagnosticResponse,
   ListDiagnosticsResponse,
   CompleteDiagnosticResponse,
 } from "@workspace/api-zod";
@@ -19,9 +18,27 @@ function mapDiagnostic(d: typeof diagnosticsTable.$inferSelect) {
     concluidoEm: d.concluidoEm?.toISOString() ?? null,
     scoreGlobal: d.scoreGlobal != null ? Number(d.scoreGlobal) : null,
     scoresPilares: d.scoresPilares as Record<string, number> | null,
+    metasPilares: d.metasPilares as Record<string, number> | null,
+    insightsIa: d.insightsIa as Record<string, unknown> | null,
     createdAt: d.createdAt.toISOString(),
   };
 }
+
+router.get("/diagnostics/latest-active", async (req, res): Promise<void> => {
+  const [diagnostic] = await db
+    .select()
+    .from(diagnosticsTable)
+    .where(eq(diagnosticsTable.status, "em_andamento"))
+    .orderBy(desc(diagnosticsTable.createdAt))
+    .limit(1);
+
+  if (!diagnostic) {
+    res.json(null);
+    return;
+  }
+
+  res.json(mapDiagnostic(diagnostic));
+});
 
 router.get("/clinics/:clinicId/diagnostics", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
@@ -50,7 +67,7 @@ router.post("/clinics/:clinicId/diagnostics", async (req, res): Promise<void> =>
     .values({ clinicId, versao: nextVersion })
     .returning();
 
-  res.status(201).json(GetDiagnosticResponse.parse(mapDiagnostic(diagnostic)));
+  res.status(201).json(mapDiagnostic(diagnostic));
 });
 
 router.get("/diagnostics/:id", async (req, res): Promise<void> => {
@@ -66,7 +83,7 @@ router.get("/diagnostics/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(GetDiagnosticResponse.parse(mapDiagnostic(diagnostic)));
+  res.json(mapDiagnostic(diagnostic));
 });
 
 router.post("/diagnostics/:id/complete", async (req, res): Promise<void> => {

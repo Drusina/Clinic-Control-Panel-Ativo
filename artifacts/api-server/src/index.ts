@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { db, perguntasTable } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 

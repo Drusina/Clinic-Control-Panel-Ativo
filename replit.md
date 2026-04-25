@@ -63,3 +63,42 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `PUT /api/clinics/:clinicId/socios/:socioId` — Update QSA partner
 - `DELETE /api/clinics/:clinicId/socios/:socioId` — Delete QSA partner
 - `POST /api/clinics/:id/invite-user` — Invite user to clinic (mock, logs activity)
+
+## M4 — Diagnóstico 360° + AI Insights
+
+### Overview
+Full 150-question diagnostic wizard with 8 pillars, autosave, score calculation, radar chart results, and Claude AI insights.
+
+### New DB Tables
+- `perguntas` — 150 questions seeded from CSV, with `pilar_slug`, `pilar_nome`, `tipo` (sim_nao/escala_1_5/texto_livre/numerico), `peso`, `ordem`
+- `respostas` — Answers keyed by `(diagnostico_id, pergunta_id)` with upsert
+
+### New Routes
+- `/diagnostico/select` — Clinic + diagnostic session selector
+- `/diagnostico/:id` — Wizard with full-screen question, pillar navigation, autosave
+- `/diagnostico/:id/resultado` — Radar chart, score table, AI insights
+
+### New API Endpoints
+- `GET /api/perguntas` — All 150 questions ordered by pillar + order
+- `GET /api/diagnostics/:id/respostas` — All answers for a diagnostic
+- `PUT /api/diagnostics/:id/respostas/:perguntaId` — Upsert answer (autosave)
+- `POST /api/diagnostics/:id/calculate-scores` — Compute weighted pillar scores + global score
+- `POST /api/ai/analyze-diagnostico` — Claude claude-opus-4-5 generates JSON insights `{pontos_fortes, pontos_criticos, acoes_sugeridas}`
+
+### Score Calculation
+- `sim_nao`: sim=5, nao=1
+- `escala_1_5`: direct value
+- `numerico`: normalized to 1-5 range (percentage fields)
+- `texto_livre`: filled (>10 chars) = 4, empty = 2
+- Pillar score = weighted average (answer_value × peso) / sum(peso)
+- Global score = mean of 8 pillar scores
+
+### AI Integration
+- Uses `@anthropic-ai/sdk` with `claude-opus-4-5`
+- Requires `ANTHROPIC_API_KEY` secret
+- Prompt includes pillar scores + critical responses
+- Returns structured JSON stored in `diagnosticos.insights_ia`
+- Each suggested action has a "+ Criar tarefa no Plano de Ação" button
+
+### 8 Pillars (slugs)
+estrategia, financeiro, contabil, marketing, operacoes, pessoas, tecnologia, compliance
