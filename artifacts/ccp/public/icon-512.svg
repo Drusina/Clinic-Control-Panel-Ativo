@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#111218"/>
+      <stop offset="100%" style="stop-color:#0a0b0f"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <rect x="12" y="12" width="488" height="488" rx="96" fill="none" stroke="#1e2333" stroke-width="4"/>
+  <!-- Stylized I symbol -->
+  <rect x="188" y="90" width="136" height="28" rx="14" fill="url(#blue)"/>
+  <rect x="232" y="118" width="48" height="216" rx="12" fill="#e2e8f0"/>
+  <rect x="188" y="334" width="136" height="28" rx="14" fill="url(#blue)"/>
+  <!-- Gold accent -->
+  <circle cx="256" cy="432" r="22" fill="#f59e0b"/>
+  <circle cx="256" cy="432" r="13" fill="#fbbf24"/>
+  <!-- Side accent lines -->
+  <rect x="90" y="228" width="76" height="8" rx="4" fill="#3b82f6" opacity="0.6"/>
+  <rect x="90" y="246" width="54" height="8" rx="4" fill="#1d4ed8" opacity="0.4"/>
+  <rect x="346" y="228" width="76" height="8" rx="4" fill="#3b82f6" opacity="0.6"/>
+  <rect x="368" y="246" width="54" height="8" rx="4" fill="#1d4ed8" opacity="0.4"/>
+  <!-- ICS text hint -->
+  <rect x="90" y="264" width="36" height="8" rx="4" fill="#f59e0b" opacity="0.5"/>
+  <rect x="386" y="264" width="36" height="8" rx="4" fill="#f59e0b" opacity="0.5"/>
+</svg>

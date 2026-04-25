@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { db, perguntasTable } from "@workspace/db";
+import { runExpiryCheck } from "./lib/expiry-check.js";
 
 const rawPort = process.env["PORT"];
 
@@ -16,6 +16,17 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+async function scheduledExpiryCheck(): Promise<void> {
+  try {
+    const { sent, skipped, total } = await runExpiryCheck();
+    logger.info({ sent, skipped, total }, "Expiry check completed");
+  } catch (err) {
+    logger.error({ err }, "Expiry check failed");
+  }
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
@@ -23,4 +34,8 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  setInterval(() => {
+    scheduledExpiryCheck();
+  }, MS_PER_DAY);
 });

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
+import { NotificationPreferencesModal } from "@/components/notification-preferences-modal";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -30,6 +31,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [complementarOpen, setComplementarOpen] = useState(
     location.startsWith("/processos") || location.startsWith("/evidencias") || location.startsWith("/documentos") || location.startsWith("/relatorios")
   );
+  const [prefsOpen, setPrefsOpen] = useState(false);
 
   const navigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -135,7 +137,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
       </div>
       <div className="px-4 mt-auto">
-        <Button variant="ghost" className="w-full justify-start gap-3 text-sidebar-foreground/70">
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3 text-sidebar-foreground/70"
+          onClick={() => setPrefsOpen(true)}
+        >
           <Settings className="h-4 w-4" />
           Configurações
         </Button>
@@ -179,6 +185,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      <NotificationPreferencesModal open={prefsOpen} onOpenChange={setPrefsOpen} />
     </div>
   );
 }

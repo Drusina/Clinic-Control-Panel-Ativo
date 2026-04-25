@@ -79,3 +79,22 @@ export function requireSuperAdmin(
   }
   next();
 }
+
+export function requireAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  const token = extractToken(req);
+  if (!token) {
+    res.status(401).json({ error: "Unauthorized: missing token" });
+    return;
+  }
+  const payload = verifyToken(token);
+  if (!payload) {
+    res.status(401).json({ error: "Unauthorized: invalid token" });
+    return;
+  }
+  (req as Request & { user: Record<string, unknown> }).user = payload;
+  next();
+}

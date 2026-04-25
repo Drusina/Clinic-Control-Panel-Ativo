@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { clinicsTable } from "./clinics";
@@ -17,6 +17,10 @@ export const teamTable = pgTable("equipe_interna", {
   temAcessoPlataforma: boolean("tem_acesso_plataforma").default(false),
   inviteStatus: text("invite_status"),
   lastAccessAt: timestamp("last_access_at", { withTimezone: true }),
+  notificationPreferences: jsonb("notification_preferences").$type<{
+    emailEnabled: boolean;
+    whatsappEnabled: boolean;
+  }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

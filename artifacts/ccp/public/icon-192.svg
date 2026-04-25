@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#111218"/>
+      <stop offset="100%" style="stop-color:#0a0b0f"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="40" fill="url(#bg)"/>
+  <rect x="8" y="8" width="176" height="176" rx="34" fill="none" stroke="#1e2333" stroke-width="2"/>
+  <!-- Stylized I symbol with medical cross accent -->
+  <rect x="72" y="36" width="48" height="10" rx="5" fill="url(#blue)"/>
+  <rect x="88" y="46" width="16" height="80" rx="4" fill="#e2e8f0"/>
+  <rect x="72" y="126" width="48" height="10" rx="5" fill="url(#blue)"/>
+  <!-- Gold accent dot -->
+  <circle cx="96" cy="165" r="8" fill="#f59e0b"/>
+  <!-- 360 text indicator lines -->
+  <rect x="36" y="88" width="28" height="3" rx="1.5" fill="#3b82f6" opacity="0.6"/>
+  <rect x="128" y="88" width="28" height="3" rx="1.5" fill="#3b82f6" opacity="0.6"/>
+  <rect x="36" y="98" width="20" height="3" rx="1.5" fill="#1d4ed8" opacity="0.4"/>
+  <rect x="136" y="98" width="20" height="3" rx="1.5" fill="#1d4ed8" opacity="0.4"/>
+</svg>

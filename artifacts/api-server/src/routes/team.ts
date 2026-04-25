@@ -82,6 +82,19 @@ async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect): Pr
   return "sent";
 }
 
+router.get("/team/all", async (_req, res): Promise<void> => {
+  const members = await db
+    .select()
+    .from(teamTable)
+    .orderBy(teamTable.nome);
+  res.json(
+    members.map((m) => ({
+      ...mapTeamMember(m),
+      notificationPreferences: m.notificationPreferences ?? { emailEnabled: true, whatsappEnabled: true },
+    }))
+  );
+});
+
 router.get("/clinics/:clinicId/team", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   const members = await db.select().from(teamTable).where(eq(teamTable.clinicId, clinicId));

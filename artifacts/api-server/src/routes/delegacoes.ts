@@ -2,6 +2,9 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, delegacoesTable } from "@workspace/db";
 import { z } from "zod";
+import { sendEmail, buildDelegationEmail } from "../lib/email.js";
+import { sendDelegationWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
+import { getRecipientPrefs } from "../lib/preferences.js";
 
 const router: IRouter = Router();
 
@@ -89,22 +92,39 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     })
     .returning();
 
-  if (responsavelEmail && process.env.RESEND_API_KEY) {
-    const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
-    const link = `${appUrl}/diagnostico?pilar=${encodeURIComponent(pilarSlug)}`;
-    fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "IONEX360 <noreply@ionex360.com.br>",
-        to: [responsavelEmail],
-        subject: `Você foi designado responsável pelo pilar ${pilarNome}`,
-        html: `<p>Olá, ${responsavelNome ?? ""},</p><p>Você foi delegado como responsável pelo pilar <strong>${pilarNome}</strong> no diagnóstico ICS.</p><p><a href="${link}">Acessar diagnóstico</a></p>`,
-      }),
-    }).catch(() => {});
+  if (responsavelEmail) {
+    const recipientPrefs = await getRecipientPrefs(responsavelEmail);
+
+    if (recipientPrefs.whatsappEnabled || recipientPrefs.emailEnabled) {
+      const emailHtml = buildDelegationEmail({
+        responsavelNome: responsavelNome ?? "Responsável",
+        responsavelEmail,
+        pilarNome,
+        pilarSlug,
+        prazo: prazo ?? undefined,
+        observacoes: observacoes ?? undefined,
+      });
+
+      const whatsappPhone = req.body?.responsavelWhatsapp as string | undefined;
+      let notifiedViaWhatsApp = false;
+
+      if (whatsappPhone && isWhatsAppConfigured() && recipientPrefs.whatsappEnabled) {
+        notifiedViaWhatsApp = await sendDelegationWhatsApp({
+          phone: whatsappPhone,
+          responsavelNome: responsavelNome ?? "Responsável",
+          pilarNome,
+          prazo: prazo ?? undefined,
+        });
+      }
+
+      if (!notifiedViaWhatsApp && recipientPrefs.emailEnabled) {
+        sendEmail({
+          to: responsavelEmail,
+          subject: `[IONEX360] Delegação — você é responsável pelo pilar ${pilarNome}`,
+          html: emailHtml,
+        }).catch(() => {});
+      }
+    }
   }
 
   res.status(201).json(mapDelegacao(delegacao));

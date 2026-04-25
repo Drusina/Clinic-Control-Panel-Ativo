@@ -47,7 +47,7 @@ router.post("/auth/login", (req, res): void => {
 
   loginAttempts.delete(ip);
 
-  const token = signToken({ role: "super_admin" });
+  const token = signToken({ role: "super_admin", sub: "super_admin" });
   res.json({ token, role: "super_admin" });
 });
 

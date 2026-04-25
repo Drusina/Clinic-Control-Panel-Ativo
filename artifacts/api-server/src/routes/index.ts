@@ -26,6 +26,8 @@ import delegacoesRouter from "./delegacoes";
 import processosRouter from "./processos";
 import evidenciasRouter from "./evidencias";
 import documentosRouter from "./documentos";
+import jobsRouter from "./jobs";
+import notificationPreferencesRouter from "./notification-preferences";
 
 const router: IRouter = Router();
 
@@ -56,5 +58,7 @@ router.use(requireSuperAdmin, evidenciasRouter);
 router.use(requireSuperAdmin, documentosRouter);
 router.use(autentiquePublicRouter);
 router.use(notificationsRouter);
+router.use(requireSuperAdmin, jobsRouter);
+router.use(notificationPreferencesRouter);
 
 export default router;

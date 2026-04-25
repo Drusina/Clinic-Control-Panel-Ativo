@@ -1,7 +1,10 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { db, lgpdTermosTable } from "@workspace/db";
+import { db, lgpdTermosTable, teamTable } from "@workspace/db";
+import { sendEmail, buildSigningRequestEmail, buildSigningConfirmationEmail } from "../lib/email.js";
+import { sendApprovalWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
+import { getRecipientPrefs } from "../lib/preferences.js";
 
 const publicRouter: IRouter = Router();
 const protectedRouter: IRouter = Router();
@@ -221,26 +224,17 @@ protectedRouter.post("/autentique/create-document", async (req, res): Promise<vo
       })
       .where(and(eq(lgpdTermosTable.slug, termSlug), eq(lgpdTermosTable.clinicId, clinicId)));
 
-    const resendKey = process.env.RESEND_API_KEY;
-    if (resendKey && signatureLink) {
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "IONEX360 <noreply@ionex360.com.br>",
-          to: [signerEmail],
-          subject: `Assinatura necessária: ${termo.nome}`,
-          html: `
-            <p>Olá, ${signerName},</p>
-            <p>Você foi convidado a assinar o documento: <strong>${termo.nome}</strong>.</p>
-            <p><a href="${signatureLink}">Clique aqui para assinar</a></p>
-            <p>IONEX360</p>
-          `,
-        }),
+    if (signatureLink) {
+      const signingHtml = buildSigningRequestEmail({
+        signatarioNome: signerName,
+        termoNome: termo.nome,
+        signatureLink,
       });
+      sendEmail({
+        to: signerEmail,
+        subject: `[IONEX360] Assinatura necessária: ${termo.nome}`,
+        html: signingHtml,
+      }).catch(() => {});
     }
 
     res.json({ success: true, documentId: doc.id, signatureLink });
@@ -291,6 +285,40 @@ publicRouter.post("/autentique/webhook", async (req, res): Promise<void> => {
           assinadoEm: newStatus === "assinado" ? new Date() : undefined,
         })
         .where(eq(lgpdTermosTable.autentiqueDocId, docId));
+
+      if (newStatus === "assinado" && termo.signatarioEmail && termo.signatarioNome) {
+        const recipientPrefs = await getRecipientPrefs(termo.signatarioEmail);
+
+        const [teamMember] = await db
+          .select({ whatsapp: teamTable.whatsapp })
+          .from(teamTable)
+          .where(eq(teamTable.email, termo.signatarioEmail))
+          .limit(1);
+
+        let notifiedViaWhatsApp = false;
+        if (recipientPrefs.whatsappEnabled && teamMember?.whatsapp && isWhatsAppConfigured()) {
+          notifiedViaWhatsApp = await sendApprovalWhatsApp({
+            phone: teamMember.whatsapp,
+            responsavelNome: termo.signatarioNome,
+            termoNome: termo.nome ?? "Termo LGPD",
+          });
+        }
+
+        if (!notifiedViaWhatsApp && recipientPrefs.emailEnabled) {
+          const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
+          const docsLink = `${appUrl}/documentos`;
+          const html = buildSigningConfirmationEmail({
+            signatarioNome: termo.signatarioNome,
+            termoNome: termo.nome ?? "Termo LGPD",
+            docsLink,
+          });
+          sendEmail({
+            to: termo.signatarioEmail,
+            subject: `[IONEX360] Documento assinado com sucesso — ${termo.nome ?? "Termo LGPD"}`,
+            html,
+          }).catch(() => {});
+        }
+      }
     }
 
     res.sendStatus(200);

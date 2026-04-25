@@ -143,3 +143,33 @@ estrategia, financeiro, contabil, marketing, operacoes, pessoas, tecnologia, com
 - `POST /api/clinics/:clinicId/delegacoes` — Create delegation (N1 or N2)
 - `PATCH /api/delegacoes/:id` — Update delegation (status, responsible, etc.)
 - `DELETE /api/delegacoes/:id` — Remove delegation
+
+## M7 — PWA, Email & WhatsApp Notifications
+
+### PWA
+- `vite-plugin-pwa` installed in CCP; VitePWA plugin configured in `vite.config.ts`
+- Manifest: name "IONEX360", short_name "IONEX", theme/background `#0a0b0f`, display `standalone`
+- Icons: `public/icon-192.svg` and `public/icon-512.svg` in IONEX blue/gold style
+- Service worker (Workbox) caches app shell and uses NetworkFirst for `/api/*` routes (production only)
+
+### Email Templates
+- `artifacts/api-server/src/lib/email.ts` — branded dark-theme HTML templates + `sendEmail()` helper
+- Three templates: **invite** (magic link + role), **delegation** (pilar name, deadline, deep link), **document expiry digest** (table of expiring docs)
+- Delegation notifications updated to use branded templates; invite sends branded email via Resend when `RESEND_API_KEY` is set
+
+### WhatsApp (Meta Cloud API)
+- `artifacts/api-server/src/lib/whatsapp.ts` — helper for `delegacao_pilar` and `aprovacao_termo` pre-approved template messages
+- Graceful fallback to email if `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_ID` env vars are not set
+- Integrated at delegation creation (`POST /api/clinics/:clinicId/delegacoes`)
+
+### Document Expiry Cron
+- `POST /api/jobs/expiry-check` — queries documents with `validade` within 30 days, sends per-clinic digest emails
+- Runs automatically via `setInterval` daily when server starts (calls same logic as the route)
+- Requires `RESEND_API_KEY` to send; logs results via pino
+
+### Notification Preferences
+- `notification_preferences` JSONB column added to `equipe_interna` (teamTable) via DB push
+- API: `GET/PATCH /api/notification-preferences/:memberId` — read/update email+whatsapp toggles
+- UI: `NotificationPreferencesModal` component in `artifacts/ccp/src/components/notification-preferences-modal.tsx`
+- Settings button in sidebar opens modal; preferences stored in localStorage for super admin
+- Env vars required: `RESEND_API_KEY`, `APP_URL`, `WHATSAPP_TOKEN` (optional), `WHATSAPP_PHONE_ID` (optional)

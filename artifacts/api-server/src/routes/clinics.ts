@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
+import { sendEmail, buildInviteEmail } from "../lib/email.js";
 import {
   CreateClinicBody,
   UpdateClinicBody,
@@ -361,7 +362,7 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
     return;
   }
 
-  const inviteRes = await fetch(`${supabaseUrl}/auth/v1/invite`, {
+  const generateLinkRes = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -369,15 +370,40 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
       "apikey": serviceRoleKey,
     },
     body: JSON.stringify({
+      type: "invite",
       email,
       data: { role, clinic_id: id, clinic_nome: clinic.nome },
     }),
   });
 
-  if (!inviteRes.ok) {
-    const errorBody = await inviteRes.text();
-    res.status(inviteRes.status).json({ success: false, message: `Erro ao enviar convite: ${errorBody}` });
-    return;
+  let magicLink: string | null = null;
+  if (generateLinkRes.ok) {
+    try {
+      const linkData = await generateLinkRes.json() as Record<string, unknown>;
+      magicLink = (linkData.action_link as string) ?? (linkData.data as Record<string, unknown>)?.action_link as string ?? null;
+    } catch {}
+  }
+
+  if (!magicLink) {
+    const inviteRes = await fetch(`${supabaseUrl}/auth/v1/invite`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceRoleKey}`,
+        "apikey": serviceRoleKey,
+      },
+      body: JSON.stringify({
+        email,
+        data: { role, clinic_id: id, clinic_nome: clinic.nome },
+      }),
+    });
+    if (!inviteRes.ok) {
+      const errorBody = await inviteRes.text();
+      res.status(inviteRes.status).json({ success: false, message: `Erro ao enviar convite: ${errorBody}` });
+      return;
+    }
+    const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
+    magicLink = `${appUrl}/login?email=${encodeURIComponent(email)}`;
   }
 
   const existingMember = await db
@@ -408,6 +434,13 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
     descricao: `Perfil: ${role}`,
     autorNome: "Super Admin",
   });
+
+  const inviteHtml = buildInviteEmail({ email, role, magicLink: magicLink! });
+  sendEmail({
+    to: email,
+    subject: `[IONEX360] Você foi convidado para a plataforma — ${clinic.nome}`,
+    html: inviteHtml,
+  }).catch(() => {});
 
   res.json({ success: true, message: `Convite enviado para ${email}. O usuário receberá um email com o link de acesso.` });
 });

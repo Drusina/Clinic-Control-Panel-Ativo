@@ -20,3 +20,4 @@ export * from "./respostas";
 export * from "./processos";
 export * from "./evidencias";
 export * from "./documentos";
+export * from "./user_preferences";
