@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, delegacoesTable, clinicsTable } from "@workspace/db";
+import { eq, and, count } from "drizzle-orm";
+import { db, delegacoesTable, clinicsTable, risksTable, actionsTable } from "@workspace/db";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { z } from "zod";
 import { sendEmail, buildDelegationEmail } from "../lib/email.js";
@@ -52,6 +52,27 @@ const UpdateDelegacaoBody = z.object({
   questaoInicio: z.number().int().optional(),
   questaoFim: z.number().int().optional(),
   observacoes: z.string().optional(),
+});
+
+router.get("/clinics/:clinicId/ics-status", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+
+  const [[delRow], [riskRow], [actionRow]] = await Promise.all([
+    db.select({ value: count() }).from(delegacoesTable).where(eq(delegacoesTable.clinicId, clinicId)),
+    db.select({ value: count() }).from(risksTable).where(eq(risksTable.clinicId, clinicId)),
+    db.select({ value: count() }).from(actionsTable).where(eq(actionsTable.clinicId, clinicId)),
+  ]);
+
+  const delegacoes = delRow?.value ?? 0;
+  const risks = riskRow?.value ?? 0;
+  const actions = actionRow?.value ?? 0;
+
+  res.json({
+    delegacoes,
+    risks,
+    actions,
+    seeded: delegacoes > 0 && risks > 0 && actions > 0,
+  });
 });
 
 router.get("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => {

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Clinic } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Building, Mail, Phone, MapPin, User, Calendar, Wand2, CheckCircle2, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -18,11 +19,33 @@ interface SeedResult {
   actions: number;
 }
 
+interface IcsStatus {
+  delegacoes: number;
+  risks: number;
+  actions: number;
+  seeded: boolean;
+}
+
 export default function OverviewTab({ clinic }: { clinic: Clinic }) {
   const [seeding, setSeeding] = useState(false);
   const [seeded, setSeeded] = useState<SeedResult | null>(null);
+  const [icsStatus, setIcsStatus] = useState<IcsStatus | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const token = getStoredToken();
+    const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+    setLoadingStatus(true);
+    fetch(`${BASE}/api/clinics/${clinic.id}/ics-status`, { headers: authHeaders })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: IcsStatus | null) => {
+        if (data) setIcsStatus(data);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingStatus(false));
+  }, [clinic.id]);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -69,6 +92,13 @@ export default function OverviewTab({ clinic }: { clinic: Clinic }) {
         });
         await queryClient.invalidateQueries();
       }
+
+      const token = getStoredToken();
+      const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      fetch(`${BASE}/api/clinics/${clinic.id}/ics-status`, { headers: authHeaders })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data: IcsStatus | null) => { if (data) setIcsStatus(data); })
+        .catch(() => {});
     } catch {
       toast({
         title: "Erro ao inicializar dados",
@@ -87,30 +117,44 @@ export default function OverviewTab({ clinic }: { clinic: Clinic }) {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Wand2 className="h-5 w-5 text-primary" />
-              Inicializar dados ICS
+              Dados ICS
+              {!loadingStatus && icsStatus?.seeded && (
+                <Badge
+                  variant="secondary"
+                  className="ml-1 gap-1 bg-green-100 text-green-700 border-green-200"
+                  data-testid="badge-ics-seeded"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Inicializados
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription className="mt-1">
-              Pré-carrega 7 delegações por pilar, 8 riscos operacionais e 9 ações no Kanban — conforme a metodologia ICS. Seguro repetir: não duplica registros já existentes.
+              {icsStatus?.seeded
+                ? `${icsStatus.delegacoes} delegações · ${icsStatus.risks} riscos · ${icsStatus.actions} ações já carregados para esta clínica.`
+                : "Pré-carrega 7 delegações por pilar, 8 riscos operacionais e 9 ações no Kanban — conforme a metodologia ICS. Seguro repetir: não duplica registros já existentes."}
             </CardDescription>
           </div>
-          <Button
-            onClick={handleSeed}
-            disabled={seeding}
-            data-testid="btn-seed-ics"
-            className="shrink-0"
-          >
-            {seeding ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Inicializando…
-              </>
-            ) : (
-              <>
-                <Wand2 className="mr-2 h-4 w-4" />
-                Inicializar dados ICS
-              </>
-            )}
-          </Button>
+          {!icsStatus?.seeded && (
+            <Button
+              onClick={handleSeed}
+              disabled={seeding || loadingStatus}
+              data-testid="btn-seed-ics"
+              className="shrink-0"
+            >
+              {seeding ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Inicializando…
+                </>
+              ) : (
+                <>
+                  <Wand2 className="mr-2 h-4 w-4" />
+                  Inicializar dados ICS
+                </>
+              )}
+            </Button>
+          )}
         </CardHeader>
         {seeded !== null && (
           <CardContent>
