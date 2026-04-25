@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plus, ArrowLeft, Search, ChevronRight, Upload, FileText, Image, File, Video, Trash2, X } from "lucide-react";
+import { Loader2, Plus, ArrowLeft, Search, ChevronRight, Upload, FileText, Image, File, Video, Trash2, X, Eye, Download } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -82,6 +82,16 @@ async function deleteEvidencia(id: string): Promise<void> {
   });
 }
 
+async function fetchSignedUrl(clinicId: string, evidenciaId: string): Promise<string> {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE}/api/clinics/${clinicId}/evidencias/${evidenciaId}/signed-url`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to get signed URL");
+  const { url } = await res.json();
+  return url;
+}
+
 function getFileIcon(tipo: string | null, mimeType: string | null) {
   if (tipo === "imagem" || mimeType?.startsWith("image/")) return <Image className="h-8 w-8 text-purple-500" />;
   if (tipo === "video" || mimeType?.startsWith("video/")) return <Video className="h-8 w-8 text-blue-500" />;
@@ -122,6 +132,46 @@ export default function EvidenciasPage() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadForm, setUploadForm] = useState({ pilarSlug: "", descricao: "", responsavel: "" });
   const [isUploading, setIsUploading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
+
+  const handleViewOrDownload = async (ev: Evidencia) => {
+    if (!ev.storagePath) return;
+    setLoadingFileId(ev.id);
+    try {
+      const url = await fetchSignedUrl(clinicId!, ev.id);
+      const isImage = ev.tipo === "imagem" || ev.mimeType?.startsWith("image/");
+      if (isImage) {
+        setLightboxUrl(url);
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao obter URL do arquivo" });
+    } finally {
+      setLoadingFileId(null);
+    }
+  };
+
+  const handleDownload = async (ev: Evidencia) => {
+    if (!ev.storagePath) return;
+    setLoadingFileId(ev.id);
+    try {
+      const url = await fetchSignedUrl(clinicId!, ev.id);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = ev.nome;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao baixar arquivo" });
+    } finally {
+      setLoadingFileId(null);
+    }
+  };
 
   const { data: evidencias = [], isLoading } = useQuery({
     queryKey: ["evidencias", clinicId],
@@ -280,11 +330,51 @@ export default function EvidenciasPage() {
                     <p className="text-[10px] text-muted-foreground">
                       {format(new Date(ev.createdAt), "dd/MM/yyyy", { locale: ptBR })}
                     </p>
+                    {ev.storagePath && (
+                      <div className="flex gap-1 mt-2 border-t pt-2">
+                        <button
+                          onClick={() => handleViewOrDownload(ev)}
+                          disabled={loadingFileId === ev.id}
+                          className="flex-1 flex items-center justify-center gap-1 text-[10px] text-primary hover:bg-primary/10 rounded px-1 py-1 transition-colors disabled:opacity-50"
+                        >
+                          {loadingFileId === ev.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
+                          {ev.tipo === "imagem" || ev.mimeType?.startsWith("image/") ? "Ver" : "Abrir"}
+                        </button>
+                        <button
+                          onClick={() => handleDownload(ev)}
+                          disabled={loadingFileId === ev.id}
+                          className="flex-1 flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:bg-muted/60 rounded px-1 py-1 transition-colors disabled:opacity-50"
+                        >
+                          <Download className="h-3 w-3" />
+                          Baixar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-colors"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Prévia da evidência"
+            className="max-h-[85vh] max-w-full rounded-lg shadow-2xl object-contain"
+            onClick={e => e.stopPropagation()}
+          />
         </div>
       )}
 

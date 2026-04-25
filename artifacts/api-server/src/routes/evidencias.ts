@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, evidenciasTable } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -108,6 +108,46 @@ router.post("/clinics/:clinicId/evidencias/upload", async (req, res): Promise<vo
     .returning();
 
   res.status(201).json(mapEvidencia(row));
+});
+
+router.get("/clinics/:clinicId/evidencias/:evidenciaId/signed-url", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  const evidenciaId = Array.isArray(req.params.evidenciaId) ? req.params.evidenciaId[0] : req.params.evidenciaId;
+
+  const [ev] = await db
+    .select()
+    .from(evidenciasTable)
+    .where(and(eq(evidenciasTable.id, evidenciaId), eq(evidenciasTable.clinicId, clinicId)));
+
+  if (!ev || !ev.storagePath) {
+    res.status(404).json({ error: "Evidência not found or no file uploaded" });
+    return;
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    res.status(501).json({ error: "Supabase Storage não configurado no servidor." });
+    return;
+  }
+
+  const signRes = await fetch(`${supabaseUrl}/storage/v1/object/sign/evidencias/${ev.storagePath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ expiresIn: 3600 }),
+  });
+
+  if (!signRes.ok) {
+    res.status(500).json({ error: "Failed to generate signed URL" });
+    return;
+  }
+
+  const { signedURL } = await signRes.json() as { signedURL: string };
+  res.json({ url: `${supabaseUrl}/storage/v1${signedURL}` });
 });
 
 router.delete("/evidencias/:id", async (req, res): Promise<void> => {
