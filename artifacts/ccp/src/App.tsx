@@ -19,6 +19,7 @@ import { getStoredToken } from "@/hooks/use-auth";
 import DiagnosticoSelectPage from "@/pages/diagnostico/select";
 import DiagnosticoWizard from "@/pages/diagnostico/wizard";
 import DiagnosticoResultado from "@/pages/diagnostico/resultado";
+import DiagnosticoComparar from "@/pages/diagnostico/comparar";
 import DelegacaoPage from "@/pages/delegacao/index";
 import RiscosPage from "@/pages/riscos/index";
 import AcaoPage from "@/pages/acao/index";
@@ -161,6 +162,15 @@ function Router() {
           <AppLayout>
             <SuperAdminGuard>
               <DiagnosticoSelectPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/diagnostico/comparar">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <DiagnosticoComparar />
             </SuperAdminGuard>
           </AppLayout>
         )}
