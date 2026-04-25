@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plus, ArrowLeft, Search, ChevronRight, GitFork, X, Pencil } from "lucide-react";
+import { Loader2, Plus, ArrowLeft, Search, ChevronRight, GitFork, X, Pencil, LayoutTemplate, CheckCircle2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -36,6 +37,7 @@ import ReactFlow, {
   type Edge,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import { PROCESS_TEMPLATES, type ProcessoTemplate } from "./templates";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -197,6 +199,8 @@ export default function ProcessosPage() {
   const queryClient = useQueryClient();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<ProcessoTemplate | null>(null);
   const [editProcesso, setEditProcesso] = useState<Processo | null>(null);
   const [flowProcesso, setFlowProcesso] = useState<Processo | null>(null);
   const [form, setForm] = useState({
@@ -273,6 +277,26 @@ export default function ProcessosPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["processos", clinicId] }),
   });
 
+  const useTemplateMut = useMutation({
+    mutationFn: (tpl: ProcessoTemplate) =>
+      createProcesso(clinicId!, {
+        nome: tpl.nome,
+        descricao: tpl.descricao,
+        status: "pendente",
+        pilarSlug: tpl.pilarSlug,
+        duracaoMedia: tpl.duracaoMedia,
+        flowNodes: tpl.flowNodes,
+        flowEdges: tpl.flowEdges,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["processos", clinicId] });
+      setPreviewTemplate(null);
+      setTemplatesOpen(false);
+      toast({ title: "Processo criado a partir do template" });
+    },
+    onError: () => toast({ variant: "destructive", title: "Erro ao usar template" }),
+  });
+
   if (!clinicId) return <ClinicSelector />;
 
   return (
@@ -287,9 +311,14 @@ export default function ProcessosPage() {
             <p className="text-sm text-muted-foreground">Mapeamento de processos críticos da clínica</p>
           </div>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" /> Novo Processo
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setTemplatesOpen(true)}>
+            <LayoutTemplate className="h-4 w-4 mr-2" /> Templates
+          </Button>
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" /> Novo Processo
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -477,6 +506,112 @@ export default function ProcessosPage() {
               onSave={(nodes, edges) => updateMut.mutate({ id: flowProcesso.id, data: { flowNodes: nodes, flowEdges: edges } })}
               onClose={() => setFlowProcesso(null)}
             />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
+        <DialogContent className="sm:max-w-[680px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LayoutTemplate className="h-5 w-5 text-primary" />
+              Templates de Processos
+            </DialogTitle>
+            <DialogDescription>
+              Selecione um template para criar um processo com fluxo pré-configurado. Você poderá editar livremente após a criação.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 py-2 max-h-[60vh] overflow-y-auto pr-1">
+            {PROCESS_TEMPLATES.map(tpl => {
+              const pilar = PILARES.find(p => p.slug === tpl.pilarSlug);
+              return (
+                <div
+                  key={tpl.id}
+                  className="border rounded-xl p-4 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer group"
+                  onClick={() => setPreviewTemplate(tpl)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm">{tpl.nome}</span>
+                        {pilar && (
+                          <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
+                            {pilar.nome}
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {tpl.flowNodes.length} etapas
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{tpl.descricao}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Duração média: <span className="text-foreground font-medium">{tpl.duracaoMedia}</span>
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={e => { e.stopPropagation(); setPreviewTemplate(tpl); }}
+                    >
+                      Ver Template
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!previewTemplate} onOpenChange={open => !open && setPreviewTemplate(null)}>
+        <DialogContent className="max-w-4xl p-0">
+          {previewTemplate && (
+            <div className="flex flex-col h-full">
+              <div className="flex items-center justify-between px-5 py-4 border-b">
+                <div>
+                  <h3 className="font-semibold text-base">{previewTemplate.nome}</h3>
+                  <p className="text-sm text-muted-foreground mt-0.5">{previewTemplate.descricao}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPreviewTemplate(null)}
+                  >
+                    Voltar
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => useTemplateMut.mutate(previewTemplate)}
+                    disabled={useTemplateMut.isPending}
+                  >
+                    {useTemplateMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                    )}
+                    Usar Template
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setPreviewTemplate(null); setTemplatesOpen(false); }}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div style={{ height: 480 }}>
+                <ReactFlow
+                  nodes={previewTemplate.flowNodes}
+                  edges={previewTemplate.flowEdges}
+                  fitView
+                  nodesDraggable={false}
+                  nodesConnectable={false}
+                  elementsSelectable={false}
+                >
+                  <Background />
+                  <Controls showInteractive={false} />
+                  <MiniMap />
+                </ReactFlow>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
