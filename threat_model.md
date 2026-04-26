@@ -40,6 +40,7 @@ Production assumptions for future scans:
 
 - **Confirmed hotspots for future scans** — `routes/index.ts` public mounts, `middleware/auth.ts` token-purpose boundaries, `routes/push.ts` subscription enrollment, `routes/auth.ts` brute-force protections, `artifacts/ccp/src/sw.ts` API caching behavior, and signed-object responses that replay uploaded content types from the app origin.
 - **Validated non-issues in this scan** — `resolveAppUrl()` avoids Host-header poisoning in production by falling back to configured/default origins; private storage signed URLs are path-bound and short-lived; `autentiquePublicRouter` fails closed in production when the webhook secret is missing; HoundDog returned no findings; and the SAST-reported SQL injection high in `clinic-documents.ts` was a false positive on a log string.
+- **Validated attack patterns from this scan** — lower-privilege tokens expose offline verification material for the shared admin secret; invite links carry long-lived replayable tokens in the query string; Supabase-backed evidence/document flows need path normalization defenses before privileged storage calls; and admin-configurable integration endpoints can become a confused-deputy path for secret exfiltration.
 
 ## Threat Categories
 
