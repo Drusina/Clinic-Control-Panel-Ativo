@@ -5,8 +5,11 @@ import { sendEmailDetailed } from "../lib/email.js";
 import {
   rotateTokenSigningSecret,
   getTokenSigningSecretSource,
+  getTokenSigningSecretLastRotatedAt,
+  listTokenSigningSecretRotations,
   EnvSecretRotationError,
 } from "../lib/token-secret.js";
+import { extractToken, verifyToken } from "../middleware/auth.js";
 import { logger } from "../lib/logger.js";
 
 const ENV_KEYS: Record<ConfigKey, string> = {
@@ -146,17 +149,58 @@ async function handleTestEmail(req: import("express").Request, res: import("expr
 router.post("/admin/test-email", handleTestEmail);
 router.post("/admin/config/integrations/test-email", handleTestEmail);
 
-router.get("/admin/token-signing-secret/status", (_req, res): void => {
+router.get("/admin/token-signing-secret/status", async (_req, res): Promise<void> => {
   const source = getTokenSigningSecretSource();
+  // The `updated_at` column on the server_config row is bumped on every
+  // rotation (see token-secret.ts) and on the initial bootstrap insert,
+  // so it doubles as a "last rotated at" timestamp regardless of whether
+  // rotation was triggered manually or auto-bootstrapped on first boot.
+  const lastRotatedAt = await getTokenSigningSecretLastRotatedAt();
   res.json({
     source,
     canRotate: source === "db",
+    lastRotatedAt: lastRotatedAt ? lastRotatedAt.toISOString() : null,
   });
 });
 
-router.post("/admin/rotate-token-signing-secret", async (_req, res): Promise<void> => {
+router.get("/admin/token-signing-secret/rotations", async (_req, res): Promise<void> => {
   try {
-    await rotateTokenSigningSecret();
+    const rotations = await listTokenSigningSecretRotations(10);
+    res.json(rotations);
+  } catch (err) {
+    // Tolerate the case where the schema migration that creates
+    // `token_secret_rotations` hasn't run yet (e.g. partial deploy where the
+    // app code is live but `pnpm --filter @workspace/db push` hasn't been
+    // executed). Returning an empty list keeps the Security card usable
+    // instead of breaking the whole admin page with a 500.
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "42P01") {
+      logger.warn(
+        "token_secret_rotations table is missing — returning empty rotation history. Run `pnpm --filter @workspace/db push` to apply the schema.",
+      );
+      res.json([]);
+      return;
+    }
+    throw err;
+  }
+});
+
+router.post("/admin/rotate-token-signing-secret", async (req, res): Promise<void> => {
+  // requireSuperAdmin (mounted at the router level) already verified the
+  // caller, but it does not stash the JWT payload on the request, so
+  // re-extract it here purely to attribute the audit-log entry. The
+  // verification is cheap (HMAC) and worst case (token went invalid in the
+  // microseconds between checks) we just record a null actor.
+  const token = extractToken(req);
+  const payload = token ? verifyToken(token) : null;
+  const actor = {
+    role: typeof payload?.role === "string" ? payload.role : null,
+    email: typeof payload?.email === "string" ? payload.email : null,
+    sub: typeof payload?.sub === "string" ? payload.sub : null,
+  };
+
+  try {
+    await rotateTokenSigningSecret(actor);
     res.json({ success: true });
   } catch (err) {
     if (err instanceof EnvSecretRotationError) {

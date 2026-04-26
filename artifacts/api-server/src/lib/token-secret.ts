@@ -1,20 +1,39 @@
 import { randomBytes } from "crypto";
-import { eq } from "drizzle-orm";
-import { db, serverConfigTable } from "@workspace/db";
+import { desc, eq } from "drizzle-orm";
+import { db, serverConfigTable, tokenSecretRotationsTable } from "@workspace/db";
 import { logger } from "./logger.js";
 
 const CONFIG_KEY = "token_signing_secret";
 
 export type TokenSecretSource = "env" | "db";
 
+export interface RotationActor {
+  role?: string | null;
+  email?: string | null;
+  sub?: string | null;
+}
+
+export interface RotationLogEntry {
+  id: string;
+  rotatedAt: string;
+  actorRole: string | null;
+  actorEmail: string | null;
+  actorSub: string | null;
+}
+
 let cachedSecret: string | null = null;
 let cachedSource: TokenSecretSource | null = null;
 
-async function loadFromDb(): Promise<string | null> {
+async function loadRowFromDb(): Promise<{ value: string; updatedAt: Date } | null> {
   const [row] = await db
     .select()
     .from(serverConfigTable)
     .where(eq(serverConfigTable.key, CONFIG_KEY));
+  return row ? { value: row.value, updatedAt: row.updatedAt } : null;
+}
+
+async function loadFromDb(): Promise<string | null> {
+  const row = await loadRowFromDb();
   return row?.value ?? null;
 }
 
@@ -120,7 +139,7 @@ export class EnvSecretRotationError extends Error {
   }
 }
 
-export async function rotateTokenSigningSecret(): Promise<void> {
+export async function rotateTokenSigningSecret(actor?: RotationActor): Promise<void> {
   // Refuse rotation when the secret originated from the env var: the DB row
   // would change but `initTokenSigningSecret` would silently overwrite it on
   // the next boot, giving operators a false sense that rotation succeeded.
@@ -150,7 +169,46 @@ export async function rotateTokenSigningSecret(): Promise<void> {
   }
   cachedSecret = canonical;
   cachedSource = "db";
+
+  // Record an audit-style entry so operators can see a short history of who
+  // rotated the secret and when, directly from the admin panel. Failure to
+  // write the audit row must not undo the rotation itself, so we log and
+  // swallow the error.
+  try {
+    await db.insert(tokenSecretRotationsTable).values({
+      actorRole: actor?.role ?? null,
+      actorEmail: actor?.email ?? null,
+      actorSub: actor?.sub ?? null,
+    });
+  } catch (auditErr) {
+    logger.error(
+      { err: auditErr },
+      "Token signing secret rotated successfully but failed to write rotation audit log entry.",
+    );
+  }
+
   logger.warn(
+    { actorRole: actor?.role ?? null, actorEmail: actor?.email ?? null, actorSub: actor?.sub ?? null },
     "Token signing secret rotated. All previously issued sessions on this instance are now invalid. In multi-instance deployments, other replicas continue using the old secret in-memory until they restart or reload — restart all replicas to fully propagate.",
   );
+}
+
+export async function getTokenSigningSecretLastRotatedAt(): Promise<Date | null> {
+  const row = await loadRowFromDb();
+  return row?.updatedAt ?? null;
+}
+
+export async function listTokenSigningSecretRotations(limit = 10): Promise<RotationLogEntry[]> {
+  const rows = await db
+    .select()
+    .from(tokenSecretRotationsTable)
+    .orderBy(desc(tokenSecretRotationsTable.rotatedAt))
+    .limit(limit);
+  return rows.map((r) => ({
+    id: r.id,
+    rotatedAt: r.rotatedAt.toISOString(),
+    actorRole: r.actorRole,
+    actorEmail: r.actorEmail,
+    actorSub: r.actorSub,
+  }));
 }

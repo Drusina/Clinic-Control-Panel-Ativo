@@ -292,10 +292,41 @@ function EmailTestCard({ disabled }: { disabled: boolean }) {
 interface TokenSecretStatus {
   source: "env" | "db" | null;
   canRotate: boolean;
+  lastRotatedAt: string | null;
+}
+
+interface TokenSecretRotation {
+  id: string;
+  rotatedAt: string;
+  actorRole: string | null;
+  actorEmail: string | null;
+  actorSub: string | null;
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function describeActor(r: TokenSecretRotation): string {
+  if (r.actorEmail) return r.actorEmail;
+  if (r.actorSub && r.actorSub !== "super_admin") return r.actorSub;
+  if (r.actorRole === "super_admin") return "super-admin";
+  if (r.actorRole) return r.actorRole;
+  return "desconhecido";
 }
 
 function SecuritySection() {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const logout = useLogout();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -303,6 +334,11 @@ function SecuritySection() {
   const { data: status, isLoading: statusLoading } = useQuery<TokenSecretStatus>({
     queryKey: ["token-signing-secret-status"],
     queryFn: () => apiFetch("/api/admin/token-signing-secret/status"),
+  });
+
+  const { data: rotations = [], isLoading: rotationsLoading } = useQuery<TokenSecretRotation[]>({
+    queryKey: ["token-signing-secret-rotations"],
+    queryFn: () => apiFetch("/api/admin/token-signing-secret/rotations"),
   });
 
   const rotateMut = useMutation({
@@ -316,6 +352,12 @@ function SecuritySection() {
         title: "Chave de assinatura rotacionada",
         description: "Todas as sessões foram invalidadas. Faça login novamente.",
       });
+      // Refresh the status + history so if the operator stays on the page
+      // after re-login (or another tab is open) they immediately see the new
+      // entry. We invalidate before logout so it triggers before the auth
+      // header is dropped — the next mount will refetch with the new token.
+      qc.invalidateQueries({ queryKey: ["token-signing-secret-status"] });
+      qc.invalidateQueries({ queryKey: ["token-signing-secret-rotations"] });
       // The token we currently hold was signed by the old secret and is now
       // rejected by verifyToken. Drop it locally and bounce to the login page
       // so the operator immediately re-authenticates.
@@ -368,6 +410,24 @@ function SecuritySection() {
             </p>
           </div>
         )}
+
+        <div
+          className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
+          data-testid="token-secret-last-rotated"
+        >
+          <span className="font-medium text-foreground">Última rotação: </span>
+          {statusLoading
+            ? "carregando…"
+            : status?.lastRotatedAt
+              ? formatDateTime(status.lastRotatedAt)
+              : "—"}
+          {!statusLoading && status?.lastRotatedAt && rotations.length === 0 && (
+            <span className="ml-1 italic">
+              (gerada automaticamente no primeiro boot — ainda não houve rotação manual)
+            </span>
+          )}
+        </div>
+
         <Button
           variant="outline"
           size="sm"
@@ -379,6 +439,35 @@ function SecuritySection() {
             ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Rotacionando…</>
             : <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Rotacionar chave de sessão</>}
         </Button>
+
+        <div className="pt-1">
+          <p className="text-xs font-medium text-foreground mb-1.5">Histórico de rotações</p>
+          {rotationsLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando histórico…
+            </div>
+          ) : rotations.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Nenhuma rotação manual registrada ainda.
+            </p>
+          ) : (
+            <ul
+              className="text-xs divide-y rounded-md border bg-background"
+              data-testid="token-secret-rotation-history"
+            >
+              {rotations.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-1.5">
+                  <span className="text-muted-foreground whitespace-nowrap">
+                    {formatDateTime(r.rotatedAt)}
+                  </span>
+                  <span className="font-mono text-foreground truncate" title={describeActor(r)}>
+                    {describeActor(r)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </CardContent>
 
       <AlertDialog open={confirmOpen} onOpenChange={(o) => { if (!rotateMut.isPending) setConfirmOpen(o); }}>
