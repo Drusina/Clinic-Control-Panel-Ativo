@@ -63,12 +63,20 @@ O sistema envia e-mails transacionais via Resend (convites, delegações, alerta
 
 | Chave                  | Sensível | Fallback env             | Exemplo                                       |
 |------------------------|----------|--------------------------|-----------------------------------------------|
-| `resend_api_key`       | ✓        | `RESEND_API_KEY`         | `re_xxx...`                                   |
+| `resend_api_key`       | ✓        | `RESEND_API_KEY` → integração Replit | `re_xxx...`                         |
 | `resend_from_address`  |          | `RESEND_FROM_ADDRESS`    | `IONEX360 <noreply@clinionex.com.br>`         |
 | `reply_to_address`     |          | `REPLY_TO_ADDRESS`       | `gestor@blusolution.com.br`                   |
 | `app_url`              |          | `APP_URL`                | `https://app.clinionex.com.br`                |
 
 `sendEmail()` / `sendEmailDetailed()` (em `artifacts/api-server/src/lib/email.ts`) leem todas as chaves via `getConfig()` em runtime; o `reply_to_address` é mapeado para o campo `reply_to` do payload Resend. `resolveAppUrl(req?)` retorna, em ordem: (1) valor configurado em DB, (2) env `APP_URL`, (3) `req.protocol://req.host` quando há request, (4) default `https://app.clinionex.com.br`.
+
+### Resolução da `resend_api_key` (precedência)
+
+1. Valor salvo no banco (`server_config.resend_api_key`) — operador sobrescreve manualmente
+2. Variável de ambiente `RESEND_API_KEY` — útil para overrides em deploy
+3. Integração Replit Resend — fonte padrão hoje (gerencia rotação automática); fetched via `artifacts/api-server/src/lib/replit-connectors.ts` com cache de 60s
+
+Quando a chave vem da integração, o card no painel `/admin/configuracoes` mostra o selo verde "via integração Replit" e o botão "Alterar" fica oculto — para sobrescrever, é preciso primeiro remover/desautorizar a integração no painel do Replit ou definir `RESEND_API_KEY` no env. **Importante**: o `resend_from_address` NÃO é puxado da integração (o e-mail da conta Replit raramente é um endereço de domínio verificado no Resend); ele continua sendo definido pelo operador no painel ou cai no sandbox `onboarding@resend.dev` quando vazio.
 
 ## Verificação do domínio na Hostinger (DNS)
 
