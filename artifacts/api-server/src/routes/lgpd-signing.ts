@@ -109,8 +109,17 @@ async function getOrSeedTemplate(slug: string) {
   return tpl;
 }
 
-async function uploadPdfBytes(bytes: Uint8Array): Promise<string> {
-  const uploadUrl = await objectStorage.getObjectEntityUploadURL();
+/**
+ * Uploads a PDF to a deterministic, traceable path under the private bucket
+ * (e.g. `clinics/<id>/lgpd/originais/<termo>-v1-<ts>.pdf`) and returns the
+ * canonical `/objects/...` path for persistence.
+ *
+ * Layout (LGPD operator audit requirement):
+ *   clinics/<clinicId>/lgpd/originais/<slug>-v<versao>-<termoId>-<ts>.pdf
+ *   clinics/<clinicId>/lgpd/assinados/<slug>-<termoId>-<ts>.pdf
+ */
+async function uploadPdfToPath(bytes: Uint8Array, relativePath: string): Promise<string> {
+  const { uploadUrl, objectPath } = await objectStorage.getCustomEntityUploadURL(relativePath);
   const res = await fetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": "application/pdf" },
@@ -120,7 +129,15 @@ async function uploadPdfBytes(bytes: Uint8Array): Promise<string> {
     const txt = await res.text();
     throw new Error(`Upload PDF failed: ${res.status} ${txt}`);
   }
-  return objectStorage.normalizeObjectEntityPath(uploadUrl);
+  return objectPath;
+}
+
+function buildOriginalPath(clinicId: string, slug: string, termoId: string, versao: number): string {
+  return `clinics/${clinicId}/lgpd/originais/${slug}-v${versao}-${termoId}-${Date.now()}.pdf`;
+}
+
+function buildSignedPath(clinicId: string, slug: string, termoId: string): string {
+  return `clinics/${clinicId}/lgpd/assinados/${slug}-${termoId}-${Date.now()}.pdf`;
 }
 
 async function downloadPdfBytes(objectPath: string): Promise<Buffer> {
@@ -188,8 +205,11 @@ protectedRouter.post(
         contratante: clinic.info,
       });
 
-      // Upload original PDF to GCS
-      const originalPath = await uploadPdfBytes(bytes);
+      // Upload original PDF to traceable per-clinic path
+      const originalPath = await uploadPdfToPath(
+        bytes,
+        buildOriginalPath(clinicId, termo.slug, termoId, tpl.versao),
+      );
 
       // Token + 30-day expiry (matches the validity window communicated to the
       // signer in the request e-mail; renew via "Reemitir" if it expires).
@@ -333,6 +353,12 @@ protectedRouter.get(
 
 // ─── PUBLIC: signing flow (no auth) ───────────────────────────────────────
 
+// Strict single-use semantics: once status leaves "enviado" (signed or being
+// signed) the public endpoints stop serving the document. The signer has a
+// short window to download via the success card (which uses the signed-PDF
+// base64 returned in the submit response — no further server fetch needed).
+// Anyone who later receives a leaked link sees only "Link inválido / expirado".
+
 publicRouter.get("/assinar/info/:token", async (req, res): Promise<void> => {
   const token = req.params.token as string;
   const [termo] = await db.select().from(lgpdTermosTable).where(eq(lgpdTermosTable.signingToken, token));
@@ -345,8 +371,16 @@ publicRouter.get("/assinar/info/:token", async (req, res): Promise<void> => {
     res.status(410).json({ error: "expired", message: "Este link expirou. Solicite um novo à clínica." });
     return;
   }
+  if (termo.status !== "enviado") {
+    // Already signed (or claim in flight) — refuse to disclose any further
+    // document metadata. Single-use enforcement (Lei 14.063 best practice).
+    res.status(410).json({
+      error: "already_used",
+      message: "Este link já foi utilizado. Verifique seu e-mail para o comprovante assinado.",
+    });
+    return;
+  }
 
-  const alreadySigned = termo.status === "assinado";
   const [clinic] = await db.select().from(clinicsTable).where(eq(clinicsTable.id, termo.clinicId));
 
   res.json({
@@ -358,7 +392,7 @@ publicRouter.get("/assinar/info/:token", async (req, res): Promise<void> => {
     signatarioEmail: termo.signatarioEmail ?? "",
     signatarioCargo: termo.signatarioCargo ?? null,
     status: termo.status,
-    alreadySigned,
+    alreadySigned: false,
     expiresAt: termo.signingTokenExpiresAt?.toISOString() ?? null,
   });
 });
@@ -375,16 +409,21 @@ publicRouter.get("/assinar/pdf/:token", async (req, res): Promise<void> => {
     res.status(410).json({ error: "Link expirado" });
     return;
   }
+  if (termo.status !== "enviado") {
+    // Strict single-use: never serve PDFs through a token that has already
+    // been used to sign. The signed copy is delivered to the signer in the
+    // submit response (and emailed by the server).
+    res.status(410).json({ error: "Link já utilizado" });
+    return;
+  }
 
-  // If already signed, prefer the signed copy
-  const path = termo.signedStoragePath ?? termo.storagePath;
-  if (!path) {
+  if (!termo.storagePath) {
     res.status(404).json({ error: "PDF não disponível" });
     return;
   }
 
   try {
-    const buf = await downloadPdfBytes(path);
+    const buf = await downloadPdfBytes(termo.storagePath);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${termo.slug}.pdf"`);
     res.setHeader("Cache-Control", "private, max-age=0, no-store");
@@ -504,8 +543,11 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
       verificationCode,
     });
 
-    // Upload signed PDF
-    const signedPath = await uploadPdfBytes(signedBytes);
+    // Upload signed PDF to traceable per-clinic path
+    const signedPath = await uploadPdfToPath(
+      signedBytes,
+      buildSignedPath(termo.clinicId, termo.slug, termo.id),
+    );
 
     // Finalize: transition to "assinado" and persist all signature evidence.
     await db
@@ -577,7 +619,10 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
       success: true,
       verificationCode,
       signedAt: signedAt.toISOString(),
-      downloadToken: token, // The same token can fetch the signed PDF via /assinar/pdf/:token
+      // The signed PDF is delivered inline so the client can offer an
+      // immediate download without re-hitting the (now invalidated) public
+      // PDF endpoint. After this response the token is single-use-spent.
+      signedPdfBase64: pdfBase64,
     });
   } catch (err) {
     // Compensating rollback: any failure after the atomic claim must release the

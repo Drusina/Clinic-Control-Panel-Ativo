@@ -130,6 +130,41 @@ export class ObjectStorageService {
     });
   }
 
+  /**
+   * Generates a signed PUT URL for a deterministic object path under the
+   * configured private bucket. Use this when callers need traceable, organized
+   * storage layout (e.g. `clinics/<id>/lgpd/originais/<file>.pdf`) instead of
+   * the random-UUID path produced by getObjectEntityUploadURL().
+   *
+   * Returns both the upload URL (with a short TTL) and the canonical
+   * `/objects/<relativePath>` path that can be persisted in the DB and later
+   * resolved by getObjectEntityFile().
+   */
+  async getCustomEntityUploadURL(
+    relativePath: string,
+  ): Promise<{ uploadUrl: string; objectPath: string }> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      throw new Error(
+        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
+          "tool and set PRIVATE_OBJECT_DIR env var."
+      );
+    }
+    const trimmed = relativePath.replace(/^\/+/, "");
+    if (trimmed.length === 0 || trimmed.includes("..")) {
+      throw new Error(`Invalid object path: "${relativePath}"`);
+    }
+    const fullPath = `${privateObjectDir}/${trimmed}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const uploadUrl = await signObjectURL({
+      bucketName,
+      objectName,
+      method: "PUT",
+      ttlSec: 900,
+    });
+    return { uploadUrl, objectPath: `/objects/${trimmed}` };
+  }
+
   async getObjectEntityFile(objectPath: string): Promise<File> {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();

@@ -76,7 +76,11 @@ export default function AssinarPage() {
   const [cpf, setCpf] = useState("");
   const [accepted, setAccepted] = useState(false);
   const [confirmed, setConfirmed] = useState<{
-    verificationCode: string; signedAt: string;
+    verificationCode: string;
+    signedAt: string;
+    signedPdfBase64: string;
+    termoNome: string;
+    signatarioEmail: string;
   } | null>(null);
 
   // Auto-prefill name once info loads
@@ -100,14 +104,35 @@ export default function AssinarPage() {
         throw new Error(err?.error ?? "Falha ao registrar assinatura");
       }
       return res.json() as Promise<{
-        success: boolean; verificationCode: string; signedAt: string; downloadToken: string;
+        success: boolean; verificationCode: string; signedAt: string; signedPdfBase64: string;
       }>;
     },
     onSuccess: (data) => {
-      setConfirmed({ verificationCode: data.verificationCode, signedAt: data.signedAt });
-      refetch();
+      // Snapshot the data we need for the success card BEFORE the token is
+      // revoked server-side. We deliberately do NOT refetch /assinar/info
+      // because the public token is now single-use-spent and would 410.
+      setConfirmed({
+        verificationCode: data.verificationCode,
+        signedAt: data.signedAt,
+        signedPdfBase64: data.signedPdfBase64,
+        termoNome: info?.termoNome ?? "documento",
+        signatarioEmail: info?.signatarioEmail ?? "",
+      });
     },
   });
+
+  // Builds an inline PDF data URL from the base64 returned by the submit
+  // response. Used by the "Baixar documento assinado" button — no server
+  // round-trip needed (the token is single-use and already spent).
+  const downloadSignedPdf = (): void => {
+    if (!confirmed) return;
+    const a = document.createElement("a");
+    a.href = `data:application/pdf;base64,${confirmed.signedPdfBase64}`;
+    a.download = `${confirmed.termoNome.replace(/[^a-zA-Z0-9-_]+/g, "-").toLowerCase()}-assinado.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   const pdfUrl = token ? `${BASE}/api/assinar/pdf/${encodeURIComponent(token)}` : "";
 
@@ -141,7 +166,10 @@ export default function AssinarPage() {
     );
   }
 
-  // ─── Already signed ──────────────────────────────────────────────────────
+  // ─── Already signed (defense-in-depth) ───────────────────────────────────
+  // Server enforces single-use semantics: /assinar/info now returns 410 once
+  // the termo leaves "enviado", so this branch is normally unreachable on a
+  // fresh page load. Kept defensively to handle any in-flight transition.
 
   if (info.alreadySigned && !confirmed) {
     return (
@@ -151,16 +179,9 @@ export default function AssinarPage() {
             <CheckCircle2 className="h-12 w-12 text-emerald-600 mx-auto" />
             <h1 className="text-xl font-semibold">Documento já assinado</h1>
             <p className="text-sm text-muted-foreground">
-              Este documento foi assinado anteriormente. Você pode baixar uma cópia abaixo.
+              Este documento já foi assinado anteriormente. Verifique seu e-mail
+              para o comprovante.
             </p>
-            <Button
-              onClick={() => window.open(pdfUrl, "_blank")}
-              className="w-full"
-              data-testid="btn-download-already-signed"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Baixar documento assinado
-            </Button>
           </CardContent>
         </Card>
       </Centered>
@@ -190,7 +211,7 @@ export default function AssinarPage() {
               </div>
             </div>
             <Button
-              onClick={() => window.open(pdfUrl, "_blank")}
+              onClick={downloadSignedPdf}
               className="w-full"
               variant="default"
               data-testid="btn-download-just-signed"

@@ -26,30 +26,28 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 try {
   const { rowCount } = await pool.query(
     `INSERT INTO clinics
-       (id, nome, fantasia, cnpj, endereco, cep, responsavel, plano, status, etapa, progresso, created_at, updated_at)
+       (id, nome, fantasia, razao_social, cnpj,
+        endereco, cidade, uf, cep, responsavel, email,
+        plano, status, etapa, progresso,
+        created_at, updated_at)
      VALUES
-       ($1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        'pro',
-        'trial',
-        3,
-        20,
-        NOW(),
-        NOW())
+       ($1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10, $11,
+        'pro', 'trial', 3, 20,
+        NOW(), NOW())
      ON CONFLICT (id) DO NOTHING`,
     [
       CLINIC_ID,
       "CICATRIOXI - Clínica de Cicatrização e Tratamentos",
       "CICATRIOXI",
+      "CICATRIOXI Serviços Médicos LTDA",
       "62.471.913/0001-08",
-      "Rua das Tulipas, 450 - Centro - Sorriso/MT",
-      "78.890-000",
+      "Rua das Tulipas, 450 - Centro",
+      "Sorriso",
+      "MT",
+      "78890-000",
       "Dr. Edgar Stroppa Lamas",
+      "claudiomilenio@gmail.com",
     ],
   );
 
