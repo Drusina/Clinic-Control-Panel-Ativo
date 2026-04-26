@@ -1,5 +1,6 @@
 import webpush from "web-push";
 import { db, pushSubscriptionsTable, serverConfigTable } from "@workspace/db";
+import { teamTable } from "@workspace/db/schema";
 import { eq, or, isNull, sql, and } from "drizzle-orm";
 
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT ?? "mailto:noreply@clinionex.com.br";
@@ -81,15 +82,39 @@ async function dispatchPush(
   return { sent, failed };
 }
 
-export async function sendPushToEmail(email: string, payload: PushPayload): Promise<{ sent: number; failed: number }> {
+export async function sendPushToTeamMember(teamMemberId: string, payload: PushPayload): Promise<{ sent: number; failed: number }> {
   if (!vapidConfigured) return { sent: 0, failed: 0 };
+
+  const [member] = await db
+    .select({ temAcessoPlataforma: teamTable.temAcessoPlataforma })
+    .from(teamTable)
+    .where(eq(teamTable.id, teamMemberId))
+    .limit(1);
+
+  if (!member?.temAcessoPlataforma) return { sent: 0, failed: 0 };
 
   const subs = await db
     .select()
     .from(pushSubscriptionsTable)
-    .where(eq(pushSubscriptionsTable.email, email));
+    .where(eq(pushSubscriptionsTable.teamMemberId, teamMemberId));
 
   return dispatchPush(subs, payload);
+}
+
+export async function sendPushToEmail(email: string, payload: PushPayload): Promise<{ sent: number; failed: number }> {
+  if (!vapidConfigured) return { sent: 0, failed: 0 };
+
+  const [member] = await db
+    .select({ id: teamTable.id, temAcessoPlataforma: teamTable.temAcessoPlataforma })
+    .from(teamTable)
+    .where(eq(teamTable.email, email))
+    .limit(1);
+
+  if (member) {
+    return sendPushToTeamMember(member.id, payload);
+  }
+
+  return { sent: 0, failed: 0 };
 }
 
 export async function sendPushToClinic(clinicId: string, payload: PushPayload): Promise<{ sent: number; failed: number }> {

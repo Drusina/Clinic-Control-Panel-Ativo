@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual, randomBytes, createHash } from "crypto";
 import type { Request, Response, NextFunction } from "express";
 
 function getSigningSecret(): string | null {
@@ -14,7 +14,16 @@ function base64urlDecode(data: string): string {
 }
 
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
-const INVITE_TTL_SECONDS = 30 * 24 * 60 * 60;
+const INVITE_CODE_TTL_SECONDS = 72 * 60 * 60;
+
+export const INVITE_CODE_TTL_MS = INVITE_CODE_TTL_SECONDS * 1000;
+
+export function generateInviteCode(): { code: string; hash: string; expiresAt: Date } {
+  const code = randomBytes(32).toString("base64url");
+  const hash = createHash("sha256").update(code).digest("hex");
+  const expiresAt = new Date(Date.now() + INVITE_CODE_TTL_MS);
+  return { code, hash, expiresAt };
+}
 
 export function signToken(payload: Record<string, unknown>, ttlSeconds = SESSION_TTL_SECONDS): string {
   const signingSecret = getSigningSecret();
@@ -28,10 +37,6 @@ export function signToken(payload: Record<string, unknown>, ttlSeconds = SESSION
     .update(`${header}.${body}`)
     .digest("base64url");
   return `${header}.${body}.${sig}`;
-}
-
-export function signInviteToken(memberId: string): string {
-  return signToken({ purpose: "team_invite", memberId }, INVITE_TTL_SECONDS);
 }
 
 export function verifyToken(token: string): Record<string, unknown> | null {

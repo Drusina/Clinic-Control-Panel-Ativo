@@ -1,8 +1,9 @@
 import { Router, type IRouter, type Request } from "express";
 import { eq } from "drizzle-orm";
 import { db, teamTable } from "@workspace/db";
+import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
-import { signInviteToken } from "../middleware/auth";
+import { generateInviteCode } from "../middleware/auth";
 import { sendEmail, buildInviteEmail, buildPushSetupEmail, resolveAppUrl } from "../lib/email.js";
 
 const router: IRouter = Router();
@@ -45,13 +46,16 @@ async function dispatchSupabaseInvite(email: string): Promise<boolean> {
 export async function sendPushSetupEmail(member: typeof teamTable.$inferSelect, req?: Request): Promise<void> {
   if (!member.email) return;
   const appUrl = await resolveAppUrl(req);
-  let inviteToken: string;
-  try {
-    inviteToken = signInviteToken(member.id);
-  } catch {
-    return;
-  }
-  const activationLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}&tok=${encodeURIComponent(inviteToken)}`;
+
+  const { code, hash, expiresAt } = generateInviteCode();
+
+  await db.update(teamTable).set({
+    inviteCodeHash: hash,
+    inviteCodeExpiresAt: expiresAt,
+    inviteRedeemedAt: null,
+  }).where(eq(teamTable.id, member.id));
+
+  const activationLink = `${appUrl}/convite?code=${encodeURIComponent(code)}`;
 
   await sendEmail({
     to: member.email,
@@ -71,13 +75,18 @@ async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect, req
   }
 
   const appUrl = await resolveAppUrl(req);
-  let inviteToken: string;
+  const { code, hash, expiresAt } = generateInviteCode();
+
   try {
-    inviteToken = signInviteToken(member.id);
+    await db.update(teamTable).set({
+      inviteCodeHash: hash,
+      inviteCodeExpiresAt: expiresAt,
+    }).where(eq(teamTable.id, member.id));
   } catch {
     return "pending";
   }
-  const inviteLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}&tok=${encodeURIComponent(inviteToken)}`;
+
+  const inviteLink = `${appUrl}/convite?code=${encodeURIComponent(code)}`;
 
   const sent = await sendEmail({
     to: member.email,
@@ -189,6 +198,9 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
   } else if (d.temAcessoPlataforma === false && existing.temAcessoPlataforma) {
     updates.inviteStatus = null;
     updates.inviteRedeemedAt = null;
+    updates.inviteCodeHash = null;
+    updates.inviteCodeExpiresAt = null;
+    await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.teamMemberId, id));
   }
 
   const [member] = await db.update(teamTable).set(updates).where(eq(teamTable.id, id)).returning();

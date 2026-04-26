@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import type { Request } from "express";
+import { createHash } from "crypto";
 import { signToken, verifyToken, extractToken } from "../middleware/auth";
 import { db } from "@workspace/db";
 import { teamTable } from "@workspace/db/schema";
@@ -55,31 +56,28 @@ router.post("/auth/login", (req, res): void => {
 
 router.post("/auth/convite", async (req, res): Promise<void> => {
   res.setHeader("Cache-Control", "no-store");
-  const { memberId, inviteToken } = req.body as { memberId?: string; inviteToken?: string };
+  const { code } = req.body as { code?: string };
 
-  if (!memberId || !inviteToken) {
-    res.status(400).json({ error: "memberId e inviteToken são obrigatórios" });
+  if (!code) {
+    res.status(400).json({ error: "code é obrigatório" });
     return;
   }
 
-  const tokenPayload = verifyToken(inviteToken);
-  if (
-    !tokenPayload ||
-    tokenPayload.purpose !== "team_invite" ||
-    tokenPayload.memberId !== memberId
-  ) {
-    res.status(401).json({ error: "Token de convite inválido ou expirado" });
-    return;
-  }
+  const codeHash = createHash("sha256").update(code).digest("hex");
 
   const [member] = await db
     .select()
     .from(teamTable)
-    .where(eq(teamTable.id, memberId))
+    .where(eq(teamTable.inviteCodeHash, codeHash))
     .limit(1);
 
   if (!member) {
-    res.status(404).json({ error: "Membro não encontrado" });
+    res.status(401).json({ error: "Token de convite inválido ou expirado" });
+    return;
+  }
+
+  if (!member.inviteCodeExpiresAt || member.inviteCodeExpiresAt < new Date()) {
+    res.status(401).json({ error: "Token de convite inválido ou expirado" });
     return;
   }
 
@@ -96,7 +94,12 @@ router.post("/auth/convite", async (req, res): Promise<void> => {
   const now = new Date();
   const redeemed = await db
     .update(teamTable)
-    .set({ lastAccessAt: now, inviteRedeemedAt: now })
+    .set({
+      lastAccessAt: now,
+      inviteRedeemedAt: now,
+      inviteCodeHash: null,
+      inviteCodeExpiresAt: null,
+    })
     .where(and(eq(teamTable.id, member.id), isNull(teamTable.inviteRedeemedAt)))
     .returning({ id: teamTable.id });
 

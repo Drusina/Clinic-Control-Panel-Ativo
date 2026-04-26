@@ -119,35 +119,33 @@ function PushSubscriptionCard({ clinicId }: { clinicId: string }) {
 
 export default function ConvitePage() {
   const switchSession = useSwitchSession();
-  const [memberId, setMemberId] = useState<string | null>(null);
   const [memberInfo, setMemberInfo] = useState<MemberInfo | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "no_access">("loading");
   const [errorMessage, setErrorMessage] = useState<string>("");
 
-  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const ref = params.get("ref");
-    const tok = params.get("tok");
-    if (!ref || !tok) {
+    const code = params.get("code");
+    history.replaceState(null, "", window.location.pathname);
+    if (!code) {
       setStatus("error");
       setErrorMessage("Link de convite inválido ou incompleto. Verifique o e-mail de convite e tente novamente.");
       return;
     }
-    setMemberId(ref);
-    setInviteToken(tok);
+    setInviteCode(code);
   }, []);
 
   useEffect(() => {
-    if (!memberId || !inviteToken) return;
+    if (!inviteCode) return;
 
     async function authenticate() {
       try {
         const res = await fetch(`${BASE}/api/auth/convite`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ memberId, inviteToken }),
+          body: JSON.stringify({ code: inviteCode }),
         });
 
         if (res.status === 403) {
@@ -191,7 +189,6 @@ export default function ConvitePage() {
           clinicId: data.clinicId,
           teamMemberId: data.teamMemberId,
         });
-        history.replaceState(null, "", window.location.pathname);
         setStatus("ready");
       } catch {
         setStatus("error");
@@ -200,7 +197,7 @@ export default function ConvitePage() {
     }
 
     authenticate();
-  }, [memberId, inviteToken]);
+  }, [inviteCode]);
 
   if (status === "loading") {
     return (

@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { db, pushSubscriptionsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -10,6 +10,30 @@ import { sendPushSetupEmail } from "./team.js";
 const router: IRouter = Router();
 
 type AuthedRequest = Request & { user: Record<string, unknown> };
+
+async function requireActiveTeamMember(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const authedReq = req as AuthedRequest;
+  const role = String(authedReq.user?.role ?? "");
+  if (role !== "team_member") {
+    next();
+    return;
+  }
+  const teamMemberId = authedReq.user?.teamMemberId as string | null | undefined;
+  if (!teamMemberId) {
+    res.status(403).json({ error: "Token de membro inválido" });
+    return;
+  }
+  const [member] = await db
+    .select({ id: teamTable.id, temAcessoPlataforma: teamTable.temAcessoPlataforma })
+    .from(teamTable)
+    .where(eq(teamTable.id, teamMemberId))
+    .limit(1);
+  if (!member || !member.temAcessoPlataforma) {
+    res.status(403).json({ error: "Acesso revogado. Solicite um novo convite ao responsável da sua clínica." });
+    return;
+  }
+  next();
+}
 
 const SubscribeBody = z.object({
   clinicId: z.string().uuid().optional(),
@@ -23,7 +47,7 @@ const SubscribeBody = z.object({
   }),
 });
 
-router.get("/push/vapid-public-key", requireAuth, (_req, res): void => {
+router.get("/push/vapid-public-key", requireAuth, requireActiveTeamMember, (_req, res): void => {
   const key = getVapidPublicKey();
   if (!key) {
     res.status(503).json({ error: "Push not configured" });
@@ -32,7 +56,7 @@ router.get("/push/vapid-public-key", requireAuth, (_req, res): void => {
   res.json({ publicKey: key });
 });
 
-router.post("/push/subscribe", requireAuth, async (req, res): Promise<void> => {
+router.post("/push/subscribe", requireAuth, requireActiveTeamMember, async (req, res): Promise<void> => {
   if (!isPushConfigured()) {
     res.status(503).json({ error: "Push not configured" });
     return;
@@ -92,10 +116,16 @@ router.post("/push/subscribe", requireAuth, async (req, res): Promise<void> => {
     teamMemberId = teamMember[0]?.id ?? null;
   }
 
-  const existingForUser = await db
-    .select()
-    .from(pushSubscriptionsTable)
-    .where(eq(pushSubscriptionsTable.email, userKey));
+  if (userRole === "team_member" && !teamMemberId) {
+    res.status(403).json({ error: "Membro de equipe não encontrado" });
+    return;
+  }
+
+  const existingQuery = teamMemberId
+    ? db.select().from(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.teamMemberId, teamMemberId))
+    : db.select().from(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.email, userKey));
+
+  const existingForUser = await existingQuery;
 
   const alreadyExists = existingForUser.some(
     (row) => (row.subscription as { endpoint: string }).endpoint === subscription.endpoint
@@ -116,8 +146,11 @@ router.post("/push/subscribe", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json({ ok: true, created: true });
 });
 
-router.delete("/push/subscribe", requireAuth, async (req, res): Promise<void> => {
-  const userKey = String((req as AuthedRequest).user.sub ?? "unknown");
+router.delete("/push/subscribe", requireAuth, requireActiveTeamMember, async (req, res): Promise<void> => {
+  const authedReq = req as AuthedRequest;
+  const userKey = String(authedReq.user.sub ?? "unknown");
+  const userRole = String(authedReq.user.role ?? "");
+  const teamMemberId = authedReq.user.teamMemberId as string | null | undefined;
   const { endpoint } = req.body as { endpoint?: string };
 
   if (!endpoint) {
@@ -125,26 +158,23 @@ router.delete("/push/subscribe", requireAuth, async (req, res): Promise<void> =>
     return;
   }
 
-  const allForUser = await db
-    .select()
-    .from(pushSubscriptionsTable)
-    .where(eq(pushSubscriptionsTable.email, userKey));
+  const allForUser = teamMemberId
+    ? await db.select().from(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.teamMemberId, teamMemberId))
+    : await db.select().from(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.email, userKey));
 
   for (const row of allForUser) {
     if ((row.subscription as { endpoint: string }).endpoint === endpoint) {
-      await db.delete(pushSubscriptionsTable).where(
-        and(
-          eq(pushSubscriptionsTable.id, row.id),
-          eq(pushSubscriptionsTable.email, userKey)
-        )
-      );
+      const whereClause = teamMemberId && userRole === "team_member"
+        ? and(eq(pushSubscriptionsTable.id, row.id), eq(pushSubscriptionsTable.teamMemberId, teamMemberId))
+        : and(eq(pushSubscriptionsTable.id, row.id), eq(pushSubscriptionsTable.email, userKey));
+      await db.delete(pushSubscriptionsTable).where(whereClause);
     }
   }
 
   res.json({ ok: true });
 });
 
-router.post("/push/resend-setup-email", requireAuth, async (req, res): Promise<void> => {
+router.post("/push/resend-setup-email", requireAuth, requireActiveTeamMember, async (req, res): Promise<void> => {
   const authedReq = req as AuthedRequest;
   const teamMemberId = authedReq.user.teamMemberId as string | undefined;
 
