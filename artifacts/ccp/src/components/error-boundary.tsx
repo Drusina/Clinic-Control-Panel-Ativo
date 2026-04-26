@@ -12,7 +12,21 @@ interface State {
   error: Error | null;
 }
 
+function isTransientDomMismatchError(error: Error): boolean {
+  const msg = (error?.message ?? "").toLowerCase();
+  return (
+    msg.includes("removechild") ||
+    msg.includes("insertbefore") ||
+    msg.includes("the node to be removed is not a child") ||
+    msg.includes("não é filho deste nó") ||
+    msg.includes("nao e filho deste no")
+  );
+}
+
 export class ErrorBoundary extends Component<Props, State> {
+  private autoRecoveryAttempted = false;
+  private autoRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -24,9 +38,31 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
     console.error("[ErrorBoundary] Uncaught error:", error, info.componentStack);
+
+    if (isTransientDomMismatchError(error) && !this.autoRecoveryAttempted) {
+      this.autoRecoveryAttempted = true;
+      this.autoRecoveryTimer = setTimeout(() => {
+        this.autoRecoveryTimer = null;
+        this.setState({ hasError: false, error: null });
+      }, 0);
+    }
+  }
+
+  componentDidUpdate(_prevProps: Props, prevState: State) {
+    if (prevState.hasError && !this.state.hasError) {
+      this.autoRecoveryAttempted = false;
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.autoRecoveryTimer !== null) {
+      clearTimeout(this.autoRecoveryTimer);
+      this.autoRecoveryTimer = null;
+    }
   }
 
   handleReset = () => {
+    this.autoRecoveryAttempted = false;
     this.setState({ hasError: false, error: null });
   };
 

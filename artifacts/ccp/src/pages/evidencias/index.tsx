@@ -163,9 +163,7 @@ export default function EvidenciasPage() {
       a.download = ev.nome;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
-      document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
     } catch {
       toast({ variant: "destructive", title: "Erro ao baixar arquivo" });
     } finally {
