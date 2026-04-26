@@ -15,12 +15,15 @@ import {
   ChevronRight,
   Trash2,
   Plus,
+  X,
+  ArrowRight,
 } from "lucide-react";
 import {
   useDocsConstitutivos,
   useAddDocConstitutivoFile,
   useDeleteDocConstitutivoFile,
   getSignedFileUrl,
+  getSignedUrl,
   type DocConstitutivoData,
   type DocConstitutivoFileData,
 } from "@/hooks/use-kickoff-api";
@@ -34,6 +37,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Props { clinicId: string }
 
@@ -43,6 +52,10 @@ function formatSize(bytes?: number | null) {
   if (!bytes) return null;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function isLegacyId(id: string): boolean {
+  return id.startsWith("legacy-");
 }
 
 function FileLine({
@@ -56,12 +69,16 @@ function FileLine({
   docId: string;
   onDelete: (fileId: string) => void;
 }) {
+  const legacy = isLegacyId(file.id);
+
   async function view() {
     try {
-      const url = await getSignedFileUrl(clinicId, docId, file.id);
+      const url = legacy
+        ? await getSignedUrl(clinicId, docId)
+        : await getSignedFileUrl(clinicId, docId, file.id);
       window.open(url, "_blank");
-    } catch {
-      alert("Erro ao obter URL do arquivo");
+    } catch (e) {
+      alert(`Erro ao abrir arquivo: ${(e as Error).message}`);
     }
   }
 
@@ -78,15 +95,17 @@ function FileLine({
       <Button size="sm" variant="ghost" onClick={view} data-testid={`view-file-${file.id}`}>
         <Eye className="h-3.5 w-3.5" />
       </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="text-destructive hover:text-destructive"
-        onClick={() => onDelete(file.id)}
-        data-testid={`delete-file-${file.id}`}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
+      {!legacy && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-destructive hover:text-destructive"
+          onClick={() => onDelete(file.id)}
+          data-testid={`delete-file-${file.id}`}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      )}
     </div>
   );
 }
@@ -97,12 +116,14 @@ function DocSlot({
   isUploading,
   onUpload,
   onDelete,
+  onAssignLoose,
 }: {
   doc: DocConstitutivoData;
   clinicId: string;
   isUploading: boolean;
   onUpload: (docId: string, file: File) => void;
   onDelete: (docId: string, fileId: string) => void;
+  onAssignLoose: (looseId: string, docId: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -126,6 +147,15 @@ function DocSlot({
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
+
+    // Did we receive a "soltos" buffer item being moved into this slot?
+    const looseId = e.dataTransfer.getData("application/x-loose-file-id");
+    if (looseId) {
+      onAssignLoose(looseId, doc.id);
+      setExpanded(true);
+      return;
+    }
+
     const files = Array.from(e.dataTransfer.files).filter(
       (f) => f.type === "application/pdf" || f.name.endsWith(".pdf")
     );
@@ -269,6 +299,93 @@ function DropZone({ onFiles }: { onFiles: (files: File[]) => void }) {
   );
 }
 
+interface LooseFile {
+  id: string;
+  file: File;
+}
+
+function LooseFilesPanel({
+  loose,
+  docs,
+  onAssign,
+  onRemove,
+}: {
+  loose: LooseFile[];
+  docs: DocConstitutivoData[];
+  onAssign: (looseId: string, docId: string) => void;
+  onRemove: (looseId: string) => void;
+}) {
+  if (loose.length === 0) return null;
+
+  return (
+    <Card className="border-amber-300 bg-amber-50/40">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2 text-amber-900">
+          <FileText className="h-4 w-4" />
+          Arquivos sem associação ({loose.length})
+        </CardTitle>
+        <p className="text-xs text-amber-800">
+          Arraste cada arquivo até o documento correto, ou escolha pelo menu.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {loose.map((lf) => (
+          <div
+            key={lf.id}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData("application/x-loose-file-id", lf.id);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            className="flex items-center gap-2 py-2 px-3 bg-white border border-amber-200 rounded text-sm cursor-grab active:cursor-grabbing"
+            data-testid={`loose-file-${lf.id}`}
+          >
+            <FileText className="h-4 w-4 text-amber-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="truncate font-medium" title={lf.file.name}>{lf.file.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {formatSize(lf.file.size)}
+              </p>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" data-testid={`assign-loose-${lf.id}`}>
+                  <ArrowRight className="h-3.5 w-3.5 mr-1" /> Associar a…
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-72 overflow-auto">
+                {docs.map((d) => (
+                  <DropdownMenuItem key={d.id} onClick={() => onAssign(lf.id, d.id)}>
+                    {d.nome}
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({d.categoria})
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground"
+              onClick={() => onRemove(lf.id)}
+              data-testid={`remove-loose-${lf.id}`}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+let looseIdSeq = 0;
+function nextLooseId(): string {
+  looseIdSeq++;
+  return `loose-${Date.now()}-${looseIdSeq}`;
+}
+
 export default function DocumentosConstitutivoTab({ clinicId }: Props) {
   const { toast } = useToast();
   const { data: docs = [], isLoading } = useDocsConstitutivos(clinicId);
@@ -276,14 +393,25 @@ export default function DocumentosConstitutivoTab({ clinicId }: Props) {
   const deleteFile = useDeleteDocConstitutivoFile(clinicId);
   const [uploading, setUploading] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<{ docId: string; fileId: string } | null>(null);
+  const [looseFiles, setLooseFiles] = useState<LooseFile[]>([]);
 
-  function handleUpload(docId: string, file: File) {
+  function handleUpload(
+    docId: string,
+    file: File,
+    callbacks?: { onSuccess?: () => void; onError?: () => void },
+  ) {
     setUploading(s => new Set(s).add(docId));
     addFile.mutate(
       { docId, file },
       {
-        onSuccess: () => toast({ title: "Arquivo adicionado" }),
-        onError: (e) => toast({ variant: "destructive", title: "Erro no upload", description: (e as Error).message }),
+        onSuccess: () => {
+          toast({ title: "Arquivo adicionado" });
+          callbacks?.onSuccess?.();
+        },
+        onError: (e) => {
+          toast({ variant: "destructive", title: "Erro no upload", description: (e as Error).message });
+          callbacks?.onError?.();
+        },
         onSettled: () => setUploading(s => { const n = new Set(s); n.delete(docId); return n; }),
       }
     );
@@ -302,10 +430,25 @@ export default function DocumentosConstitutivoTab({ clinicId }: Props) {
     setPendingDelete(null);
   }
 
+  function assignLooseFile(looseId: string, docId: string) {
+    const lf = looseFiles.find((x) => x.id === looseId);
+    if (!lf) return;
+    // Only remove from the loose buffer once the upload succeeds. On failure,
+    // the file stays so the user can retry without re-selecting it.
+    handleUpload(docId, lf.file, {
+      onSuccess: () => setLooseFiles((arr) => arr.filter((x) => x.id !== looseId)),
+    });
+  }
+
+  function removeLoose(looseId: string) {
+    setLooseFiles((arr) => arr.filter((x) => x.id !== looseId));
+  }
+
   function handleBatchUpload(files: File[]) {
     const empty = docs.filter((d) => (d.files?.length ?? 0) === 0);
     const used = new Set<string>();
-    let matchedCount = 0;
+    const matched: Array<{ docId: string; file: File }> = [];
+    const unmatched: File[] = [];
 
     for (const file of files) {
       const name = file.name.toLowerCase().replace(/[-_]/g, " ").replace(".pdf", "");
@@ -317,17 +460,30 @@ export default function DocumentosConstitutivoTab({ clinicId }: Props) {
       );
       if (doc) {
         used.add(doc.id);
-        handleUpload(doc.id, file);
-        matchedCount++;
+        matched.push({ docId: doc.id, file });
+      } else {
+        unmatched.push(file);
       }
     }
 
-    if (matchedCount > 0) {
-      toast({ title: `${matchedCount} arquivo(s) associados e enviados` });
+    matched.forEach(({ docId, file }) => handleUpload(docId, file));
+
+    if (unmatched.length > 0) {
+      const newLoose = unmatched.map((f) => ({ id: nextLooseId(), file: f }));
+      setLooseFiles((arr) => [...arr, ...newLoose]);
+    }
+
+    if (matched.length > 0 && unmatched.length === 0) {
+      toast({ title: `${matched.length} arquivo(s) associados e enviados` });
+    } else if (matched.length > 0 && unmatched.length > 0) {
+      toast({
+        title: `${matched.length} associados, ${unmatched.length} sem associação`,
+        description: "Arraste os arquivos restantes para o documento correto.",
+      });
     } else {
       toast({
-        title: `${files.length} arquivo(s) carregados`,
-        description: "Use 'Adicionar arquivo' em cada documento para associar manualmente.",
+        title: `${unmatched.length} arquivo(s) sem associação`,
+        description: "Arraste cada arquivo para o documento correto.",
       });
     }
   }
@@ -369,6 +525,13 @@ export default function DocumentosConstitutivoTab({ clinicId }: Props) {
         </CardContent>
       </Card>
 
+      <LooseFilesPanel
+        loose={looseFiles}
+        docs={docs}
+        onAssign={assignLooseFile}
+        onRemove={removeLoose}
+      />
+
       {CATEGORIES.map(cat => {
         const catDocs = docs.filter(d => d.categoria === cat);
         if (catDocs.length === 0) return null;
@@ -391,6 +554,7 @@ export default function DocumentosConstitutivoTab({ clinicId }: Props) {
                   isUploading={uploading.has(doc.id)}
                   onUpload={handleUpload}
                   onDelete={handleDeleteRequest}
+                  onAssignLoose={assignLooseFile}
                 />
               ))}
             </CardContent>

@@ -30,22 +30,35 @@ function mapFile(f: typeof docsConstitutivoFilesTable.$inferSelect): DocFileMapp
 }
 
 function mapDoc(d: typeof docsConstitutivoTable.$inferSelect, files: DocFileMapped[]) {
-  const latest = files.length > 0 ? files[files.length - 1] : null;
-  // Backward-compat: if no migrated child rows, fall back to legacy single-file columns
-  const fallbackPath = files.length === 0 ? d.storagePath ?? null : null;
-  const fallbackSize = files.length === 0 ? d.tamanho ?? null : null;
-  const fallbackDate =
-    files.length === 0 ? d.enviadoEm?.toISOString() ?? null : null;
+  // Backward-compat: if no migrated child rows but legacy storage_path exists,
+  // synthesize a virtual file entry so all consumers (UI progress, PDFs, etc.)
+  // see this doc as "sent". Use a sentinel id prefixed with "legacy-" so the
+  // delete/signed-url-by-id endpoints know to handle it specially if invoked.
+  let effectiveFiles = files;
+  if (files.length === 0 && d.storagePath) {
+    effectiveFiles = [
+      {
+        id: `legacy-${d.id}`,
+        fileName: d.nome,
+        storagePath: d.storagePath,
+        tamanho: d.tamanho ?? null,
+        sequenceNumber: 1,
+        enviadoEm: d.enviadoEm?.toISOString() ?? d.createdAt.toISOString(),
+      },
+    ];
+  }
+  const latest =
+    effectiveFiles.length > 0 ? effectiveFiles[effectiveFiles.length - 1] : null;
   return {
     id: d.id,
     clinicId: d.clinicId,
     categoria: d.categoria,
     nome: d.nome,
     obrigatorio: d.obrigatorio ?? false,
-    files,
-    storagePath: latest?.storagePath ?? fallbackPath,
-    tamanho: latest?.tamanho ?? fallbackSize,
-    enviadoEm: latest?.enviadoEm ?? fallbackDate,
+    files: effectiveFiles,
+    storagePath: latest?.storagePath ?? null,
+    tamanho: latest?.tamanho ?? null,
+    enviadoEm: latest?.enviadoEm ?? null,
     createdAt: d.createdAt.toISOString(),
   };
 }
@@ -375,7 +388,8 @@ router.get(
   },
 );
 
-// Legacy signed-url endpoint — now returns the URL of the latest file
+// Legacy signed-url endpoint — returns the URL of the latest file, or falls
+// back to the legacy single-file columns if no child rows exist yet.
 router.get("/clinics/:clinicId/docs-constitutivos/:docId/signed-url", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   const docId = Array.isArray(req.params.docId) ? req.params.docId[0] : req.params.docId;
@@ -397,20 +411,22 @@ router.get("/clinics/:clinicId/docs-constitutivos/:docId/signed-url", async (req
     .orderBy(desc(docsConstitutivoFilesTable.sequenceNumber))
     .limit(1);
 
-  if (!file) {
+  const storagePath = file?.storagePath ?? doc.storagePath ?? null;
+
+  if (!storagePath) {
     res.status(404).json({ error: "Documento sem arquivos enviados" });
     return;
   }
 
-  if (!file.storagePath.startsWith("/objects/")) {
+  if (!storagePath.startsWith("/objects/")) {
     res.status(410).json({ error: "Arquivo armazenado em local legado. Reenvie." });
     return;
   }
 
-  const wildcardPath = file.storagePath.slice("/objects/".length);
+  const wildcardPath = storagePath.slice("/objects/".length);
   try {
     const sigToken = signToken(
-      { purpose: "signed_object_url", path: file.storagePath },
+      { purpose: "signed_object_url", path: storagePath },
       SIGNED_URL_TTL_SECONDS,
     );
     const url = `/api/storage/objects/${wildcardPath}?sig=${encodeURIComponent(sigToken)}`;
