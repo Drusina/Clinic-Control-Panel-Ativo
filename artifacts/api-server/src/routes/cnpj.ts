@@ -3,7 +3,7 @@ import { Router, type IRouter } from "express";
 const router: IRouter = Router();
 
 router.get("/cnpj/:cnpj", async (req, res): Promise<void> => {
-  const cnpj = (Array.isArray(req.params.cnpj) ? req.params.cnpj[0] : req.params.cnpj).replace(/\D/g, "");
+  const cnpj = req.params.cnpj.replace(/\D/g, "");
 
   if (cnpj.length !== 14) {
     res.status(400).json({ error: "CNPJ deve ter 14 dígitos" });
