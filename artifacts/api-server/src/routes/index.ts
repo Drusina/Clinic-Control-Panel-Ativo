@@ -80,7 +80,5 @@ router.use(requireSuperAdmin, icsTemplatesRouter);
 router.use(requireSuperAdmin, serverConfigRouter);
 router.use(requireSuperAdmin, documentAccessLogRouter);
 router.use(requireSuperAdmin, cnpjRouter);
-router.use(requireSuperAdmin, documentCategoriesRouter);
-router.use(requireSuperAdmin, clinicDocumentsRouter);
 
 export default router;

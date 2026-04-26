@@ -130,8 +130,21 @@ function uploadSingleWithErrorHandler(req: Request, res: Response, next: NextFun
   });
 }
 
+// The legacy endpoint POST /api/clinics/:id/documents?type=proposta|contrato
+// (proposal/contract attachments in clinics.ts) shares the same path. When
+// the request carries those query parameters, defer to the next router.
+function skipIfLegacyAttachment(req: Request, _res: Response, next: NextFunction): void {
+  const t = typeof req.query.type === "string" ? req.query.type : "";
+  if (t === "proposta" || t === "contrato") {
+    next("router");
+    return;
+  }
+  next();
+}
+
 router.post(
   "/clinics/:clinicId/documents",
+  skipIfLegacyAttachment,
   uploadSingleWithErrorHandler,
   async (req: Request, res): Promise<void> => {
     const clinicId = Array.isArray(req.params.clinicId)
