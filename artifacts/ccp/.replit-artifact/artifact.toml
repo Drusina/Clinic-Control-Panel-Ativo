@@ -3,7 +3,6 @@ previewPath = "/"
 title = "CCP IONEX — Clinic Control Panel"
 version = "1.0.0"
 id = "artifacts/ccp"
-router = "path"
 
 [[integratedSkills]]
 name = "react-vite"
@@ -18,14 +17,17 @@ localPort = 22570
 run = "pnpm --filter @workspace/ccp run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/ccp", "run", "build" ]
-publicDir = "artifacts/ccp/dist/public"
 serve = "static"
+publicDir = "artifacts/ccp/dist/public"
+
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/ccp", "run", "build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+PORT = "22570"
+BASE_PATH = "/"
 
 [[services.production.rewrites]]
 from = "/*"
 to = "/index.html"
-
-[services.env]
-PORT = "22570"
-BASE_PATH = "/"
