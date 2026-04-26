@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { getStoredToken } from "@/hooks/use-auth";
 import { ArrowLeft, Loader2, Search, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -115,6 +116,8 @@ interface BrasilAPIResponse {
   qsa?: QSAPartner[];
 }
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 export default function NewClinic() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -169,7 +172,10 @@ export default function NewClinic() {
     setLookupError(null);
 
     try {
-      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`);
+      const token = getStoredToken();
+      const response = await fetch(`${BASE}/api/cnpj/${digits}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!response.ok) {
         if (response.status === 404) {
           setLookupError("CNPJ não encontrado na Receita Federal.");
