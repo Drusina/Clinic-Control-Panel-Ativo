@@ -2,20 +2,10 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { initVapid, isPushConfigured } from "./lib/push.js";
 import { startScheduler, stopScheduler } from "./lib/scheduler.js";
+import { initTokenSigningSecret } from "./lib/token-secret.js";
 
 if (!process.env.SUPER_ADMIN_SECRET) {
   throw new Error("SUPER_ADMIN_SECRET is required but not set. Configure it before starting the server.");
-}
-
-if (!process.env.TOKEN_SIGNING_SECRET) {
-  throw new Error("TOKEN_SIGNING_SECRET is required but not set. Configure it as a secure secret before starting the server.");
-}
-
-if (process.env.SUPER_ADMIN_SECRET === process.env.TOKEN_SIGNING_SECRET) {
-  throw new Error(
-    "TOKEN_SIGNING_SECRET must be different from SUPER_ADMIN_SECRET. " +
-    "Using the same value for both defeats privilege separation between the admin login credential and the token signing key."
-  );
 }
 
 const rawPort = process.env["PORT"];
@@ -41,24 +31,44 @@ async function shutdown(signal: string): Promise<void> {
 process.on("SIGTERM", () => { shutdown("SIGTERM"); });
 process.on("SIGINT", () => { shutdown("SIGINT"); });
 
-app.listen(port, async (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
+async function main(): Promise<void> {
+  // Bootstrap the JWT signing secret BEFORE accepting any HTTP traffic. If
+  // this fails (e.g. DB unreachable) we exit and let the orchestrator restart
+  // us — never serve requests with broken auth.
+  try {
+    await initTokenSigningSecret();
+  } catch (e) {
+    logger.error(
+      { err: e },
+      "Fatal: failed to initialize token signing secret — exiting so the process is restarted",
+    );
     process.exit(1);
   }
 
-  logger.info({ port }, "Server listening");
+  app.listen(port, async (err) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
 
-  await initVapid().catch((e) => logger.error({ err: e }, "VAPID init failed"));
-  if (isPushConfigured()) {
-    logger.info("VAPID push notifications initialized");
-  } else {
-    logger.warn("VAPID push notifications not configured — push will be disabled");
-  }
+    logger.info({ port }, "Server listening");
 
-  try {
-    await startScheduler();
-  } catch (e) {
-    logger.error({ err: e }, "Job scheduler failed to start — scheduled digests will not run");
-  }
+    await initVapid().catch((e) => logger.error({ err: e }, "VAPID init failed"));
+    if (isPushConfigured()) {
+      logger.info("VAPID push notifications initialized");
+    } else {
+      logger.warn("VAPID push notifications not configured — push will be disabled");
+    }
+
+    try {
+      await startScheduler();
+    } catch (e) {
+      logger.error({ err: e }, "Job scheduler failed to start — scheduled digests will not run");
+    }
+  });
+}
+
+main().catch((e) => {
+  logger.error({ err: e }, "Unhandled error during startup");
+  process.exit(1);
 });

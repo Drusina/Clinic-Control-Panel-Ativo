@@ -10,11 +10,33 @@
  */
 
 import { createHmac } from "crypto";
+import pg from "pg";
 
 const BASE_URL = process.env.API_URL ?? "http://localhost:8080";
-const TOKEN_SIGNING_SECRET = process.env.TOKEN_SIGNING_SECRET;
 const SUPER_ADMIN_SECRET = process.env.SUPER_ADMIN_SECRET;
 const TEST_PATH = "/api/storage/objects/__auth_test_nonexistent__.pdf";
+
+let TOKEN_SIGNING_SECRET = null;
+
+async function loadTokenSigningSecret() {
+  // Prefer a usable env var (set + different from the admin secret); otherwise
+  // read the value the api-server persisted in server_config on first boot.
+  const envValue = process.env.TOKEN_SIGNING_SECRET ?? "";
+  if (envValue.length > 0 && envValue !== (SUPER_ADMIN_SECRET ?? "")) {
+    return envValue;
+  }
+  if (!process.env.DATABASE_URL) return null;
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    const { rows } = await pool.query(
+      "SELECT value FROM server_config WHERE key = $1 LIMIT 1",
+      ["token_signing_secret"],
+    );
+    return rows[0]?.value ?? null;
+  } finally {
+    await pool.end();
+  }
+}
 
 let passed = 0;
 let failed = 0;
@@ -56,8 +78,11 @@ async function main() {
     process.exit(1);
   }
 
+  TOKEN_SIGNING_SECRET = await loadTokenSigningSecret();
   if (!TOKEN_SIGNING_SECRET) {
-    console.error("TOKEN_SIGNING_SECRET env var is not set — cannot run auth tests");
+    console.error(
+      "Token signing secret not available (env var unset/equal to admin and no value in server_config). Start the api-server once so it can bootstrap the secret.",
+    );
     process.exit(1);
   }
 

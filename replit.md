@@ -32,7 +32,7 @@ The project is structured as a pnpm workspace monorepo, utilizing Node.js 24 and
     - **Email:** Branded dark-theme HTML templates for various notifications (invite, delegation, document expiry) using Resend.
     - **WhatsApp:** Helper for pre-approved template messages via Meta Cloud API, with graceful fallback to email.
     - **Web Push:** Uses `web-push` npm package, VAPID keys stored in the DB, and a unified service worker for browser push notifications.
-- **Authentication:** `SuperAdminGuard` protects sensitive routes, and API endpoints require `requireAuth` middleware, deriving subscriber identity from JWT `sub` claims for push notifications.
+- **Authentication:** `SuperAdminGuard` protects sensitive routes, and API endpoints require `requireAuth` middleware, deriving subscriber identity from JWT `sub` claims for push notifications. The HS256 signing key is auto-bootstrapped on first boot: `initTokenSigningSecret()` (em `artifacts/api-server/src/lib/token-secret.ts`) prefere `TOKEN_SIGNING_SECRET` apenas quando definido **e diferente** de `SUPER_ADMIN_SECRET`; caso contrário lê `server_config.token_signing_secret`; se ausente, gera 48 bytes aleatórios (base64), persiste com `INSERT ... ON CONFLICT DO NOTHING` (seguro p/ múltiplos replicas), relê o valor canônico e cacheia em memória. A inicialização ocorre **antes** de `app.listen()` e **falha o processo** se der erro, garantindo que nenhuma requisição chegue ao servidor com auth quebrado. Para rotacionar: `DELETE FROM server_config WHERE key='token_signing_secret'` e reinicie.
 - **Scheduled Jobs:** A daily cron job implemented via `setInterval` checks for expiring documents and sends digest emails/push notifications.
 
 # External Dependencies

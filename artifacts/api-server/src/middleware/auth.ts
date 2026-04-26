@@ -1,8 +1,13 @@
 import { createHmac, timingSafeEqual, randomBytes, createHash } from "crypto";
 import type { Request, Response, NextFunction } from "express";
+import { getTokenSigningSecret } from "../lib/token-secret.js";
 
 function getSigningSecret(): string | null {
-  return process.env.TOKEN_SIGNING_SECRET ?? null;
+  try {
+    return getTokenSigningSecret();
+  } catch {
+    return null;
+  }
 }
 
 function base64urlEncode(data: string): string {
