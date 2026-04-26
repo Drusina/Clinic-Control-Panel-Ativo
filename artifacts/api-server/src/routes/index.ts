@@ -72,7 +72,7 @@ router.use(requireSuperAdmin, processosRouter);
 router.use(requireSuperAdmin, evidenciasRouter);
 router.use(requireSuperAdmin, documentosRouter);
 router.use(autentiquePublicRouter);
-router.use(notificationsRouter);
+router.use(requireSuperAdmin, notificationsRouter);
 router.use(requireSuperAdmin, jobsRouter);
 router.use(notificationPreferencesRouter);
 router.use(pushRouter);
