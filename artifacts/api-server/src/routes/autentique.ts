@@ -127,12 +127,13 @@ protectedRouter.post("/autentique/create-document", async (req, res): Promise<vo
     const pdfBuffer = Buffer.from(pdfBytes);
 
     let storagePath: string | null = null;
-    const supabaseUrl = await getConfig("supabase_url");
-    const serviceRoleKey = await getConfig("supabase_service_role_key");
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (supabaseUrl && serviceRoleKey) {
       const objectPath = `clinics/${clinicId}/lgpd/${termo.slug}.pdf`;
+      const encodedObjectPath = objectPath.split("/").map(encodeURIComponent).join("/");
       const uploadRes = await fetch(
-        `${supabaseUrl}/storage/v1/object/signed-docs/${objectPath}`,
+        `${supabaseUrl}/storage/v1/object/signed-docs/${encodedObjectPath}`,
         {
           method: "POST",
           headers: {

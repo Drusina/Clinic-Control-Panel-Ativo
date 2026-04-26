@@ -1,6 +1,11 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, documentosTable } from "@workspace/db";
+import path from "path";
+
+function sanitizeFileName(raw: string): string {
+  return path.posix.basename(raw.replace(/\\/g, "/")).replace(/\.\./g, "_");
+}
 
 const router: IRouter = Router();
 
@@ -76,13 +81,19 @@ router.post("/clinics/:clinicId/documentos/:docId/upload", async (req, res): Pro
   }
 
   const fileBuffer = Buffer.from(fileBase64, "base64");
-  const storagePath = `clinics/${clinicId}/documentos/${docId}_${fileName}`;
+  const safeFileName = sanitizeFileName(fileName);
+  if (!safeFileName) {
+    res.status(400).json({ error: "fileName inválido" });
+    return;
+  }
+  const storagePath = `clinics/${clinicId}/documentos/${docId}_${safeFileName}`;
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (supabaseUrl && serviceRoleKey) {
-    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/clinic-docs/${storagePath}`, {
+    const encodedStoragePath = storagePath.split("/").map(encodeURIComponent).join("/");
+    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/clinic-docs/${encodedStoragePath}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${serviceRoleKey}`,

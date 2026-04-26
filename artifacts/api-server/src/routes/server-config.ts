@@ -56,6 +56,20 @@ router.put("/admin/config/integrations/:key", async (req, res): Promise<void> =>
     return;
   }
 
+  if (key === "supabase_url") {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(value.trim());
+    } catch {
+      res.status(400).json({ error: "supabase_url deve ser uma URL válida" });
+      return;
+    }
+    if (parsedUrl.protocol !== "https:" || !parsedUrl.hostname.endsWith(".supabase.co")) {
+      res.status(400).json({ error: "supabase_url deve apontar para um projeto Supabase (*.supabase.co)" });
+      return;
+    }
+  }
+
   await setConfig(key, value.trim());
   res.json({ success: true, key });
 });

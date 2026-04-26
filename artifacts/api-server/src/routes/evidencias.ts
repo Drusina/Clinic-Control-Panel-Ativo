@@ -1,6 +1,19 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, evidenciasTable } from "@workspace/db";
+import path from "path";
+
+function sanitizeFileName(raw: string): string {
+  return path.posix.basename(raw.replace(/\\/g, "/")).replace(/\.\./g, "_");
+}
+
+function isValidStoragePath(storagePath: string, clinicId: string): boolean {
+  const normalized = path.posix.normalize(storagePath);
+  return (
+    !normalized.includes("..") &&
+    normalized.startsWith(`clinics/${clinicId}/`)
+  );
+}
 
 const router: IRouter = Router();
 
@@ -33,6 +46,10 @@ router.post("/clinics/:clinicId/evidencias", async (req, res): Promise<void> => 
     res.status(400).json({ error: "nome and pilarSlug are required" });
     return;
   }
+  if (d.storagePath != null && !isValidStoragePath(String(d.storagePath), clinicId)) {
+    res.status(400).json({ error: "storagePath inválido" });
+    return;
+  }
   const [row] = await db
     .insert(evidenciasTable)
     .values({
@@ -60,14 +77,20 @@ router.post("/clinics/:clinicId/evidencias/upload", async (req, res): Promise<vo
   }
 
   const fileBuffer = Buffer.from(fileBase64, "base64");
-  const storagePath = `clinics/${clinicId}/evidencias/${Date.now()}_${fileName}`;
+  const safeFileName = sanitizeFileName(fileName);
+  if (!safeFileName) {
+    res.status(400).json({ error: "fileName inválido" });
+    return;
+  }
+  const storagePath = `clinics/${clinicId}/evidencias/${Date.now()}_${safeFileName}`;
   let finalStoragePath: string | null = null;
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (supabaseUrl && serviceRoleKey) {
-    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/evidencias/${storagePath}`, {
+    const encodedStoragePath = storagePath.split("/").map(encodeURIComponent).join("/");
+    const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/evidencias/${encodedStoragePath}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${serviceRoleKey}`,
@@ -124,6 +147,11 @@ router.get("/clinics/:clinicId/evidencias/:evidenciaId/signed-url", async (req, 
     return;
   }
 
+  if (!isValidStoragePath(ev.storagePath, clinicId)) {
+    res.status(400).json({ error: "storagePath inválido" });
+    return;
+  }
+
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -132,7 +160,8 @@ router.get("/clinics/:clinicId/evidencias/:evidenciaId/signed-url", async (req, 
     return;
   }
 
-  const signRes = await fetch(`${supabaseUrl}/storage/v1/object/sign/evidencias/${ev.storagePath}`, {
+  const encodedPath = ev.storagePath.split("/").map(encodeURIComponent).join("/");
+  const signRes = await fetch(`${supabaseUrl}/storage/v1/object/sign/evidencias/${encodedPath}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${serviceRoleKey}`,
