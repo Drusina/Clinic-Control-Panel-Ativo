@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Termos de Uso da Plataforma IONEX360</title>
+<style>
+  body { font-family: 'Helvetica', Arial, sans-serif; color: #1a1a1a; max-width: 800px; margin: 40px auto; line-height: 1.6; padding: 0 24px; }
+  h1 { text-align: center; color: #0b3d91; border-bottom: 2px solid #0b3d91; padding-bottom: 10px; }
+  h2 { color: #0b3d91; margin-top: 28px; }
+  .meta { background: #f4f6fb; padding: 12px 16px; border-left: 4px solid #0b3d91; margin: 16px 0; font-size: 0.95em; }
+  .signatures { margin-top: 60px; display: flex; justify-content: space-between; gap: 40px; }
+  .sig { width: 45%; border-top: 1px solid #333; padding-top: 8px; text-align: center; font-size: 0.9em; }
+  ol li { margin-bottom: 8px; }
+  .footer { text-align: center; font-size: 0.8em; color: #666; margin-top: 40px; }
+</style>
+</head>
+<body>
+
+<h1>TERMOS DE USO DA PLATAFORMA IONEX360</h1>
+
+<div class="meta">
+  <strong>Contratada (Plataforma):</strong> IONEX360 — [Razão Social], inscrita no CNPJ nº [00.000.000/0001-00], com sede em [Endereço completo].<br>
+  <strong>Contratante (Clínica):</strong> CICATRIOXI — [Razão Social da Clínica], inscrita no CNPJ nº [00.000.000/0001-00], com sede em [Endereço completo].<br>
+  <strong>Data de vigência:</strong> [DD/MM/AAAA]
+</div>
+
+<h2>1. Objeto</h2>
+<p>O presente instrumento regula o uso da plataforma de gestão clínica <strong>IONEX360</strong>, incluindo seus módulos de Diagnóstico 360°, Kick-off, Templates ICS, Integrações e demais funcionalidades disponibilizadas à Contratante para apoio à gestão operacional, administrativa e estratégica de sua clínica.</p>
+
+<h2>2. Aceitação</h2>
+<p>O aceite destes Termos, seja por assinatura digital, eletrônica ou anexação formal pela Contratante, implica concordância integral e incondicional com todas as cláusulas aqui dispostas, vinculando a clínica, seus sócios, prepostos e usuários autorizados.</p>
+
+<h2>3. Cadastro e Acesso</h2>
+<ol>
+  <li>O acesso à plataforma é pessoal, intransferível e mediante credenciais individuais.</li>
+  <li>A Contratante é responsável pela guarda das credenciais e por todas as ações realizadas em sua conta.</li>
+  <li>Suspeitas de uso indevido devem ser comunicadas imediatamente à IONEX360 pelo canal [suporte@ionex360.com.br].</li>
+</ol>
+
+<h2>4. Uso Permitido</h2>
+<p>A Contratante compromete-se a utilizar a plataforma exclusivamente para fins lícitos, relacionados à gestão clínica, vedando-se: (i) engenharia reversa; (ii) uso para fins concorrenciais; (iii) inserção de dados falsos; (iv) uso para tratamento de dados sensíveis fora dos limites da LGPD.</p>
+
+<h2>5. Propriedade Intelectual</h2>
+<p>Todos os direitos sobre a plataforma IONEX360, incluindo software, marca, layout, metodologias, templates ICS e Diagnóstico 360°, pertencem exclusivamente à IONEX360, sendo concedida à Contratante apenas licença de uso não exclusiva e revogável durante a vigência deste Termo.</p>
+
+<h2>6. Disponibilidade e Suporte</h2>
+<p>A IONEX360 envidará seus melhores esforços para manter a plataforma disponível em regime 24/7, ressalvadas paradas programadas para manutenção e eventos de força maior. O suporte técnico será prestado em horário comercial pelo canal [suporte@ionex360.com.br].</p>
+
+<h2>7. Limitação de Responsabilidade</h2>
+<p>A IONEX360 não responde por: (i) decisões clínicas ou administrativas tomadas pela Contratante com base nas informações da plataforma; (ii) perdas decorrentes de uso indevido das credenciais; (iii) eventos de força maior, indisponibilidade de internet ou falhas de terceiros.</p>
+
+<h2>8. Vigência e Rescisão</h2>
+<p>Este Termo vigora por prazo indeterminado a contar do aceite, podendo ser rescindido por qualquer das partes mediante aviso prévio de 30 (trinta) dias, sem prejuízo das obrigações já assumidas.</p>
+
+<h2>9. Confidencialidade e LGPD</h2>
+<p>As partes se comprometem a observar a Lei nº 13.709/2018 (LGPD) e a manter sigilo sobre dados confidenciais trocados em razão deste Termo, conforme detalhado em instrumento específico (NDA e Política de Privacidade).</p>
+
+<h2>10. Foro</h2>
+<p>Fica eleito o foro da Comarca de [Cidade/UF] para dirimir quaisquer controvérsias oriundas deste Termo, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
+
+<div class="signatures">
+  <div class="sig">
+    [Nome do Representante da CICATRIOXI]<br>
+    CPF: [000.000.000-00]<br>
+    Cargo: [Sócio-administrador]
+  </div>
+  <div class="sig">
+    [Nome do Representante da IONEX360]<br>
+    CPF: [000.000.000-00]<br>
+    Cargo: [Diretor]
+  </div>
+</div>
+
+<div class="footer">IONEX360 — Documento gerado em [DD/MM/AAAA] · Versão 1.0</div>
+
+</body>
+</html>
