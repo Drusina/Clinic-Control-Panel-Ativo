@@ -1,7 +1,5 @@
 /// <reference lib="webworker" />
 import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
-import { registerRoute } from "workbox-routing";
-import { NetworkFirst } from "workbox-strategies";
 import type { PrecacheEntry } from "workbox-precaching";
 
 declare const self: ServiceWorkerGlobalScope & {
@@ -12,16 +10,11 @@ cleanupOutdatedCaches();
 
 precacheAndRoute(self.__WB_MANIFEST);
 
-registerRoute(
-  ({ url }) => url.pathname.startsWith("/api/"),
-  new NetworkFirst({
-    cacheName: "api-cache",
-    fetchOptions: {
-      credentials: "include",
-    },
-    networkTimeoutSeconds: 10,
-  })
-);
+self.addEventListener("message", (event: ExtendableMessageEvent) => {
+  if (event.data?.type === "CLEAR_API_CACHE") {
+    event.waitUntil(caches.delete("api-cache"));
+  }
+});
 
 self.addEventListener("push", (event: PushEvent) => {
   let payload: {

@@ -16,6 +16,7 @@ function getClientIp(req: Request): string {
 }
 
 router.post("/auth/login", (req, res): void => {
+  res.setHeader("Cache-Control", "no-store");
   const superAdminSecret = process.env.SUPER_ADMIN_SECRET;
 
   if (!superAdminSecret) {
@@ -53,6 +54,7 @@ router.post("/auth/login", (req, res): void => {
 });
 
 router.post("/auth/convite", async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "no-store");
   const { memberId, inviteToken } = req.body as { memberId?: string; inviteToken?: string };
 
   if (!memberId || !inviteToken) {
@@ -117,6 +119,8 @@ router.post("/auth/convite", async (req, res): Promise<void> => {
 });
 
 router.get("/auth/me", (req, res): void => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Vary", "Authorization");
   const token = extractToken(req);
   if (!token) {
     res.json({ role: null });

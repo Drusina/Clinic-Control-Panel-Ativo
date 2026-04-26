@@ -48,5 +48,8 @@ export function useLogout() {
     clearToken();
     queryClient.setQueryData(AUTH_QUERY_KEY, { role: null });
     queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY });
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: "CLEAR_API_CACHE" });
+    }
   };
 }
