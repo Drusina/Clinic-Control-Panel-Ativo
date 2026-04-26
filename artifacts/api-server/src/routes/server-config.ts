@@ -2,6 +2,12 @@ import { Router, type IRouter } from "express";
 import { getConfig, setConfig, deleteConfig, CONFIGURABLE_KEYS, type ConfigKey } from "../lib/config.js";
 import { db, serverConfigTable } from "@workspace/db";
 import { sendEmailDetailed } from "../lib/email.js";
+import {
+  rotateTokenSigningSecret,
+  getTokenSigningSecretSource,
+  EnvSecretRotationError,
+} from "../lib/token-secret.js";
+import { logger } from "../lib/logger.js";
 
 const ENV_KEYS: Record<ConfigKey, string> = {
   autentique_token: "AUTENTIQUE_TOKEN",
@@ -139,6 +145,29 @@ async function handleTestEmail(req: import("express").Request, res: import("expr
 // which lives inside the integrations panel.
 router.post("/admin/test-email", handleTestEmail);
 router.post("/admin/config/integrations/test-email", handleTestEmail);
+
+router.get("/admin/token-signing-secret/status", (_req, res): void => {
+  const source = getTokenSigningSecretSource();
+  res.json({
+    source,
+    canRotate: source === "db",
+  });
+});
+
+router.post("/admin/rotate-token-signing-secret", async (_req, res): Promise<void> => {
+  try {
+    await rotateTokenSigningSecret();
+    res.json({ success: true });
+  } catch (err) {
+    if (err instanceof EnvSecretRotationError) {
+      res.status(409).json({ success: false, error: err.message });
+      return;
+    }
+    const msg = err instanceof Error ? err.message : "Erro ao rotacionar segredo";
+    logger.error({ err }, "Failed to rotate token signing secret");
+    res.status(500).json({ success: false, error: msg });
+  }
+});
 
 router.post("/admin/config/integrations/test-autentique", async (_req, res): Promise<void> => {
   const token = await getConfig("autentique_token");

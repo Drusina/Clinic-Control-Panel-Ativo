@@ -5,7 +5,10 @@ import { logger } from "./logger.js";
 
 const CONFIG_KEY = "token_signing_secret";
 
+export type TokenSecretSource = "env" | "db";
+
 let cachedSecret: string | null = null;
+let cachedSource: TokenSecretSource | null = null;
 
 async function loadFromDb(): Promise<string | null> {
   const [row] = await db
@@ -39,6 +42,7 @@ export async function initTokenSigningSecret(): Promise<void> {
 
   if (envIsUsable) {
     cachedSecret = envValue;
+    cachedSource = "env";
     logger.info("Token signing secret loaded from TOKEN_SIGNING_SECRET env var");
     return;
   }
@@ -53,6 +57,7 @@ export async function initTokenSigningSecret(): Promise<void> {
   const dbValue = await loadFromDb();
   if (dbValue && dbValue.length > 0 && dbValue !== adminValue) {
     cachedSecret = dbValue;
+    cachedSource = "db";
     logger.warn(
       { reason },
       "Token signing secret loaded from server_config (DB-stored fallback) because the env-provided value is misconfigured. Existing user sessions are preserved, but please set TOKEN_SIGNING_SECRET in Deployments → Secrets to a strong random 32+ char value DIFFERENT from SUPER_ADMIN_SECRET.",
@@ -78,6 +83,7 @@ export async function initTokenSigningSecret(): Promise<void> {
     );
   }
   cachedSecret = canonical;
+  cachedSource = "db";
   logger.warn(
     { reason },
     [
@@ -86,7 +92,8 @@ export async function initTokenSigningSecret(): Promise<void> {
       "To take ownership of the secret (recommended for production): set TOKEN_SIGNING_SECRET in Deployments → Secrets to a",
       "strong random 32+ char value DIFFERENT from SUPER_ADMIN_SECRET — for example:",
       "  node -e \"console.log(require('crypto').randomBytes(32).toString('base64url'))\"",
-      "To rotate the bootstrapped value, delete the 'token_signing_secret' row from server_config and restart the server.",
+      "To rotate the bootstrapped value, use the super-admin endpoint POST /api/admin/rotate-token-signing-secret",
+      "(or the 'Rotacionar chave de sessão' button under /admin/configuracoes → Segurança).",
     ].join(" "),
   );
 }
@@ -98,4 +105,52 @@ export function getTokenSigningSecret(): string {
     );
   }
   return cachedSecret;
+}
+
+export function getTokenSigningSecretSource(): TokenSecretSource | null {
+  return cachedSource;
+}
+
+export class EnvSecretRotationError extends Error {
+  constructor() {
+    super(
+      "Cannot rotate: TOKEN_SIGNING_SECRET environment variable is set and takes priority over the database value. After a server restart the env value would be reasserted, making rotation effectively a no-op. Unset TOKEN_SIGNING_SECRET in Deployments → Secrets to allow rotation, or change the env value there directly to rotate.",
+    );
+    this.name = "EnvSecretRotationError";
+  }
+}
+
+export async function rotateTokenSigningSecret(): Promise<void> {
+  // Refuse rotation when the secret originated from the env var: the DB row
+  // would change but `initTokenSigningSecret` would silently overwrite it on
+  // the next boot, giving operators a false sense that rotation succeeded.
+  if (cachedSource === "env") {
+    throw new EnvSecretRotationError();
+  }
+
+  // Generate a fresh random secret and overwrite the row in server_config so
+  // every subsequent signToken() call uses the new value, immediately
+  // invalidating every JWT issued under the previous secret.
+  const next = generateSecret();
+  await db
+    .insert(serverConfigTable)
+    .values({ key: CONFIG_KEY, value: next })
+    .onConflictDoUpdate({
+      target: serverConfigTable.key,
+      set: { value: next, updatedAt: new Date() },
+    });
+
+  // Re-read the canonical value (in case another instance rotated at the same
+  // time, the DB row is the source of truth) and refresh the in-process cache.
+  const canonical = await loadFromDb();
+  if (!canonical || canonical.length === 0) {
+    throw new Error(
+      "Failed to rotate token_signing_secret: row missing after upsert.",
+    );
+  }
+  cachedSecret = canonical;
+  cachedSource = "db";
+  logger.warn(
+    "Token signing secret rotated. All previously issued sessions on this instance are now invalid. In multi-instance deployments, other replicas continue using the old secret in-memory until they restart or reload — restart all replicas to fully propagate.",
+  );
 }

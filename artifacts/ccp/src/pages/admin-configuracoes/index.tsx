@@ -1,10 +1,21 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle2,
@@ -21,8 +32,10 @@ import {
   Mail,
   Send,
   Globe,
+  KeyRound,
+  ShieldAlert,
 } from "lucide-react";
-import { getStoredToken } from "@/hooks/use-auth";
+import { getStoredToken, useLogout } from "@/hooks/use-auth";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -273,6 +286,127 @@ function EmailTestCard({ disabled }: { disabled: boolean }) {
         </div>
       )}
     </div>
+  );
+}
+
+interface TokenSecretStatus {
+  source: "env" | "db" | null;
+  canRotate: boolean;
+}
+
+function SecuritySection() {
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const logout = useLogout();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const { data: status, isLoading: statusLoading } = useQuery<TokenSecretStatus>({
+    queryKey: ["token-signing-secret-status"],
+    queryFn: () => apiFetch("/api/admin/token-signing-secret/status"),
+  });
+
+  const rotateMut = useMutation({
+    mutationFn: () =>
+      apiFetch<{ success: boolean }>("/api/admin/rotate-token-signing-secret", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      setConfirmOpen(false);
+      toast({
+        title: "Chave de assinatura rotacionada",
+        description: "Todas as sessões foram invalidadas. Faça login novamente.",
+      });
+      // The token we currently hold was signed by the old secret and is now
+      // rejected by verifyToken. Drop it locally and bounce to the login page
+      // so the operator immediately re-authenticates.
+      logout();
+      setLocation("/admin/login");
+    },
+    onError: (e) => {
+      setConfirmOpen(false);
+      toast({
+        variant: "destructive",
+        title: "Erro ao rotacionar",
+        description: (e as Error).message,
+      });
+    },
+  });
+
+  const envManaged = status?.source === "env";
+  const canRotate = !!status?.canRotate;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <KeyRound className="h-4 w-4 text-primary" /> Segurança — Chave de Assinatura de Sessão
+        </CardTitle>
+        <CardDescription className="text-sm">
+          Gera um novo segredo aleatório usado para assinar os tokens de sessão. Útil se você suspeita
+          que a chave atual foi exposta.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {envManaged ? (
+          <div className="flex items-start gap-2 rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+            <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              A chave atual vem da variável de ambiente <code className="font-mono">TOKEN_SIGNING_SECRET</code>,
+              que tem prioridade sobre o banco de dados. Para rotacionar, altere o valor diretamente
+              em <strong>Deployments → Secrets</strong> e reinicie o servidor — caso contrário, qualquer
+              rotação aqui seria sobrescrita no próximo boot.
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              <strong>Atenção:</strong> ao rotacionar, todos os usuários (incluindo você) serão
+              desconectados imediatamente e precisarão fazer login novamente. Em ambientes com
+              múltiplas instâncias do servidor, reinicie todas as réplicas após a rotação para que a
+              chave nova seja propagada.
+            </p>
+          </div>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setConfirmOpen(true)}
+          disabled={statusLoading || !canRotate || rotateMut.isPending}
+          data-testid="btn-rotate-token-secret"
+        >
+          {rotateMut.isPending
+            ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Rotacionando…</>
+            : <><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Rotacionar chave de sessão</>}
+        </Button>
+      </CardContent>
+
+      <AlertDialog open={confirmOpen} onOpenChange={(o) => { if (!rotateMut.isPending) setConfirmOpen(o); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rotacionar chave de assinatura?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação gera uma nova chave secreta usada para assinar os tokens de login.{" "}
+              <strong>Todos os usuários serão desconectados imediatamente</strong> e precisarão
+              fazer login novamente — incluindo você. Tem certeza?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={rotateMut.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); rotateMut.mutate(); }}
+              disabled={rotateMut.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="btn-confirm-rotate-token-secret"
+            >
+              {rotateMut.isPending
+                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Rotacionando…</>
+                : "Sim, rotacionar agora"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
   );
 }
 
@@ -545,6 +679,8 @@ export default function AdminConfiguracoesPage() {
           </Card>
         </>
       )}
+
+      <SecuritySection />
 
       <DocumentAccessLogSection />
     </div>
