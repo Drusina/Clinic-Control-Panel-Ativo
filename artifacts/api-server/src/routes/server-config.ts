@@ -73,7 +73,7 @@ router.delete("/admin/config/integrations/:key", async (req, res): Promise<void>
   res.json({ success: true, key });
 });
 
-router.post("/admin/config/integrations/test-email", async (req, res): Promise<void> => {
+async function handleTestEmail(req: import("express").Request, res: import("express").Response): Promise<void> {
   const { to } = req.body as { to?: string };
   if (!to || typeof to !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
     res.status(400).json({ ok: false, error: "Endereço de e-mail inválido" });
@@ -113,7 +113,14 @@ router.post("/admin/config/integrations/test-email", async (req, res): Promise<v
     replyTo: replyTo ?? null,
     to,
   });
-});
+}
+
+// Both endpoints are mounted under requireSuperAdmin via routes/index.ts.
+// `/admin/test-email` is the canonical path from the original spec.
+// `/admin/config/integrations/test-email` is kept as an alias for the UI
+// which lives inside the integrations panel.
+router.post("/admin/test-email", handleTestEmail);
+router.post("/admin/config/integrations/test-email", handleTestEmail);
 
 router.post("/admin/config/integrations/test-autentique", async (_req, res): Promise<void> => {
   const token = await getConfig("autentique_token");

@@ -170,7 +170,7 @@ router.post("/push/resend-setup-email", requireAuth, async (req, res): Promise<v
   }
 
   try {
-    await sendPushSetupEmail(member);
+    await sendPushSetupEmail(member, req);
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Falha ao enviar o e-mail. Tente novamente mais tarde." });

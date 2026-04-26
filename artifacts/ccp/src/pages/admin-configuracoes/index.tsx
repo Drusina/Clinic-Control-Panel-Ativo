@@ -424,12 +424,25 @@ export default function AdminConfiguracoesPage() {
         <>
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Mail className="h-4 w-4 text-primary" /> E-mail Oficial — Resend
-              </CardTitle>
-              <CardDescription className="text-sm">
-                Configurações de envio de e-mails transacionais (convites, delegações, alertas, assinaturas).
-              </CardDescription>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-primary" /> E-mail Oficial — Resend
+                  </CardTitle>
+                  <CardDescription className="text-sm">
+                    Configurações de envio de e-mails transacionais (convites, delegações, alertas, assinaturas).
+                  </CardDescription>
+                </div>
+                {resendApiKeyConfigured ? (
+                  <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/15 gap-1" data-testid="badge-resend-status">
+                    <CheckCircle2 className="h-3 w-3" /> Resend conectado
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 gap-1" data-testid="badge-resend-status">
+                    <XCircle className="h-3 w-3" /> Resend não configurado
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {emailKeys.map(entry => (

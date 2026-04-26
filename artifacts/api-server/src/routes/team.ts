@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { eq } from "drizzle-orm";
 import { db, teamTable } from "@workspace/db";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
@@ -42,9 +42,9 @@ async function dispatchSupabaseInvite(email: string): Promise<boolean> {
   return res.ok;
 }
 
-export async function sendPushSetupEmail(member: typeof teamTable.$inferSelect): Promise<void> {
+export async function sendPushSetupEmail(member: typeof teamTable.$inferSelect, req?: Request): Promise<void> {
   if (!member.email) return;
-  const appUrl = await resolveAppUrl();
+  const appUrl = await resolveAppUrl(req);
   let inviteToken: string;
   try {
     inviteToken = signInviteToken(member.id);
@@ -60,17 +60,17 @@ export async function sendPushSetupEmail(member: typeof teamTable.$inferSelect):
   });
 }
 
-async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect): Promise<string> {
+async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect, req?: Request): Promise<string> {
   if (!member.email) return "no_email";
 
   const supabaseInvited = await dispatchSupabaseInvite(member.email);
 
   if (supabaseInvited) {
-    sendPushSetupEmail(member).catch(() => {});
+    sendPushSetupEmail(member, req).catch(() => {});
     return "sent";
   }
 
-  const appUrl = await resolveAppUrl();
+  const appUrl = await resolveAppUrl(req);
   let inviteToken: string;
   try {
     inviteToken = signInviteToken(member.id);
@@ -135,7 +135,7 @@ router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
 
   if (parsed.data.temAcessoPlataforma && parsed.data.email) {
     try {
-      const status = await dispatchPlatformInvite(member);
+      const status = await dispatchPlatformInvite(member, req);
       await db.update(teamTable).set({ inviteStatus: status }).where(eq(teamTable.id, member.id));
       member.inviteStatus = status;
     } catch {
@@ -177,7 +177,7 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
     if (emailToUse) {
       try {
         const memberForInvite = { ...existing, ...updates, email: emailToUse } as typeof teamTable.$inferSelect;
-        const status = await dispatchPlatformInvite(memberForInvite);
+        const status = await dispatchPlatformInvite(memberForInvite, req);
         updates.inviteStatus = status;
       } catch {
         updates.inviteStatus = "error";

@@ -136,7 +136,7 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     const recipientPrefs = await getRecipientPrefs(responsavelEmail);
 
     if (recipientPrefs.whatsappEnabled || recipientPrefs.emailEnabled) {
-      const emailAppUrl = await resolveAppUrl();
+      const emailAppUrl = await resolveAppUrl(req);
       const emailHtml = buildDelegationEmail({
         responsavelNome: responsavelNome ?? "Responsável",
         responsavelEmail,

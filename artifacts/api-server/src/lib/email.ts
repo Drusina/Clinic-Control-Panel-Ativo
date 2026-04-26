@@ -1,12 +1,32 @@
 import { getConfig } from "./config.js";
+import type { Request } from "express";
 
 const DEFAULT_FROM = "IONEX360 <onboarding@resend.dev>";
 const DEFAULT_APP_URL = "https://app.clinionex.com.br";
 const BRAND_SITE_URL = "https://clinionex.com.br";
 const BRAND_SITE_LABEL = "clinionex.com.br";
 
-export async function resolveAppUrl(): Promise<string> {
-  return (await getConfig("app_url")) ?? DEFAULT_APP_URL;
+/**
+ * Resolves the public app URL for use in email links.
+ * Priority order:
+ *   1. `app_url` from server_config (DB) — set by admin in /admin/configuracoes
+ *   2. `APP_URL` env var (via config registry fallback)
+ *   3. Request context (`req.protocol://req.get('host')`) — only in non-production,
+ *      to avoid host-header poisoning influencing email links in deployed envs.
+ *      In production we always fall back to DEFAULT_APP_URL when nothing is configured.
+ *   4. DEFAULT_APP_URL (https://app.clinionex.com.br) as last-resort hardcoded fallback
+ */
+export async function resolveAppUrl(req?: Request): Promise<string> {
+  const configured = await getConfig("app_url");
+  if (configured) return configured;
+  if (req && process.env.NODE_ENV !== "production") {
+    const host = req.get("host");
+    // Defensive: reject obviously malicious/empty hosts and bare IPs without dev-friendly patterns.
+    if (host && /^[a-zA-Z0-9.\-:]+$/.test(host)) {
+      return `${req.protocol}://${host}`;
+    }
+  }
+  return DEFAULT_APP_URL;
 }
 
 function baseTemplate(title: string, bodyHtml: string): string {

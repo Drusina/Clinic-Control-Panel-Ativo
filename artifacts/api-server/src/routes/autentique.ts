@@ -307,7 +307,7 @@ publicRouter.post("/autentique/webhook", async (req, res): Promise<void> => {
         }
 
         if (!notifiedViaWhatsApp && recipientPrefs.emailEnabled) {
-          const appUrl = await resolveAppUrl();
+          const appUrl = await resolveAppUrl(req);
           const docsLink = `${appUrl}/documentos`;
           const html = buildSigningConfirmationEmail({
             signatarioNome: termo.signatarioNome,

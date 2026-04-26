@@ -481,7 +481,7 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
   }
 
   const inviteToken = signInviteToken(memberId);
-  const appUrl = (await resolveAppUrl()) || `${req.protocol}://${req.get("host")}`;
+  const appUrl = await resolveAppUrl(req);
   const inviteLink = `${appUrl}/convite?ref=${encodeURIComponent(memberId)}&tok=${encodeURIComponent(inviteToken)}`;
 
   await db.insert(clinicActivityTable).values({
