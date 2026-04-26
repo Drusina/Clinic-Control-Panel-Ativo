@@ -15,7 +15,7 @@ import type { ClinicDocumentCategory } from "@/hooks/use-clinic-documents";
 import { FileIcon, formatBytes } from "./file-icon";
 import { cn } from "@/lib/utils";
 
-type UploadStatus = "pending" | "uploading" | "done" | "error";
+type UploadStatus = "pending" | "uploading" | "done" | "error" | "rejected";
 
 interface QueuedFile {
   id: string;
@@ -49,13 +49,37 @@ export function UploadModal({
     }
   }, [open, initialCategoryId, categories]);
 
+  const ALLOWED_MIME_TYPES = new Set([
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/tiff",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "text/plain",
+    "application/zip",
+    "application/x-zip-compressed",
+  ]);
+
   function addFiles(files: FileList | null) {
     if (!files) return;
-    const next: QueuedFile[] = Array.from(files).map((f) => ({
-      id: `${f.name}-${f.size}-${Math.random().toString(36).slice(2, 8)}`,
-      file: f,
-      status: "pending",
-    }));
+    const next: QueuedFile[] = Array.from(files).map((f) => {
+      const allowed = ALLOWED_MIME_TYPES.has(f.type);
+      return {
+        id: `${f.name}-${f.size}-${Math.random().toString(36).slice(2, 8)}`,
+        file: f,
+        status: allowed ? "pending" : "rejected",
+        errorMessage: allowed
+          ? undefined
+          : `Tipo de arquivo não permitido: ${f.type || "desconhecido"}`,
+      };
+    });
     setQueue((q) => [...q, ...next]);
   }
 
@@ -67,7 +91,7 @@ export function UploadModal({
     if (!categoryId || queue.length === 0) return;
     setRunning(true);
     for (const item of queue) {
-      if (item.status === "done") continue;
+      if (item.status === "done" || item.status === "rejected") continue;
       setQueue((q) =>
         q.map((x) => (x.id === item.id ? { ...x, status: "uploading", errorMessage: undefined } : x)),
       );
@@ -87,7 +111,7 @@ export function UploadModal({
     setRunning(false);
   }
 
-  const allDone = queue.length > 0 && queue.every((x) => x.status === "done");
+  const allDone = queue.length > 0 && queue.every((x) => x.status === "done" || x.status === "rejected");
   const anyPendingOrFailed = queue.some(
     (x) => x.status === "pending" || x.status === "error",
   );
@@ -138,6 +162,7 @@ export function UploadModal({
               multiple
               ref={inputRef}
               className="hidden"
+              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.tif,.tiff,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,application/pdf,image/jpeg,image/png,image/gif,image/webp,image/tiff,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/zip"
               onChange={(e) => addFiles(e.target.files)}
             />
           </div>
@@ -165,7 +190,7 @@ export function UploadModal({
                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
                     )}
                     {q.status === "done" && <Check className="h-4 w-4 text-green-600" />}
-                    {q.status === "error" && (
+                    {(q.status === "error" || q.status === "rejected") && (
                       <AlertCircle className="h-4 w-4 text-destructive" />
                     )}
                     {!running && q.status !== "done" && (
@@ -198,8 +223,8 @@ export function UploadModal({
             className={cn(allDone && "hidden")}
           >
             {running && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Enviar {queue.filter((x) => x.status !== "done").length}{" "}
-            {queue.filter((x) => x.status !== "done").length === 1 ? "arquivo" : "arquivos"}
+            Enviar {queue.filter((x) => x.status !== "done" && x.status !== "rejected").length}{" "}
+            {queue.filter((x) => x.status !== "done" && x.status !== "rejected").length === 1 ? "arquivo" : "arquivos"}
           </Button>
         </DialogFooter>
       </DialogContent>

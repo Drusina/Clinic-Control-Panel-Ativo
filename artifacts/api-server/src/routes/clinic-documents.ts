@@ -175,6 +175,31 @@ router.post(
     const fileName = decodeMultipartFilename(file.originalname || "arquivo");
     const mimeType = file.mimetype || "application/octet-stream";
 
+    const ALLOWED_MIME_TYPES = new Set([
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "image/tiff",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "text/plain",
+      "application/zip",
+      "application/x-zip-compressed",
+    ]);
+
+    if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+      res.status(415).json({
+        error: `Tipo de arquivo não suportado: ${mimeType}. Apenas PDF, imagens, documentos Office e arquivos de texto são permitidos.`,
+      });
+      return;
+    }
+
     // Validate the category belongs to the clinic
     const [cat] = await db
       .select()

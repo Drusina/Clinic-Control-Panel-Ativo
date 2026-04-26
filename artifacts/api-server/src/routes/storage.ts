@@ -159,6 +159,9 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
 
       res.status(response.status);
       response.headers.forEach((value, key) => res.setHeader(key, value));
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", "attachment");
+      res.setHeader("X-Content-Type-Options", "nosniff");
 
       res.on("finish", () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -216,6 +219,9 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
 
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("Content-Disposition", "attachment");
+    res.setHeader("X-Content-Type-Options", "nosniff");
 
     res.on("finish", () => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
