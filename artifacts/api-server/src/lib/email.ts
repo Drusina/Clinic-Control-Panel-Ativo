@@ -1,6 +1,13 @@
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_ADDRESS = process.env.RESEND_FROM_ADDRESS ?? "IONEX360 <onboarding@resend.dev>";
-const APP_URL = process.env.APP_URL ?? "https://ionex360.com.br";
+import { getConfig } from "./config.js";
+
+const DEFAULT_FROM = "IONEX360 <onboarding@resend.dev>";
+const DEFAULT_APP_URL = "https://app.clinionex.com.br";
+const BRAND_SITE_URL = "https://clinionex.com.br";
+const BRAND_SITE_LABEL = "clinionex.com.br";
+
+export async function resolveAppUrl(): Promise<string> {
+  return (await getConfig("app_url")) ?? DEFAULT_APP_URL;
+}
 
 function baseTemplate(title: string, bodyHtml: string): string {
   return `<!DOCTYPE html>
@@ -42,8 +49,8 @@ function baseTemplate(title: string, bodyHtml: string): string {
                 <tr>
                   <td style="color:#475569;font-size:12px;text-align:center;line-height:1.6;">
                     Este é um email automático do sistema IONEX360.<br/>
-                    Por favor, não responda a este email.<br/>
-                    <a href="${APP_URL}" style="color:#3b82f6;text-decoration:none;">ionex360.com.br</a>
+                    Para suporte ou dúvidas, responda a este email.<br/>
+                    <a href="${BRAND_SITE_URL}" style="color:#3b82f6;text-decoration:none;">${BRAND_SITE_LABEL}</a>
                   </td>
                 </tr>
               </table>
@@ -111,8 +118,9 @@ export function buildDelegationEmail(params: {
   clinicName?: string;
   prazo?: string;
   observacoes?: string;
+  appUrl: string;
 }): string {
-  const link = `${APP_URL}/diagnostico/select?pilar=${encodeURIComponent(params.pilarSlug)}`;
+  const link = `${params.appUrl}/diagnostico/select?pilar=${encodeURIComponent(params.pilarSlug)}`;
   const prazoLine = params.prazo
     ? `<tr><td style="padding-top:16px;">
         <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Prazo</p>
@@ -160,6 +168,7 @@ export function buildExpiryDigestEmail(params: {
   clinicName: string;
   adminEmail: string;
   documents: Array<{ nome: string; categoria: string; validade: string; diasRestantes: number }>;
+  appUrl: string;
 }): string {
   const rows = params.documents
     .map(
@@ -177,7 +186,7 @@ export function buildExpiryDigestEmail(params: {
     )
     .join("");
 
-  const docsLink = `${APP_URL}/documentos`;
+  const docsLink = `${params.appUrl}/documentos`;
 
   const body = `
     <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Documentos próximos ao vencimento</h1>
@@ -297,30 +306,68 @@ export function buildPushSetupEmail(params: { nome: string; activationLink: stri
   return baseTemplate("Ativar notificações push — IONEX360", body);
 }
 
+export interface SendEmailResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
+
 export async function sendEmail(params: {
   to: string | string[];
   subject: string;
   html: string;
+  replyTo?: string;
 }): Promise<boolean> {
-  if (!RESEND_API_KEY) {
-    return false;
+  const result = await sendEmailDetailed(params);
+  return result.ok;
+}
+
+export async function sendEmailDetailed(params: {
+  to: string | string[];
+  subject: string;
+  html: string;
+  replyTo?: string;
+}): Promise<SendEmailResult> {
+  const apiKey = await getConfig("resend_api_key");
+  if (!apiKey) {
+    return { ok: false, error: "RESEND_API_KEY não configurado" };
   }
+
+  const fromAddress = (await getConfig("resend_from_address")) ?? DEFAULT_FROM;
+  const replyTo = params.replyTo ?? (await getConfig("reply_to_address"));
+
   try {
+    const body: Record<string, unknown> = {
+      from: fromAddress,
+      to: Array.isArray(params.to) ? params.to : [params.to],
+      subject: params.subject,
+      html: params.html,
+    };
+    if (replyTo) {
+      body.reply_to = replyTo;
+    }
+
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from: FROM_ADDRESS,
-        to: Array.isArray(params.to) ? params.to : [params.to],
-        subject: params.subject,
-        html: params.html,
-      }),
+      body: JSON.stringify(body),
     });
-    return res.ok;
-  } catch {
-    return false;
+
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      try {
+        const errBody = await res.json() as { message?: string; error?: string; name?: string };
+        errMsg = errBody.message ?? errBody.error ?? errBody.name ?? errMsg;
+      } catch {
+        // ignore parse error
+      }
+      return { ok: false, status: res.status, error: errMsg };
+    }
+    return { ok: true, status: res.status };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro de conexão com Resend" };
   }
 }

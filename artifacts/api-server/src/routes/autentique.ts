@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { db, lgpdTermosTable, teamTable } from "@workspace/db";
-import { sendEmail, buildSigningRequestEmail, buildSigningConfirmationEmail } from "../lib/email.js";
+import { sendEmail, buildSigningRequestEmail, buildSigningConfirmationEmail, resolveAppUrl } from "../lib/email.js";
 import { sendApprovalWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
 import { getConfig } from "../lib/config.js";
@@ -307,7 +307,7 @@ publicRouter.post("/autentique/webhook", async (req, res): Promise<void> => {
         }
 
         if (!notifiedViaWhatsApp && recipientPrefs.emailEnabled) {
-          const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
+          const appUrl = await resolveAppUrl();
           const docsLink = `${appUrl}/documentos`;
           const html = buildSigningConfirmationEmail({
             signatarioNome: termo.signatarioNome,

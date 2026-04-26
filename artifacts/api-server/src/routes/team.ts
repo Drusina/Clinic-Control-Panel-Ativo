@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, teamTable } from "@workspace/db";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
 import { signInviteToken } from "../middleware/auth";
-import { sendEmail, buildInviteEmail, buildPushSetupEmail } from "../lib/email.js";
+import { sendEmail, buildInviteEmail, buildPushSetupEmail, resolveAppUrl } from "../lib/email.js";
 
 const router: IRouter = Router();
 
@@ -44,7 +44,7 @@ async function dispatchSupabaseInvite(email: string): Promise<boolean> {
 
 export async function sendPushSetupEmail(member: typeof teamTable.$inferSelect): Promise<void> {
   if (!member.email) return;
-  const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
+  const appUrl = await resolveAppUrl();
   let inviteToken: string;
   try {
     inviteToken = signInviteToken(member.id);
@@ -70,7 +70,7 @@ async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect): Pr
     return "sent";
   }
 
-  const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
+  const appUrl = await resolveAppUrl();
   let inviteToken: string;
   try {
     inviteToken = signInviteToken(member.id);

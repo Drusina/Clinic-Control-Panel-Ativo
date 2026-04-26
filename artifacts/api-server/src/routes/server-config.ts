@@ -1,12 +1,17 @@
 import { Router, type IRouter } from "express";
 import { getConfig, setConfig, deleteConfig, CONFIGURABLE_KEYS, type ConfigKey } from "../lib/config.js";
 import { db, serverConfigTable } from "@workspace/db";
+import { sendEmailDetailed } from "../lib/email.js";
 
 const ENV_KEYS: Record<ConfigKey, string> = {
   autentique_token: "AUTENTIQUE_TOKEN",
   autentique_webhook_secret: "AUTENTIQUE_WEBHOOK_SECRET",
   supabase_url: "SUPABASE_URL",
   supabase_service_role_key: "SUPABASE_SERVICE_ROLE_KEY",
+  resend_api_key: "RESEND_API_KEY",
+  resend_from_address: "RESEND_FROM_ADDRESS",
+  reply_to_address: "REPLY_TO_ADDRESS",
+  app_url: "APP_URL",
 };
 
 const router: IRouter = Router();
@@ -66,6 +71,48 @@ router.delete("/admin/config/integrations/:key", async (req, res): Promise<void>
 
   await deleteConfig(key);
   res.json({ success: true, key });
+});
+
+router.post("/admin/config/integrations/test-email", async (req, res): Promise<void> => {
+  const { to } = req.body as { to?: string };
+  if (!to || typeof to !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    res.status(400).json({ ok: false, error: "Endereço de e-mail inválido" });
+    return;
+  }
+
+  const apiKey = await getConfig("resend_api_key");
+  if (!apiKey) {
+    res.json({ ok: false, error: "Resend API Key não configurado. Salve a chave acima antes de testar." });
+    return;
+  }
+
+  const fromAddress = (await getConfig("resend_from_address")) ?? "(padrão)";
+  const replyTo = await getConfig("reply_to_address");
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#0a0b0f;color:#e2e8f0;border-radius:12px;">
+      <h2 style="color:#3b82f6;margin:0 0 12px 0;">Teste de envio — IONEX360</h2>
+      <p style="margin:0 0 12px 0;line-height:1.6;">Este é um e-mail de teste enviado pela tela de Configurações.</p>
+      <p style="margin:0 0 6px 0;font-size:13px;color:#94a3b8;"><strong>Remetente:</strong> ${fromAddress}</p>
+      <p style="margin:0 0 6px 0;font-size:13px;color:#94a3b8;"><strong>Reply-To:</strong> ${replyTo ?? "(não configurado)"}</p>
+      <p style="margin:12px 0 0 0;font-size:13px;color:#94a3b8;">Se você recebeu este e-mail, a configuração do domínio e do Resend está funcionando corretamente.</p>
+    </div>
+  `;
+
+  const result = await sendEmailDetailed({
+    to,
+    subject: "[IONEX360] Teste de configuração de e-mail",
+    html,
+  });
+
+  res.json({
+    ok: result.ok,
+    error: result.error,
+    status: result.status ?? null,
+    from: fromAddress,
+    replyTo: replyTo ?? null,
+    to,
+  });
 });
 
 router.post("/admin/config/integrations/test-autentique", async (_req, res): Promise<void> => {

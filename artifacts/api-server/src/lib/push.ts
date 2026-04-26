@@ -2,7 +2,7 @@ import webpush from "web-push";
 import { db, pushSubscriptionsTable, serverConfigTable } from "@workspace/db";
 import { eq, or, isNull, sql, and } from "drizzle-orm";
 
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT ?? "mailto:noreply@ionex360.com.br";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT ?? "mailto:noreply@clinionex.com.br";
 
 let vapidPublicKey: string | null = null;
 let vapidConfigured = false;

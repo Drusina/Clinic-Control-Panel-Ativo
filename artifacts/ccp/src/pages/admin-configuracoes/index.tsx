@@ -18,6 +18,9 @@ import {
   Save,
   FileDown,
   RefreshCw,
+  Mail,
+  Send,
+  Globe,
 } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
 
@@ -180,6 +183,99 @@ interface TestResult {
   error?: string;
 }
 
+interface TestEmailResult {
+  ok: boolean;
+  error?: string;
+  from?: string;
+  replyTo?: string | null;
+  to?: string;
+}
+
+function EmailTestCard({ disabled }: { disabled: boolean }) {
+  const { toast } = useToast();
+  const [to, setTo] = useState("");
+  const [result, setResult] = useState<TestEmailResult | null>(null);
+  const [sending, setSending] = useState(false);
+
+  async function handleSend() {
+    if (!to.trim()) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await apiFetch<TestEmailResult>("/api/admin/config/integrations/test-email", {
+        method: "POST",
+        body: JSON.stringify({ to: to.trim() }),
+      });
+      setResult(res);
+      if (res.ok) {
+        toast({ title: "E-mail de teste enviado", description: `Verifique a caixa de entrada de ${to.trim()}.` });
+      } else {
+        toast({ variant: "destructive", title: "Falha no envio", description: res.error });
+      }
+    } catch (e) {
+      const msg = (e as Error).message;
+      setResult({ ok: false, error: msg });
+      toast({ variant: "destructive", title: "Erro ao enviar", description: msg });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 p-3 rounded-md border border-dashed bg-muted/30 space-y-3">
+      <div className="flex items-center gap-2">
+        <Send className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium">Enviar e-mail de teste</span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Envie um e-mail de teste para validar a configuração do remetente, do reply-to e do domínio.
+      </p>
+      <div className="flex gap-2">
+        <Input
+          type="email"
+          placeholder="seu-email@exemplo.com"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          className="text-sm"
+          disabled={disabled || sending}
+        />
+        <Button size="sm" onClick={handleSend} disabled={disabled || sending || !to.trim()}>
+          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Send className="h-3.5 w-3.5 mr-1.5" />Enviar</>}
+        </Button>
+      </div>
+      {disabled && (
+        <p className="text-xs text-yellow-700">
+          Configure a Resend API Key acima antes de testar o envio.
+        </p>
+      )}
+      {result && (
+        <div className={`flex items-start gap-2 text-sm rounded-md px-3 py-2 ${result.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
+          {result.ok
+            ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <div>E-mail enviado para <strong>{result.to}</strong></div>
+                  <div className="text-xs mt-0.5 opacity-80">
+                    Remetente: <code>{result.from}</code>
+                    {result.replyTo && <> · Reply-To: <code>{result.replyTo}</code></>}
+                  </div>
+                </div>
+              </>
+            )
+            : (
+              <>
+                <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{result.error}</span>
+              </>
+            )
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DocumentAccessLogSection() {
   const { data: entries = [], isLoading, refetch, isFetching } = useQuery<DocumentAccessLogEntry[]>({
     queryKey: ["document-access-log"],
@@ -299,6 +395,13 @@ export default function AdminConfiguracoesPage() {
   const supabaseKeys = entries.filter(e =>
     e.key === "supabase_url" || e.key === "supabase_service_role_key"
   );
+  const emailKeys = entries.filter(e =>
+    e.key === "resend_api_key" ||
+    e.key === "resend_from_address" ||
+    e.key === "reply_to_address"
+  );
+  const appUrlKey = entries.find(e => e.key === "app_url");
+  const resendApiKeyConfigured = !!emailKeys.find(e => e.key === "resend_api_key")?.configured;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -319,6 +422,56 @@ export default function AdminConfiguracoesPage() {
 
       {!isLoading && (
         <>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Mail className="h-4 w-4 text-primary" /> E-mail Oficial — Resend
+              </CardTitle>
+              <CardDescription className="text-sm">
+                Configurações de envio de e-mails transacionais (convites, delegações, alertas, assinaturas).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {emailKeys.map(entry => (
+                <ConfigRow key={entry.key} entry={entry} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-config-integrations"] })} />
+              ))}
+              <div className="mt-4 p-3 rounded-md bg-muted/50 text-xs text-muted-foreground space-y-2">
+                <p className="font-medium text-foreground">Como configurar o domínio <code className="font-mono">clinionex.com.br</code> no Resend</p>
+                <ol className="list-decimal list-inside space-y-1.5 ml-1">
+                  <li>Acesse <a href="https://resend.com/domains" target="_blank" rel="noopener" className="text-primary underline">resend.com/domains</a> e clique em <strong>Add Domain</strong>.</li>
+                  <li>Informe <code className="font-mono">clinionex.com.br</code> e selecione a região mais próxima do Brasil.</li>
+                  <li>Adicione no painel DNS da Hostinger (zona do domínio) os seguintes registros mostrados pelo Resend:
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
+                      <li><strong>SPF</strong> (TXT em <code className="font-mono">@</code>): <code className="font-mono break-all">v=spf1 include:_spf.resend.com ~all</code></li>
+                      <li><strong>DKIM</strong> (CNAME em <code className="font-mono">resend._domainkey</code>): valor exato fornecido pelo Resend</li>
+                      <li><strong>MX</strong> (opcional, somente se for receber bounces): conforme instruções do Resend</li>
+                      <li><strong>DMARC</strong> (opcional, recomendado): TXT em <code className="font-mono">_dmarc</code> com <code className="font-mono break-all">v=DMARC1; p=none; rua=mailto:gestor@blusolution.com.br</code></li>
+                    </ul>
+                  </li>
+                  <li>Aguarde a verificação no Resend (de 5 minutos a algumas horas). Quando estiver verde, salve o endereço <code className="font-mono">noreply@clinionex.com.br</code> em <strong>Endereço remetente (From)</strong> acima.</li>
+                  <li>Use o teste abaixo para validar o envio.</li>
+                </ol>
+              </div>
+              <EmailTestCard disabled={!resendApiKeyConfigured} />
+            </CardContent>
+          </Card>
+
+          {appUrlKey && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-primary" /> URL Pública da Plataforma
+                </CardTitle>
+                <CardDescription className="text-sm">
+                  URL base usada nos links incluídos em todos os e-mails (convites, delegações, etc).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ConfigRow entry={appUrlKey} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-config-integrations"] })} />
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">

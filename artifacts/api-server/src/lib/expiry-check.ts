@@ -1,6 +1,6 @@
 import { db, documentosTable, clinicsTable } from "@workspace/db";
 import { lte, gte, and, ne, isNotNull, inArray } from "drizzle-orm";
-import { sendEmail, buildExpiryDigestEmail } from "./email.js";
+import { sendEmail, buildExpiryDigestEmail, resolveAppUrl } from "./email.js";
 import { getRecipientPrefs } from "./preferences.js";
 import { sendPushToClinic } from "./push.js";
 
@@ -85,6 +85,7 @@ export async function runExpiryCheck(): Promise<{ sent: number; skipped: number;
       clinicName: clinic.nome,
       adminEmail: clinic.email,
       documents: docItems,
+      appUrl: await resolveAppUrl(),
     });
 
     const ok = await sendEmail({

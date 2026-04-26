@@ -3,7 +3,7 @@ import { eq, and, count } from "drizzle-orm";
 import { db, delegacoesTable, clinicsTable, risksTable, actionsTable } from "@workspace/db";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { z } from "zod";
-import { sendEmail, buildDelegationEmail } from "../lib/email.js";
+import { sendEmail, buildDelegationEmail, resolveAppUrl } from "../lib/email.js";
 import { sendDelegationWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
 import { sendPushToClinic, sendPushToEmail } from "../lib/push.js";
@@ -136,6 +136,7 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     const recipientPrefs = await getRecipientPrefs(responsavelEmail);
 
     if (recipientPrefs.whatsappEnabled || recipientPrefs.emailEnabled) {
+      const emailAppUrl = await resolveAppUrl();
       const emailHtml = buildDelegationEmail({
         responsavelNome: responsavelNome ?? "Responsável",
         responsavelEmail,
@@ -143,6 +144,7 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
         pilarSlug,
         prazo: prazo ?? undefined,
         observacoes: observacoes ?? undefined,
+        appUrl: emailAppUrl,
       });
 
       const whatsappPhone = req.body?.responsavelWhatsapp as string | undefined;

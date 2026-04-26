@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
-import { sendEmail, buildInviteEmail } from "../lib/email.js";
+import { sendEmail, buildInviteEmail, resolveAppUrl } from "../lib/email.js";
 import { signInviteToken } from "../middleware/auth";
 import { objectStorageClient } from "../lib/objectStorage";
 import { seedIcsData } from "../lib/ics-seed.js";
@@ -481,7 +481,7 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
   }
 
   const inviteToken = signInviteToken(memberId);
-  const appUrl = process.env.APP_URL ?? `${req.protocol}://${req.get("host")}`;
+  const appUrl = (await resolveAppUrl()) || `${req.protocol}://${req.get("host")}`;
   const inviteLink = `${appUrl}/convite?ref=${encodeURIComponent(memberId)}&tok=${encodeURIComponent(inviteToken)}`;
 
   await db.insert(clinicActivityTable).values({
