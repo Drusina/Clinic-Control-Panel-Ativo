@@ -74,11 +74,15 @@ router.delete("/admin/config/integrations/:key", async (req, res): Promise<void>
 });
 
 async function handleTestEmail(req: import("express").Request, res: import("express").Response): Promise<void> {
-  const { to } = req.body as { to?: string };
+  const { to, subject: customSubject } = req.body as { to?: string; subject?: string };
   if (!to || typeof to !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
     res.status(400).json({ ok: false, error: "Endereço de e-mail inválido" });
     return;
   }
+  const subject = (typeof customSubject === "string" && customSubject.trim().length > 0
+    && customSubject.length <= 200 && !/[\r\n]/.test(customSubject))
+    ? customSubject.trim()
+    : "[IONEX360] Teste de configuração de e-mail";
 
   const apiKey = await getConfig("resend_api_key");
   if (!apiKey) {
@@ -101,7 +105,7 @@ async function handleTestEmail(req: import("express").Request, res: import("expr
 
   const result = await sendEmailDetailed({
     to,
-    subject: "[IONEX360] Teste de configuração de e-mail",
+    subject,
     html,
   });
 

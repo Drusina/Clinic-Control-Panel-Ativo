@@ -11,18 +11,18 @@ const BRAND_SITE_LABEL = "clinionex.com.br";
  * Priority order:
  *   1. `app_url` from server_config (DB) — set by admin in /admin/configuracoes
  *   2. `APP_URL` env var (via config registry fallback)
- *   3. Request context (`req.protocol://req.get('host')`) — only in non-production,
- *      to avoid host-header poisoning influencing email links in deployed envs.
- *      In production we always fall back to DEFAULT_APP_URL when nothing is configured.
+ *   3. Request context (`req.protocol://req.get('host')`) when `req` is provided,
+ *      with strict host sanitization to defend against Host-header poisoning.
  *   4. DEFAULT_APP_URL (https://app.clinionex.com.br) as last-resort hardcoded fallback
  */
 export async function resolveAppUrl(req?: Request): Promise<string> {
   const configured = await getConfig("app_url");
   if (configured) return configured;
-  if (req && process.env.NODE_ENV !== "production") {
+  if (req) {
     const host = req.get("host");
-    // Defensive: reject obviously malicious/empty hosts and bare IPs without dev-friendly patterns.
-    if (host && /^[a-zA-Z0-9.\-:]+$/.test(host)) {
+    // Defensive: only accept hosts that look like a normal hostname[:port].
+    // Rejects newlines, spaces, commas (multi-host injection) and other injection vectors.
+    if (host && /^[a-zA-Z0-9.\-]+(:\d{1,5})?$/.test(host)) {
       return `${req.protocol}://${host}`;
     }
   }
