@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
 import { sendEmail, buildInviteEmail } from "../lib/email.js";
+import { signInviteToken } from "../middleware/auth";
 import { objectStorageClient } from "../lib/objectStorage";
 import { seedIcsData } from "../lib/ics-seed.js";
 import {
@@ -454,81 +455,34 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
     return;
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    res.status(501).json({
-      success: false,
-      message: "Convite por email não está configurado: SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são necessários.",
-    });
-    return;
-  }
-
-  const generateLinkRes = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${serviceRoleKey}`,
-      "apikey": serviceRoleKey,
-    },
-    body: JSON.stringify({
-      type: "invite",
-      email,
-      data: { role, clinic_id: id, clinic_nome: clinic.nome },
-    }),
-  });
-
-  let magicLink: string | null = null;
-  if (generateLinkRes.ok) {
-    try {
-      const linkData = await generateLinkRes.json() as Record<string, unknown>;
-      magicLink = (linkData.action_link as string) ?? (linkData.data as Record<string, unknown>)?.action_link as string ?? null;
-    } catch {}
-  }
-
-  if (!magicLink) {
-    const inviteRes = await fetch(`${supabaseUrl}/auth/v1/invite`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${serviceRoleKey}`,
-        "apikey": serviceRoleKey,
-      },
-      body: JSON.stringify({
-        email,
-        data: { role, clinic_id: id, clinic_nome: clinic.nome },
-      }),
-    });
-    if (!inviteRes.ok) {
-      const errorBody = await inviteRes.text();
-      res.status(inviteRes.status).json({ success: false, message: `Erro ao enviar convite: ${errorBody}` });
-      return;
-    }
-    const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
-    magicLink = `${appUrl}/login?email=${encodeURIComponent(email)}`;
-  }
-
   const existingMember = await db
     .select()
     .from(teamTable)
     .where(and(eq(teamTable.clinicId, id), eq(teamTable.email, email)));
 
+  let memberId: string;
+
   if (existingMember.length > 0) {
+    memberId = existingMember[0].id;
     await db
       .update(teamTable)
-      .set({ inviteStatus: "pending", temAcessoPlataforma: true })
-      .where(eq(teamTable.id, existingMember[0].id));
+      .set({ inviteStatus: "pending", temAcessoPlataforma: true, funcao: role })
+      .where(eq(teamTable.id, memberId));
   } else {
-    await db.insert(teamTable).values({
+    const [newMember] = await db.insert(teamTable).values({
       clinicId: id,
       nome: email.split("@")[0],
       email,
       funcao: role,
       temAcessoPlataforma: true,
       inviteStatus: "pending",
-    });
+    }).returning({ id: teamTable.id });
+    memberId = newMember.id;
   }
+
+  const inviteToken = signInviteToken(memberId);
+  const appUrl = process.env.APP_URL ?? `${req.protocol}://${req.get("host")}`;
+  const inviteLink = `${appUrl}/convite?ref=${encodeURIComponent(memberId)}&tok=${encodeURIComponent(inviteToken)}`;
 
   await db.insert(clinicActivityTable).values({
     clinicId: id,
@@ -538,14 +492,18 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
     autorNome: "Super Admin",
   });
 
-  const inviteHtml = buildInviteEmail({ email, role, magicLink: magicLink! });
+  const inviteHtml = buildInviteEmail({ email, role, magicLink: inviteLink });
   sendEmail({
     to: email,
     subject: `[IONEX360] Você foi convidado para a plataforma — ${clinic.nome}`,
     html: inviteHtml,
   }).catch(() => {});
 
-  res.json({ success: true, message: `Convite enviado para ${email}. O usuário receberá um email com o link de acesso.` });
+  res.json({
+    success: true,
+    message: `Convite enviado para ${email}. O usuário receberá um email com o link de acesso.`,
+    inviteLink,
+  });
 });
 
 export default router;

@@ -331,6 +331,7 @@ export interface InviteUserBody {
 export interface InviteUserResponse {
   success: boolean;
   message: string;
+  inviteLink?: string;
 }
 
 export interface Activity {

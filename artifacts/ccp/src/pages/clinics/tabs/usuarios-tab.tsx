@@ -56,7 +56,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, Plus, MoreHorizontal, Mail, UserPlus, ShieldCheck, Clock } from "lucide-react";
+import { Loader2, Plus, MoreHorizontal, Mail, UserPlus, ShieldCheck, Clock, Copy, CheckCheck, Link2 } from "lucide-react";
 
 const inviteSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -79,6 +79,7 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
 
   const { data: members, isLoading } = useListTeam(clinicId, {
     query: { enabled: !!clinicId, queryKey: getListTeamQueryKey(clinicId) },
@@ -100,10 +101,14 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
       { id: clinicId, data: { email: values.email, role: values.role } },
       {
         onSuccess: (resp: InviteUserResponse) => {
-          toast({ title: "Convite enviado", description: resp.message });
           queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
           setIsInviteOpen(false);
           form.reset();
+          if (resp.inviteLink) {
+            setInviteLink(resp.inviteLink);
+          } else {
+            toast({ title: "Convite enviado", description: resp.message });
+          }
         },
         onError: () => toast({ variant: "destructive", title: "Erro ao enviar convite" }),
       }
@@ -227,7 +232,13 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
                                 inviteUser.mutate(
                                   { id: clinicId, data: { email: member.email ?? "", role: member.funcao ?? "colaborador" } },
                                   {
-                                    onSuccess: () => toast({ title: "Convite reenviado" }),
+                                    onSuccess: (resp: InviteUserResponse) => {
+                                      if (resp.inviteLink) {
+                                        setInviteLink(resp.inviteLink);
+                                      } else {
+                                        toast({ title: "Convite reenviado" });
+                                      }
+                                    },
                                     onError: () => toast({ variant: "destructive", title: "Erro ao reenviar convite" }),
                                   }
                                 );
@@ -282,6 +293,52 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={!!inviteLink} onOpenChange={(open) => { if (!open) setInviteLink(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-primary" />
+              Link de Convite Gerado
+            </DialogTitle>
+            <DialogDescription>
+              Copie e envie este link para o usuário acessar a plataforma. O link expira em 7 dias.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex gap-2 items-center">
+              <Input
+                readOnly
+                value={inviteLink ?? ""}
+                className="font-mono text-xs"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  if (inviteLink) {
+                    navigator.clipboard.writeText(inviteLink).then(() => {
+                      toast({ title: "Link copiado!", description: "Cole no WhatsApp ou email do usuário." });
+                    }).catch(() => {
+                      toast({ title: "Copie manualmente", description: "Selecione o link acima e pressione Ctrl+C." });
+                    });
+                  }
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <CheckCheck className="h-3.5 w-3.5 text-green-500 shrink-0" />
+              Usuário adicionado na aba Usuários com status "Pendente".
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setInviteLink(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
         <DialogContent className="sm:max-w-md">
