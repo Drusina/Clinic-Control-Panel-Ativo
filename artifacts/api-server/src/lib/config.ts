@@ -116,7 +116,10 @@ const CONTRATADA_DEFAULTS: Record<string, string> = {
   contratada_representante_nome: "Rafaela Calgaro",
   contratada_representante_cpf: "032.539.209-92",
   contratada_representante_cargo: "Sócia-Administradora",
-  contratada_email_notificacao: "claudiomilenio@gmail.com",
+  // Operator inbox for signature notifications. Spec default is the BLU
+  // gestor mailbox; operators can override via /admin/configuracoes when
+  // routing to a different inbox is desired.
+  contratada_email_notificacao: "gestor@blusolution.com.br",
 };
 
 let contratadaBootstrapDone = false;

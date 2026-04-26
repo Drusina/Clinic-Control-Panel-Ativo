@@ -16,6 +16,24 @@ import pg from "pg";
 
 const CLINIC_ID = "79a64b14-13ab-486a-a78f-5247a6fab899";
 
+// Checksum validation for CNPJ — guards against accidental fixture rot.
+// If a future edit corrupts the digit pattern the seed fails fast instead of
+// pushing invalid data into the database.
+function isValidCnpj(raw) {
+  const d = raw.replace(/\D/g, "");
+  if (d.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(d)) return false;
+  const calc = (slice, weights) => {
+    let s = 0;
+    for (let i = 0; i < weights.length; i++) s += parseInt(slice[i], 10) * weights[i];
+    const r = s % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  const dv1 = calc(d.slice(0, 12), [5,4,3,2,9,8,7,6,5,4,3,2]);
+  const dv2 = calc(d.slice(0, 13), [6,5,4,3,2,9,8,7,6,5,4,3,2]);
+  return dv1 === parseInt(d[12], 10) && dv2 === parseInt(d[13], 10);
+}
+
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL is required");
   process.exit(1);
@@ -41,7 +59,7 @@ try {
       "CICATRIOXI - Clínica de Cicatrização e Tratamentos",
       "CICATRIOXI",
       "CICATRIOXI Serviços Médicos LTDA",
-      "62.471.913/0001-08",
+      "62.471.913/0001-43",
       "Rua das Tulipas, 450 - Centro",
       "Sorriso",
       "MT",
