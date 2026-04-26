@@ -157,3 +157,32 @@ overrides:
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
   esbuild: "0.27.3"
+  # Security patches for transitive dependencies (Task #103).
+  # Scoped to specific vulnerable versions so unaffected consumers
+  # (especially those pinned to a different major) keep their working
+  # version and we avoid silent cross-major API breakage.
+  #
+  # Same-major patch bumps (low risk):
+  lodash: "^4.18.0"           # GHSA-r5fr-rjxr-66jc, GHSA-f23m-r3pf-42rh
+  path-to-regexp: "^8.4.0"    # GHSA-j3q9-mxjg-w52f, GHSA-27v5-c462-wpq7
+  postcss: "^8.5.10"          # GHSA-qx2v-qp2m-jg93
+  yaml: "^2.8.3"              # GHSA-48c2-rrv3-qjmp
+  #
+  # Scoped overrides — only the exact vulnerable version is replaced.
+  # NOTE: minimatch@10 needs brace-expansion@5+ (named `expand` export);
+  # only v2.0.x consumers (workbox-build, typedoc chain) had vulnerable 2.0.2.
+  "brace-expansion@2.0.2": "^2.0.3"   # GHSA-f886-m6hf-6m8v
+  # picomatch had two vulnerable versions in the tree; patch each line
+  # within its own major to keep API compatibility for its consumers.
+  "picomatch@2.3.1": "^2.3.2"         # GHSA-c2c7-rcm5-vvqj, GHSA-3v7f-55p6-f55p
+  "picomatch@4.0.3": "^4.0.4"         # same advisories, v4 line
+  # Cross-major bumps required by OSV — scoped to vulnerable version only.
+  # Only used during dev/build (workbox-build > @rollup/plugin-terser).
+  "serialize-javascript@6.0.2": "^7.0.5"   # GHSA-5c6j-r48x-rmvq, GHSA-qj8w-gfj5-8c6v
+  # http-proxy-agent@5 (inside @google-cloud/storage > teeny-request).
+  "@tootallnate/once@2.0.0": "^3.0.1"      # GHSA-vpq2-c234-7xj6
+  # uuid is consumed by @google-cloud/storage (8.3.2) and gaxios (9.0.1).
+  # v14 keeps the named-export API used by these deps. Verified at runtime
+  # via storage-auth-test + storage object endpoint smoke.
+  "uuid@8.3.2": "^14.0.0"             # GHSA-w5hq-g745-h8pq
+  "uuid@9.0.1": "^14.0.0"             # GHSA-w5hq-g745-h8pq
