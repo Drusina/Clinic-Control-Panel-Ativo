@@ -13,6 +13,10 @@ import {
 import { extractToken, verifyToken } from "../middleware/auth.js";
 import { logger } from "../lib/logger.js";
 
+// Environment-variable name to consult as the override source for each
+// config key. Must enumerate every key in `ConfigKey` (Drizzle's strict
+// `Record` check enforces this at compile time), so adding a new key in
+// lib/config.ts immediately surfaces a TypeScript error here.
 const ENV_KEYS: Record<ConfigKey, string> = {
   autentique_token: "AUTENTIQUE_TOKEN",
   autentique_webhook_secret: "AUTENTIQUE_WEBHOOK_SECRET",
@@ -22,6 +26,15 @@ const ENV_KEYS: Record<ConfigKey, string> = {
   resend_from_address: "RESEND_FROM_ADDRESS",
   reply_to_address: "REPLY_TO_ADDRESS",
   app_url: "APP_URL",
+  contratada_razao_social: "CONTRATADA_RAZAO_SOCIAL",
+  contratada_cnpj: "CONTRATADA_CNPJ",
+  contratada_endereco: "CONTRATADA_ENDERECO",
+  contratada_cidade_uf: "CONTRATADA_CIDADE_UF",
+  contratada_cep: "CONTRATADA_CEP",
+  contratada_representante_nome: "CONTRATADA_REPRESENTANTE_NOME",
+  contratada_representante_cpf: "CONTRATADA_REPRESENTANTE_CPF",
+  contratada_representante_cargo: "CONTRATADA_REPRESENTANTE_CARGO",
+  contratada_email_notificacao: "CONTRATADA_EMAIL_NOTIFICACAO",
 };
 
 const router: IRouter = Router();
