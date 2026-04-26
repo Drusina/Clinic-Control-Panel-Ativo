@@ -601,22 +601,28 @@ export function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+// All legal evidence (signature stamp + emails) is normalized to Brasília
+// time (BRT, UTC-3, IANA: America/Sao_Paulo). Using the federal capital's
+// time zone — not the operator/clinic's local zone — is the convention for
+// Brazilian legal documents and removes label/value mismatch ambiguity that
+// could be challenged in dispute resolution.
+const LEGAL_TIMEZONE = "America/Sao_Paulo";
+
 export function formatBRDate(d: Date): string {
   return d.toLocaleDateString("pt-BR", {
     day: "2-digit", month: "long", year: "numeric",
-    timeZone: "America/Cuiaba",
+    timeZone: LEGAL_TIMEZONE,
   });
 }
 
 export function formatBRT(d: Date): string {
-  // Cuiabá / Sorriso are in America/Cuiaba (UTC-4, no DST currently).
   const datePart = d.toLocaleDateString("pt-BR", {
     day: "2-digit", month: "2-digit", year: "numeric",
-    timeZone: "America/Cuiaba",
+    timeZone: LEGAL_TIMEZONE,
   });
   const timePart = d.toLocaleTimeString("pt-BR", {
     hour: "2-digit", minute: "2-digit", second: "2-digit",
-    timeZone: "America/Cuiaba",
+    timeZone: LEGAL_TIMEZONE,
   });
   return `${datePart} ${timePart} (BRT)`;
 }
