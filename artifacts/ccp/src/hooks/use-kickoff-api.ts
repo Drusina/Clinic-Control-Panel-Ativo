@@ -375,8 +375,16 @@ export interface LgpdTermoData {
   descricao?: string | null; status: string; metodo?: string | null;
   autentiqueDocId?: string | null; acaoUrl?: string | null;
   signatarioNome?: string | null;
-  signatarioEmail?: string | null; assinadoEm?: string | null;
-  storagePath?: string | null; enviadoEm?: string | null; createdAt: string;
+  signatarioEmail?: string | null;
+  signatarioCargo?: string | null;
+  assinadoEm?: string | null;
+  storagePath?: string | null; enviadoEm?: string | null;
+  signingTokenExpiresAt?: string | null;
+  signerCpf?: string | null;
+  docHash?: string | null;
+  signedStoragePath?: string | null;
+  templateVersion?: number | null;
+  createdAt: string;
 }
 
 export function useLgpdTermos(clinicId: string) {
@@ -410,16 +418,65 @@ export function useUpdateLgpdTermo(clinicId: string) {
   });
 }
 
-export function useCreateAutentiqueDocument(clinicId: string) {
+export interface LgpdSigningRequestResult {
+  success: boolean;
+  token: string;
+  signatureLink: string;
+  expiresAt: string;
+  emailSent: boolean;
+  emailError: string | null;
+}
+
+export function useRequestLgpdSigning(clinicId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { termSlug: string; signerEmail: string; signerName: string }) =>
-      apiFetch(`/api/autentique/create-document`, {
-        method: "POST",
-        body: JSON.stringify({ ...data, clinicId }),
-      }),
+    mutationFn: ({
+      termoId, signerName, signerEmail, signerCargo,
+    }: { termoId: string; signerName: string; signerEmail: string; signerCargo?: string | null }) =>
+      apiFetch<LgpdSigningRequestResult>(
+        `/api/clinics/${clinicId}/lgpd-termos/${termoId}/send-for-signing`,
+        { method: "POST", body: JSON.stringify({ signerName, signerEmail, signerCargo: signerCargo ?? null }) },
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["lgpd-termos", clinicId] }),
   });
+}
+
+export function useResendLgpdSigningEmail(clinicId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ termoId }: { termoId: string }) =>
+      apiFetch<{ success: boolean; emailError: string | null }>(
+        `/api/clinics/${clinicId}/lgpd-termos/${termoId}/resend-signing-email`,
+        { method: "POST", body: "{}" },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["lgpd-termos", clinicId] }),
+  });
+}
+
+/**
+ * Triggers a download of the signed PDF (or original, if not yet signed).
+ * Uses the bearer token to authenticate with the protected endpoint and
+ * streams the response into a blob URL so the browser opens / downloads it.
+ */
+export async function downloadSignedPdf(clinicId: string, termoId: string, filename?: string): Promise<void> {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE}/api/clinics/${clinicId}/lgpd-termos/${termoId}/signed-pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? "Falha ao baixar PDF");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  if (filename) a.download = filename;
+  else a.target = "_blank";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 export function useUploadLgpdPdf(clinicId: string) {
@@ -438,6 +495,58 @@ export function useUploadLgpdPdf(clinicId: string) {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["lgpd-termos", clinicId] }),
   });
+}
+
+// ─── LGPD Templates (admin) ────────────────────────────────────────────────
+
+export interface LgpdTemplateData {
+  slug: string; titulo: string; descricao: string;
+  corpo: string; versao: number; updatedAt: string;
+}
+
+export function useLgpdTemplates() {
+  return useQuery<LgpdTemplateData[]>({
+    queryKey: ["lgpd-templates"],
+    queryFn: () => apiFetch("/api/admin/lgpd-templates"),
+  });
+}
+
+export function useUpdateLgpdTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slug, ...data }: Partial<LgpdTemplateData> & { slug: string }) =>
+      apiFetch<LgpdTemplateData>(`/api/admin/lgpd-templates/${slug}`, {
+        method: "PATCH", body: JSON.stringify(data),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["lgpd-templates"] }),
+  });
+}
+
+/**
+ * Opens the live PDF preview for a template in a new tab.
+ * If overrides are provided, the preview reflects the unsaved edits.
+ */
+export async function previewLgpdTemplate(
+  slug: string,
+  overrides?: { titulo?: string; corpo?: string },
+): Promise<void> {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE}/api/admin/lgpd-templates/${slug}/preview-pdf`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(overrides ?? {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? "Falha ao gerar preview");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

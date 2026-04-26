@@ -22,7 +22,15 @@ import parceirosExternosRouter from "./parceiros-externos";
 import sistemasUsoRouter from "./sistemas-uso";
 import docsConstitutivoRouter from "./docs-constitutivos";
 import lgpdTermosRouter from "./lgpd-termos";
-import { autentiquePublicRouter, autentiqueProtectedRouter } from "./autentique";
+import lgpdTemplatesAdminRouter from "./lgpd-templates";
+import {
+  lgpdSigningProtectedRouter,
+  lgpdSigningPublicRouter,
+} from "./lgpd-signing";
+// NOTE: Autentique integration is desativada — substituída por assinatura
+// eletrônica simples hospedada na própria plataforma (Lei 14.063/2020).
+// Mantemos o arquivo `routes/autentique.ts` no repositório para histórico,
+// porém SEM registrar suas rotas.
 import delegacoesRouter from "./delegacoes";
 import processosRouter from "./processos";
 import evidenciasRouter from "./evidencias";
@@ -42,6 +50,11 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(storageRouter);
 router.use(authRouter);
+// Public LGPD signing endpoints (no auth) — gated only by the signing token.
+// MUST be registered BEFORE the first `router.use(requireSuperAdmin, …)` layer
+// because passing requireSuperAdmin to `router.use(mw, subRouter)` actually
+// installs it as a global layer that runs on every subsequent request.
+router.use(lgpdSigningPublicRouter);
 router.use(requireSuperAdmin, dashboardRouter);
 // Register the clinic-documents (library) routes BEFORE the generic clinics
 // router so the more specific paths like POST /clinics/:clinicId/documents
@@ -66,12 +79,13 @@ router.use(requireSuperAdmin, parceirosExternosRouter);
 router.use(requireSuperAdmin, sistemasUsoRouter);
 router.use(requireSuperAdmin, docsConstitutivoRouter);
 router.use(requireSuperAdmin, lgpdTermosRouter);
-router.use(requireSuperAdmin, autentiqueProtectedRouter);
+router.use(requireSuperAdmin, lgpdTemplatesAdminRouter);
+router.use(requireSuperAdmin, lgpdSigningProtectedRouter);
+// (lgpdSigningPublicRouter is mounted near the top of the chain — see comment above.)
 router.use(requireSuperAdmin, delegacoesRouter);
 router.use(requireSuperAdmin, processosRouter);
 router.use(requireSuperAdmin, evidenciasRouter);
 router.use(requireSuperAdmin, documentosRouter);
-router.use(autentiquePublicRouter);
 router.use(requireSuperAdmin, notificationsRouter);
 router.use(requireSuperAdmin, jobsRouter);
 router.use(notificationPreferencesRouter);

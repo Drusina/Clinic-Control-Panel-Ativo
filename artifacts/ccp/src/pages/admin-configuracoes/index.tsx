@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -24,7 +24,6 @@ import {
   Eye,
   EyeOff,
   Settings2,
-  FlaskConical,
   Trash2,
   Save,
   FileDown,
@@ -34,8 +33,27 @@ import {
   Globe,
   KeyRound,
   ShieldAlert,
+  Building2,
+  FileSignature,
+  FileText,
+  ExternalLink,
 } from "lucide-react";
 import { getStoredToken, useLogout } from "@/hooks/use-auth";
+import {
+  useLgpdTemplates,
+  useUpdateLgpdTemplate,
+  previewLgpdTemplate,
+  type LgpdTemplateData,
+} from "@/hooks/use-kickoff-api";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -587,43 +605,236 @@ function DocumentAccessLogSection() {
   );
 }
 
-export default function AdminConfiguracoesPage() {
+function ContratadaCard({ entries, onSaved }: { entries: ConfigEntry[]; onSaved: () => void }) {
+  const allConfigured = entries.length > 0 && entries.every(e => e.configured);
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-primary" /> Dados da Contratada
+            </CardTitle>
+            <CardDescription className="text-sm">
+              Razão social, CNPJ e responsável legal usados nos termos LGPD assinados pelos clientes.
+            </CardDescription>
+          </div>
+          {allConfigured ? (
+            <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/15 gap-1">
+              <CheckCircle2 className="h-3 w-3" /> Completo
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 gap-1">
+              <XCircle className="h-3 w-3" /> Incompleto
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {entries.length === 0 && (
+          <p className="text-sm text-muted-foreground py-2">Carregando…</p>
+        )}
+        {entries.map(entry => (
+          <ConfigRow key={entry.key} entry={entry} onSaved={onSaved} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LgpdTemplatesCard() {
+  const { data: templates = [], isLoading } = useLgpdTemplates();
+  const [editing, setEditing] = useState<LgpdTemplateData | null>(null);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileSignature className="h-4 w-4 text-primary" /> Modelos de Documentos LGPD
+        </CardTitle>
+        <CardDescription className="text-sm">
+          Edite o conteúdo padrão dos termos enviados aos signatários. Use{" "}
+          <code className="font-mono text-xs">{"{{razao_social}}"}</code>,{" "}
+          <code className="font-mono text-xs">{"{{cnpj}}"}</code>,{" "}
+          <code className="font-mono text-xs">{"{{contratada_*}}"}</code>,{" "}
+          <code className="font-mono text-xs">{"{{signatario_nome}}"}</code> e{" "}
+          <code className="font-mono text-xs">{"{{data_atual}}"}</code> como variáveis.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-3">
+            <Loader2 className="h-4 w-4 animate-spin" /> Carregando modelos…
+          </div>
+        )}
+        {!isLoading && templates.length === 0 && (
+          <p className="text-sm text-muted-foreground py-3">Nenhum modelo cadastrado.</p>
+        )}
+        <ul className="divide-y">
+          {templates.map(t => (
+            <li key={t.slug} className="py-3 flex items-start justify-between gap-3" data-testid={`row-template-${t.slug}`}>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <p className="text-sm font-medium truncate">{t.titulo}</p>
+                  <Badge variant="outline" className="text-xs">v{t.versao}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.descricao}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">{t.slug}</p>
+              </div>
+              <div className="flex gap-1.5 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    previewLgpdTemplate(t.slug).catch(e =>
+                      alert((e as Error).message),
+                    )
+                  }
+                  data-testid={`btn-preview-template-${t.slug}`}
+                >
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" /> Preview
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setEditing(t)}
+                  data-testid={`btn-edit-template-${t.slug}`}
+                >
+                  Editar
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+      <TemplateEditDialog
+        template={editing}
+        onClose={() => setEditing(null)}
+      />
+    </Card>
+  );
+}
+
+function TemplateEditDialog({
+  template,
+  onClose,
+}: {
+  template: LgpdTemplateData | null;
+  onClose: () => void;
+}) {
   const { toast } = useToast();
+  const updateMut = useUpdateLgpdTemplate();
+  const [titulo, setTitulo] = useState("");
+  const [corpo, setCorpo] = useState("");
+
+  // Reset draft whenever the dialog opens with a different template.
+  useEffect(() => {
+    if (template) {
+      setTitulo(template.titulo);
+      setCorpo(template.corpo);
+    }
+  }, [template?.slug, template?.versao]);
+
+  function handleClose() {
+    setTitulo("");
+    setCorpo("");
+    onClose();
+  }
+
+  function handleSave() {
+    if (!template) return;
+    updateMut.mutate(
+      { slug: template.slug, titulo: titulo.trim(), corpo },
+      {
+        onSuccess: () => {
+          toast({ title: "Modelo atualizado", description: `Nova versão salva.` });
+          handleClose();
+        },
+        onError: (e) =>
+          toast({ variant: "destructive", title: "Erro ao salvar", description: (e as Error).message }),
+      },
+    );
+  }
+
+  function handlePreview() {
+    if (!template) return;
+    previewLgpdTemplate(template.slug, { titulo: titulo.trim(), corpo }).catch(e =>
+      toast({ variant: "destructive", title: "Erro no preview", description: (e as Error).message }),
+    );
+  }
+
+  return (
+    <Dialog open={!!template} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Editar modelo</DialogTitle>
+          <DialogDescription className="text-xs">
+            Suporta cabeçalhos com <code>#</code>, listas com <code>-</code> e linhas em branco para
+            quebrar parágrafos. Use variáveis entre <code>{"{{ }}"}</code>.
+          </DialogDescription>
+        </DialogHeader>
+        {template && (
+          <div className="space-y-3 overflow-y-auto pr-1 flex-1">
+            <div className="space-y-1">
+              <Label>Título</Label>
+              <Input
+                value={titulo}
+                onChange={(e) => setTitulo(e.target.value)}
+                data-testid="input-template-titulo"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Conteúdo</Label>
+              <Textarea
+                value={corpo}
+                onChange={(e) => setCorpo(e.target.value)}
+                rows={20}
+                className="font-mono text-xs"
+                data-testid="textarea-template-corpo"
+              />
+            </div>
+            <div className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-2">
+              <strong className="text-foreground">Variáveis disponíveis:</strong>{" "}
+              <code>{"{{razao_social}}"}</code>, <code>{"{{cnpj}}"}</code>,{" "}
+              <code>{"{{endereco}}"}</code>, <code>{"{{representante_legal}}"}</code>,{" "}
+              <code>{"{{contratada_razao_social}}"}</code>, <code>{"{{contratada_cnpj}}"}</code>,{" "}
+              <code>{"{{contratada_endereco}}"}</code>,{" "}
+              <code>{"{{contratada_representante_nome}}"}</code>,{" "}
+              <code>{"{{contratada_representante_cpf}}"}</code>,{" "}
+              <code>{"{{contratada_representante_cargo}}"}</code>,{" "}
+              <code>{"{{signatario_nome}}"}</code>, <code>{"{{signatario_email}}"}</code>,{" "}
+              <code>{"{{signatario_cargo}}"}</code>, <code>{"{{data_atual}}"}</code>.
+            </div>
+          </div>
+        )}
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={handleClose} disabled={updateMut.isPending}>
+            Cancelar
+          </Button>
+          <Button variant="outline" onClick={handlePreview} disabled={updateMut.isPending}>
+            <ExternalLink className="h-3.5 w-3.5 mr-1" /> Preview
+          </Button>
+          <Button onClick={handleSave} disabled={updateMut.isPending || !titulo.trim() || !corpo.trim()}>
+            {updateMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            <Save className="h-3.5 w-3.5 mr-1" /> Salvar nova versão
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export default function AdminConfiguracoesPage() {
+  const { toast: _toast } = useToast();
   const qc = useQueryClient();
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
-  const [testing, setTesting] = useState(false);
 
   const { data: entries = [], isLoading } = useQuery<ConfigEntry[]>({
     queryKey: ["admin-config-integrations"],
     queryFn: () => apiFetch("/api/admin/config/integrations"),
   });
 
-  async function testAutentique() {
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const result = await apiFetch<TestResult>("/api/admin/config/integrations/test-autentique", {
-        method: "POST",
-      });
-      setTestResult(result);
-      if (result.ok) {
-        toast({ title: `Autentique conectado como: ${result.user?.name} (${result.user?.email})` });
-      } else {
-        toast({ variant: "destructive", title: "Falha na conexão", description: result.error });
-      }
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao testar", description: (e as Error).message });
-    } finally {
-      setTesting(false);
-    }
-  }
-
-  const autentiqueKeys = entries.filter(e =>
-    e.key === "autentique_token" || e.key === "autentique_webhook_secret"
-  );
-  const supabaseKeys = entries.filter(e =>
-    e.key === "supabase_url" || e.key === "supabase_service_role_key"
-  );
+  const contratadaKeys = entries.filter(e => e.key.startsWith("contratada_"));
   const emailKeys = entries.filter(e =>
     e.key === "resend_api_key" ||
     e.key === "resend_from_address" ||
@@ -714,64 +925,12 @@ export default function AdminConfiguracoesPage() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base">Autentique — Assinatura Digital</CardTitle>
-                  <CardDescription className="text-sm">
-                    Necessário para enviar documentos LGPD para assinatura eletrônica.
-                  </CardDescription>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={testAutentique}
-                  disabled={testing || !autentiqueKeys.find(e => e.key === "autentique_token")?.configured}
-                >
-                  {testing
-                    ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Testando…</>
-                    : <><FlaskConical className="h-3.5 w-3.5 mr-1.5" />Testar conexão</>}
-                </Button>
-              </div>
-              {testResult && (
-                <div className={`mt-2 flex items-center gap-2 text-sm rounded-md px-3 py-2 ${testResult.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}>
-                  {testResult.ok
-                    ? <><CheckCircle2 className="h-4 w-4" /> Conectado como <strong>{testResult.user?.name}</strong> ({testResult.user?.email})</>
-                    : <><XCircle className="h-4 w-4" /> {testResult.error}</>}
-                </div>
-              )}
-            </CardHeader>
-            <CardContent>
-              {autentiqueKeys.map(entry => (
-                <ConfigRow key={entry.key} entry={entry} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-config-integrations"] })} />
-              ))}
-              <div className="mt-3 p-3 rounded-md bg-muted/50 text-xs text-muted-foreground space-y-1">
-                <p><strong>Webhook URL</strong> para configurar no Autentique:</p>
-                <code className="block bg-muted rounded px-2 py-1 font-mono break-all select-all">
-                  {`${window.location.origin}/api/autentique/webhook`}
-                </code>
-                <p>Configure o header <code>x-autentique-secret</code> com o mesmo valor do Webhook Secret acima.</p>
-              </div>
-            </CardContent>
-          </Card>
+          <ContratadaCard
+            entries={contratadaKeys}
+            onSaved={() => qc.invalidateQueries({ queryKey: ["admin-config-integrations"] })}
+          />
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Supabase — Armazenamento de Documentos</CardTitle>
-              <CardDescription className="text-sm">
-                Necessário para upload de PDFs nos Documentos Constitutivos e LGPD.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {supabaseKeys.map(entry => (
-                <ConfigRow key={entry.key} entry={entry} onSaved={() => qc.invalidateQueries({ queryKey: ["admin-config-integrations"] })} />
-              ))}
-              <div className="mt-3 p-3 rounded-md bg-muted/50 text-xs text-muted-foreground space-y-1">
-                <p>Crie um bucket chamado <code className="font-mono">signed-docs</code> para documentos LGPD e <code className="font-mono">clinic-docs</code> para documentos constitutivos no seu projeto Supabase.</p>
-              </div>
-            </CardContent>
-          </Card>
+          <LgpdTemplatesCard />
         </>
       )}
 

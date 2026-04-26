@@ -234,12 +234,20 @@ export function buildExpiryDigestEmail(params: {
 export function buildSigningConfirmationEmail(params: {
   signatarioNome: string;
   termoNome: string;
-  docsLink: string;
+  clinicName?: string;
+  signedAt: string;
+  verificationCode: string;
 }): string {
+  const clinicLine = params.clinicName ? `<tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Clínica</p>
+        <p style="margin:0;color:#e2e8f0;font-weight:600;">${params.clinicName}</p>
+      </td></tr>` : "";
+
   const body = `
     <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Documento assinado com sucesso</h1>
     <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
-      Olá, <strong style="color:#e2e8f0;">${params.signatarioNome}</strong>. Confirmamos o recebimento da sua assinatura eletrônica.
+      Olá, <strong style="color:#e2e8f0;">${params.signatarioNome}</strong>. Sua assinatura eletrônica foi registrada e
+      uma cópia em PDF do documento assinado está anexa a este e-mail.
     </p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px;margin-bottom:24px;">
@@ -249,17 +257,29 @@ export function buildSigningConfirmationEmail(params: {
           <p style="margin:0;color:#e2e8f0;font-weight:600;font-size:16px;">${params.termoNome}</p>
         </td>
       </tr>
+      ${clinicLine}
       <tr><td style="padding-top:16px;">
-        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Status</p>
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Data e hora</p>
+        <p style="margin:0;color:#e2e8f0;">${params.signedAt}</p>
+      </td></tr>
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Código de verificação</p>
+        <p style="margin:0;"><code style="background:#1e2333;color:#fbbf24;font-size:13px;font-weight:600;padding:4px 10px;border-radius:4px;letter-spacing:1px;">${params.verificationCode}</code></p>
+      </td></tr>
+      <tr><td style="padding-top:16px;">
         <p style="margin:0;"><span style="background:#14532d;color:#4ade80;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;">✓ Assinado</span></p>
       </td></tr>
     </table>
 
     <p style="color:#94a3b8;font-size:14px;line-height:1.7;">
-      Sua assinatura foi registrada com segurança via Autentique. O documento pode ser acessado na plataforma IONEX360.
+      Esta assinatura tem validade jurídica como assinatura eletrônica simples,
+      conforme a <strong style="color:#e2e8f0;">Lei nº 14.063/2020</strong>.
+      Guarde o PDF anexo como comprovante.
     </p>
 
-    ${primaryButton(params.docsLink, "Ver documentos →")}
+    <p style="color:#475569;font-size:12px;margin-top:16px;">
+      Se você não realizou esta assinatura, entre em contato imediatamente com a administração da plataforma.
+    </p>
   `;
   return baseTemplate(`Documento assinado — ${params.termoNome}`, body);
 }
@@ -268,7 +288,18 @@ export function buildSigningRequestEmail(params: {
   signatarioNome: string;
   termoNome: string;
   signatureLink: string;
+  clinicName?: string;
+  expiresAt?: string;
 }): string {
+  const clinicLine = params.clinicName ? `<tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Clínica</p>
+        <p style="margin:0;color:#e2e8f0;font-weight:600;">${params.clinicName}</p>
+      </td></tr>` : "";
+  const expiryLine = params.expiresAt ? `<tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Válido até</p>
+        <p style="margin:0;color:#f59e0b;font-weight:600;">${params.expiresAt}</p>
+      </td></tr>` : "";
+
   const body = `
     <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Assinatura eletrônica solicitada</h1>
     <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
@@ -282,19 +313,82 @@ export function buildSigningRequestEmail(params: {
           <p style="margin:0;color:#e2e8f0;font-weight:600;font-size:16px;">${params.termoNome}</p>
         </td>
       </tr>
+      ${clinicLine}
+      ${expiryLine}
     </table>
 
     <p style="color:#94a3b8;font-size:14px;line-height:1.7;">
-      Clique no botão abaixo para revisar e assinar o documento eletronicamente via Autentique. O link é seguro e único para você.
+      Clique no botão abaixo para revisar o documento e registrar sua assinatura eletrônica.
+      Sua assinatura terá validade jurídica como assinatura eletrônica simples
+      (<strong style="color:#e2e8f0;">Lei nº 14.063/2020</strong>) e será registrada com data, hora e endereço IP.
     </p>
 
     ${primaryButton(params.signatureLink, "Revisar e assinar →")}
+
+    <p style="color:#475569;font-size:12px;margin-top:8px;">
+      Ou copie e cole este link no navegador:<br/>
+      <span style="color:#3b82f6;word-break:break-all;">${params.signatureLink}</span>
+    </p>
 
     <p style="color:#475569;font-size:12px;margin-top:16px;">
       Se você não esperava esta solicitação, entre em contato com a administração da plataforma.
     </p>
   `;
   return baseTemplate(`Assine: ${params.termoNome}`, body);
+}
+
+export function buildOperatorSignatureNotificationEmail(params: {
+  termoNome: string;
+  clinicName: string;
+  signatarioNome: string;
+  signatarioEmail: string;
+  signatarioCpf: string;
+  signedAt: string;
+  signerIp: string;
+  verificationCode: string;
+  documentLink: string;
+}): string {
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Termo assinado por cliente</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      Um documento LGPD foi assinado eletronicamente por um signatário da clínica
+      <strong style="color:#e2e8f0;">${params.clinicName}</strong>. Detalhes abaixo.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px;margin-bottom:24px;">
+      <tr>
+        <td>
+          <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Documento</p>
+          <p style="margin:0;color:#3b82f6;font-weight:600;font-size:16px;">${params.termoNome}</p>
+        </td>
+      </tr>
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Signatário</p>
+        <p style="margin:0;color:#e2e8f0;">${params.signatarioNome} — CPF ${params.signatarioCpf}</p>
+        <p style="margin:0;color:#94a3b8;font-size:13px;">${params.signatarioEmail}</p>
+      </td></tr>
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Data e hora</p>
+        <p style="margin:0;color:#e2e8f0;">${params.signedAt}</p>
+      </td></tr>
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Endereço IP</p>
+        <p style="margin:0;color:#94a3b8;font-family:monospace;">${params.signerIp || "—"}</p>
+      </td></tr>
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Código de verificação</p>
+        <p style="margin:0;"><code style="background:#1e2333;color:#fbbf24;font-size:13px;font-weight:600;padding:4px 10px;border-radius:4px;letter-spacing:1px;">${params.verificationCode}</code></p>
+      </td></tr>
+    </table>
+
+    ${primaryButton(params.documentLink, "Abrir painel da clínica →")}
+
+    <p style="color:#475569;font-size:12px;margin-top:16px;">
+      O PDF assinado está disponível para download na aba <strong style="color:#94a3b8;">LGPD &amp; Autorizações</strong>
+      do kickoff da clínica.
+    </p>
+  `;
+  return baseTemplate(`[IONEX360] Termo assinado — ${params.clinicName}`, body);
 }
 
 export function buildPushSetupEmail(params: { nome: string; activationLink: string }): string {
@@ -332,11 +426,18 @@ export interface SendEmailResult {
   error?: string;
 }
 
+export interface EmailAttachment {
+  filename: string;
+  content: string; // base64-encoded
+  contentType?: string;
+}
+
 export async function sendEmail(params: {
   to: string | string[];
   subject: string;
   html: string;
   replyTo?: string;
+  attachments?: EmailAttachment[];
 }): Promise<boolean> {
   const result = await sendEmailDetailed(params);
   return result.ok;
@@ -347,6 +448,7 @@ export async function sendEmailDetailed(params: {
   subject: string;
   html: string;
   replyTo?: string;
+  attachments?: EmailAttachment[];
 }): Promise<SendEmailResult> {
   const apiKey = await getConfig("resend_api_key");
   if (!apiKey) {
@@ -365,6 +467,13 @@ export async function sendEmailDetailed(params: {
     };
     if (replyTo) {
       body.reply_to = replyTo;
+    }
+    if (params.attachments && params.attachments.length > 0) {
+      body.attachments = params.attachments.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        ...(a.contentType ? { content_type: a.contentType } : {}),
+      }));
     }
 
     const res = await fetch("https://api.resend.com/emails", {

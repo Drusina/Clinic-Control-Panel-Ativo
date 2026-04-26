@@ -31,6 +31,7 @@ import IcsTemplatesPage from "@/pages/ics-templates/index";
 import AdminConfiguracoesPage from "@/pages/admin-configuracoes/index";
 import ConvitePage from "@/pages/convite/index";
 import ClinicDocumentsPage from "@/pages/clinic-documents/index";
+import AssinarPage from "@/pages/assinar/index";
 import { ErrorBoundary } from "@/components/error-boundary";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -76,6 +77,9 @@ function Router() {
   return (
     <Switch>
       <Route path="/admin/login" component={AdminLogin} />
+
+      {/* Public electronic-signature page — no auth, no AppLayout. */}
+      <Route path="/assinar/:token" component={AssinarPage} />
 
       <Route path="/convite" component={ConvitePage} />
 

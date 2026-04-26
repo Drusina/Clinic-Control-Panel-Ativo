@@ -66,9 +66,15 @@ function mapTermo(t: typeof lgpdTermosTable.$inferSelect) {
     acaoUrl: t.acaoUrl ?? null,
     signatarioNome: t.signatarioNome ?? null,
     signatarioEmail: t.signatarioEmail ?? null,
+    signatarioCargo: t.signatarioCargo ?? null,
     assinadoEm: t.assinadoEm?.toISOString() ?? null,
     storagePath: t.storagePath ?? null,
     enviadoEm: t.enviadoEm?.toISOString() ?? null,
+    signingTokenExpiresAt: t.signingTokenExpiresAt?.toISOString() ?? null,
+    signerCpf: t.signerCpf ?? null,
+    docHash: t.docHash ?? null,
+    signedStoragePath: t.signedStoragePath ?? null,
+    templateVersion: t.templateVersion ?? null,
     createdAt: t.createdAt.toISOString(),
   };
 }
