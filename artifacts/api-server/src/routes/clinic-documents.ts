@@ -435,7 +435,7 @@ router.post(
     }
 
     const summarizedAt = new Date();
-    const [updated] = await db
+    await db
       .update(clinicDocumentsTable)
       .set({ summary: result.summary, summarizedAt })
       .where(
@@ -443,10 +443,12 @@ router.post(
           eq(clinicDocumentsTable.id, id),
           eq(clinicDocumentsTable.clinicId, clinicId),
         ),
-      )
-      .returning();
+      );
 
-    res.json(mapDoc(updated));
+    res.json({
+      summary: result.summary,
+      summarizedAt: summarizedAt.toISOString(),
+    });
   },
 );
 

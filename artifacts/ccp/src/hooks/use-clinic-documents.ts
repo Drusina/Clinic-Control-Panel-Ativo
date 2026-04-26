@@ -174,11 +174,16 @@ export async function getClinicDocumentSignedUrl(
   return r.url;
 }
 
+export interface SummarizeResponse {
+  summary: string;
+  summarizedAt: string;
+}
+
 export function useSummarizeClinicDocument(clinicId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      apiFetch<ClinicDocument>(
+      apiFetch<SummarizeResponse>(
         `/api/clinics/${clinicId}/documents/${id}/summarize`,
         { method: "POST" },
       ),

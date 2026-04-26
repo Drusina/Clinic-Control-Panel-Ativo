@@ -2,10 +2,12 @@ import OpenAI from "openai";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 const MAX_INPUT_CHARS = 8_000;
-// gpt-5 reasoning models consume tokens internally before the final answer.
-// Reserve generous budget so a 300-word summary fits after reasoning.
-const MAX_OUTPUT_TOKENS = 3_000;
+// Cost cap mandated by the task spec: ~300 words of output.
+const MAX_OUTPUT_TOKENS = 800;
 const MODEL = "gpt-5-mini";
+// gpt-5 reasoning models burn internal tokens before the visible answer.
+// "minimal" disables that overhead so the 800-token cap holds for output.
+const REASONING_EFFORT = "minimal" as const;
 
 const SYSTEM_PROMPT =
   "Você é um assistente jurídico/administrativo de uma clínica médica. " +
@@ -123,6 +125,7 @@ export async function summarizeDocument(
     response = await client.chat.completions.create({
       model: MODEL,
       max_completion_tokens: MAX_OUTPUT_TOKENS,
+      reasoning_effort: REASONING_EFFORT,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
