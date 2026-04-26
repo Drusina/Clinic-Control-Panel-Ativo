@@ -21,6 +21,7 @@ import CadastroTab from "./tabs/cadastro-tab";
 import StatusTab from "./tabs/status-tab";
 import UsuariosTab from "./tabs/usuarios-tab";
 import AtividadeTab from "./tabs/atividade-tab";
+import DocumentosTab from "./tabs/documentos-tab";
 
 export default function ClinicDetail() {
   const params = useParams();
@@ -82,6 +83,7 @@ export default function ClinicDetail() {
           <TabsTrigger value="status" className="min-w-fit" data-testid="tab-status">Status</TabsTrigger>
           <TabsTrigger value="usuarios" className="min-w-fit" data-testid="tab-usuarios">Usuários</TabsTrigger>
           <TabsTrigger value="atividade" className="min-w-fit" data-testid="tab-atividade">Atividade</TabsTrigger>
+          <TabsTrigger value="documentos" className="min-w-fit" data-testid="tab-documentos">Documentos</TabsTrigger>
           <TabsTrigger value="overview" className="min-w-fit">Visão Geral</TabsTrigger>
           <TabsTrigger value="kickoff" className="min-w-fit">Kickoff</TabsTrigger>
           <TabsTrigger value="diagnostics" className="min-w-fit">Diagnóstico</TabsTrigger>
@@ -104,6 +106,9 @@ export default function ClinicDetail() {
         </TabsContent>
         <TabsContent value="atividade">
           <AtividadeTab clinicId={id} />
+        </TabsContent>
+        <TabsContent value="documentos">
+          <DocumentosTab clinicId={id} />
         </TabsContent>
         <TabsContent value="overview">
           <OverviewTab clinic={clinic} />

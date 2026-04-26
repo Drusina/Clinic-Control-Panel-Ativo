@@ -30,6 +30,7 @@ import RelatoriosPage from "@/pages/relatorios/index";
 import IcsTemplatesPage from "@/pages/ics-templates/index";
 import AdminConfiguracoesPage from "@/pages/admin-configuracoes/index";
 import ConvitePage from "@/pages/convite/index";
+import ClinicDocumentsPage from "@/pages/clinic-documents/index";
 import { ErrorBoundary } from "@/components/error-boundary";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -102,6 +103,15 @@ function Router() {
           <AppLayout>
             <SuperAdminGuard>
               <NewClinic />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/admin/clinicas/:id/documentos">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <ClinicDocumentsPage />
             </SuperAdminGuard>
           </AppLayout>
         )}

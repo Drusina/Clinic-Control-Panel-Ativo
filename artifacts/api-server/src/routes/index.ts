@@ -34,6 +34,8 @@ import icsTemplatesRouter from "./ics-templates";
 import serverConfigRouter from "./server-config";
 import documentAccessLogRouter from "./document-access-log";
 import cnpjRouter from "./cnpj";
+import documentCategoriesRouter from "./document-categories";
+import clinicDocumentsRouter from "./clinic-documents";
 
 const router: IRouter = Router();
 
@@ -72,5 +74,7 @@ router.use(requireSuperAdmin, icsTemplatesRouter);
 router.use(requireSuperAdmin, serverConfigRouter);
 router.use(requireSuperAdmin, documentAccessLogRouter);
 router.use(requireSuperAdmin, cnpjRouter);
+router.use(requireSuperAdmin, documentCategoriesRouter);
+router.use(requireSuperAdmin, clinicDocumentsRouter);
 
 export default router;
