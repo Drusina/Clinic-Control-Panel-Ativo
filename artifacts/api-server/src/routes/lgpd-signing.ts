@@ -191,10 +191,10 @@ protectedRouter.post(
       // Upload original PDF to GCS
       const originalPath = await uploadPdfBytes(bytes);
 
-      // Token + 30-day expiry
+      // Token + 30-day expiry (matches the validity window communicated to the
+      // signer in the request e-mail; renew via "Reemitir" if it expires).
       const token = generateToken();
-      // 7-day expiry (Lei 14.063/2020 — token TTL alinhado ao prazo razoável de assinatura)
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
       await db
         .update(lgpdTermosTable)
@@ -580,6 +580,22 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
       downloadToken: token, // The same token can fetch the signed PDF via /assinar/pdf/:token
     });
   } catch (err) {
+    // Compensating rollback: any failure after the atomic claim must release the
+    // row back to "enviado" so the admin can re-emit and the signer can retry.
+    // Without this the termo would be deadlocked in "assinando".
+    try {
+      await db
+        .update(lgpdTermosTable)
+        .set({ status: "enviado", assinadoEm: null })
+        .where(
+          and(
+            eq(lgpdTermosTable.signingToken, token),
+            eq(lgpdTermosTable.status, "assinando"),
+          ),
+        );
+    } catch {
+      /* swallow — best-effort rollback */
+    }
     const msg = err instanceof Error ? err.message : "Erro ao processar assinatura";
     res.status(500).json({ error: msg });
   }

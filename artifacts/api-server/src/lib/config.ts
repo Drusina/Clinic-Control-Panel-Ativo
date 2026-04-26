@@ -100,6 +100,45 @@ export async function setConfig(key: ConfigKey, value: string): Promise<void> {
   invalidateConfigCache(key);
 }
 
+/**
+ * Default values for the 9 contratada_* keys, populated from BLU SOLLUTTIONS
+ * LTDA's certidão CNPJ + contrato social. These are inserted on first
+ * server start (or first read) so a brand-new database renders coherent
+ * LGPD documents out of the box without requiring an admin to manually
+ * copy nine fields. Operators can override any field via /admin/configuracoes.
+ */
+const CONTRATADA_DEFAULTS: Record<string, string> = {
+  contratada_razao_social: "BLU SOLLUTTIONS LTDA",
+  contratada_cnpj: "55.190.026/0001-31",
+  contratada_endereco: "Av. Brasil 2125, sala 04-A",
+  contratada_cidade_uf: "Sorriso/MT",
+  contratada_cep: "78.890-126",
+  contratada_representante_nome: "Rafaela Calgaro",
+  contratada_representante_cpf: "032.539.209-92",
+  contratada_representante_cargo: "Sócia-Administradora",
+  contratada_email_notificacao: "claudiomilenio@gmail.com",
+};
+
+let contratadaBootstrapDone = false;
+
+/**
+ * One-time bootstrap: insert the 9 contratada_* defaults if they are not
+ * already present. Uses ON CONFLICT DO NOTHING so existing operator overrides
+ * are preserved on every restart. Safe to call repeatedly.
+ */
+export async function bootstrapContratadaDefaults(): Promise<void> {
+  if (contratadaBootstrapDone) return;
+  contratadaBootstrapDone = true;
+  const rows = Object.entries(CONTRATADA_DEFAULTS).map(([key, value]) => ({ key, value }));
+  await db
+    .insert(serverConfigTable)
+    .values(rows)
+    .onConflictDoNothing({ target: serverConfigTable.key });
+  for (const key of Object.keys(CONTRATADA_DEFAULTS)) {
+    invalidateConfigCache(key as ConfigKey);
+  }
+}
+
 export async function deleteConfig(key: ConfigKey): Promise<void> {
   await db.delete(serverConfigTable).where(eq(serverConfigTable.key, key));
   invalidateConfigCache(key);

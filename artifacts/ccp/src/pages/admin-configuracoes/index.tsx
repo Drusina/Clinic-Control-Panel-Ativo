@@ -654,11 +654,10 @@ function LgpdTemplatesCard() {
         </CardTitle>
         <CardDescription className="text-sm">
           Edite o conteúdo padrão dos termos enviados aos signatários. Use{" "}
-          <code className="font-mono text-xs">{"{{razao_social}}"}</code>,{" "}
-          <code className="font-mono text-xs">{"{{cnpj}}"}</code>,{" "}
-          <code className="font-mono text-xs">{"{{contratada_*}}"}</code>,{" "}
-          <code className="font-mono text-xs">{"{{signatario_nome}}"}</code> e{" "}
-          <code className="font-mono text-xs">{"{{data_atual}}"}</code> como variáveis.
+          <code className="font-mono text-xs">{"{{contratada.razao_social}}"}</code>,{" "}
+          <code className="font-mono text-xs">{"{{contratante.cnpj}}"}</code>,{" "}
+          <code className="font-mono text-xs">{"{{contratante.responsavel}}"}</code> e{" "}
+          <code className="font-mono text-xs">{"{{data}}"}</code> como variáveis (a lista completa aparece dentro do editor).
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -794,17 +793,26 @@ function TemplateEditDialog({
                 data-testid="textarea-template-corpo"
               />
             </div>
-            <div className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-2">
-              <strong className="text-foreground">Variáveis disponíveis:</strong>{" "}
-              <code>{"{{razao_social}}"}</code>, <code>{"{{cnpj}}"}</code>,{" "}
-              <code>{"{{endereco}}"}</code>, <code>{"{{representante_legal}}"}</code>,{" "}
-              <code>{"{{contratada_razao_social}}"}</code>, <code>{"{{contratada_cnpj}}"}</code>,{" "}
-              <code>{"{{contratada_endereco}}"}</code>,{" "}
-              <code>{"{{contratada_representante_nome}}"}</code>,{" "}
-              <code>{"{{contratada_representante_cpf}}"}</code>,{" "}
-              <code>{"{{contratada_representante_cargo}}"}</code>,{" "}
-              <code>{"{{signatario_nome}}"}</code>, <code>{"{{signatario_email}}"}</code>,{" "}
-              <code>{"{{signatario_cargo}}"}</code>, <code>{"{{data_atual}}"}</code>.
+            <div className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-2 space-y-1">
+              <p>
+                <strong className="text-foreground">Variáveis da contratada (BLU SOLLUTTIONS):</strong>{" "}
+                <code>{"{{contratada.razao_social}}"}</code>, <code>{"{{contratada.cnpj}}"}</code>,{" "}
+                <code>{"{{contratada.endereco}}"}</code>, <code>{"{{contratada.cidade_uf}}"}</code>,{" "}
+                <code>{"{{contratada.cep}}"}</code>, <code>{"{{contratada.representante_nome}}"}</code>,{" "}
+                <code>{"{{contratada.representante_cpf}}"}</code>,{" "}
+                <code>{"{{contratada.representante_cargo}}"}</code>.
+              </p>
+              <p>
+                <strong className="text-foreground">Variáveis da contratante (clínica):</strong>{" "}
+                <code>{"{{contratante.razao_social}}"}</code>, <code>{"{{contratante.nome_fantasia}}"}</code>,{" "}
+                <code>{"{{contratante.cnpj}}"}</code>, <code>{"{{contratante.endereco}}"}</code>,{" "}
+                <code>{"{{contratante.cidade_uf}}"}</code>, <code>{"{{contratante.cep}}"}</code>,{" "}
+                <code>{"{{contratante.responsavel}}"}</code>.
+              </p>
+              <p>
+                <strong className="text-foreground">Outras:</strong>{" "}
+                <code>{"{{data}}"}</code> (data atual no formato "DD de mês de AAAA").
+              </p>
             </div>
           </div>
         )}

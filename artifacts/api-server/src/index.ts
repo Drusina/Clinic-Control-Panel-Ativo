@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { initVapid, isPushConfigured } from "./lib/push.js";
 import { startScheduler, stopScheduler } from "./lib/scheduler.js";
 import { initTokenSigningSecret } from "./lib/token-secret.js";
+import { bootstrapContratadaDefaults } from "./lib/config.js";
 
 if (!process.env.SUPER_ADMIN_SECRET || process.env.SUPER_ADMIN_SECRET.length === 0) {
   throw new Error(
@@ -70,6 +71,13 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
+
+  // Bootstrap default Contratada (BLU SOLLUTTIONS) values into server_config
+  // so a brand-new database renders LGPD documents coherently from day one.
+  // Idempotent (ON CONFLICT DO NOTHING) — operator overrides are preserved.
+  await bootstrapContratadaDefaults().catch((e) =>
+    logger.error({ err: e }, "Failed to bootstrap contratada defaults — admin will need to fill them manually"),
+  );
 
   app.listen(port, async (err) => {
     if (err) {
