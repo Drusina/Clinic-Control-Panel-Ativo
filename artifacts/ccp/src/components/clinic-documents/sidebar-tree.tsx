@@ -11,6 +11,7 @@ import {
   Upload,
   Folder,
   Trash2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ClinicDocument, ClinicDocumentCategory } from "@/hooks/use-clinic-documents";
@@ -197,9 +198,15 @@ export function SidebarTree({
                       data-testid={`doc-row-${d.id}`}
                     >
                       <FileIcon mime={d.fileType} fileName={d.fileName} />
-                      <span className="truncate" title={d.title}>
+                      <span className="truncate flex-1" title={d.title}>
                         {d.title}
                       </span>
+                      {d.summary && (
+                        <Sparkles
+                          className="h-3 w-3 text-primary shrink-0"
+                          aria-label="Resumo IA disponível"
+                        />
+                      )}
                     </button>
                   ))}
                 </div>

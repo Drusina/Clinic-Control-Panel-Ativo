@@ -17,6 +17,8 @@ import {
   type ClinicDocument,
   type ClinicDocumentCategory,
   getClinicDocumentSignedUrl,
+  isSummarizableMime,
+  useSummarizeClinicDocument,
 } from "@/hooks/use-clinic-documents";
 import { FileIcon, formatBytes, getFileKind } from "./file-icon";
 
@@ -37,6 +39,7 @@ export function DetailPanel({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingUrl, setLoadingUrl] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const summarize = useSummarizeClinicDocument(clinicId);
 
   useEffect(() => {
     setPreviewUrl(null);
@@ -218,15 +221,68 @@ export function DetailPanel({
           </h3>
           <div className="border rounded-md p-4 bg-accent/20">
             {doc.summary ? (
-              <p className="text-sm whitespace-pre-wrap">{doc.summary}</p>
+              <>
+                <p className="text-sm whitespace-pre-wrap" data-testid="text-doc-summary">
+                  {doc.summary}
+                </p>
+                {doc.summarizedAt && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Gerado em{" "}
+                    {new Date(doc.summarizedAt).toLocaleString("pt-BR", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                  </p>
+                )}
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Em breve: gere um resumo automático deste documento.
+                {isSummarizableMime(doc.fileType)
+                  ? "Gere um resumo executivo automático deste documento."
+                  : "Resumo automático disponível apenas para PDF e arquivos de texto."}
               </p>
             )}
-            <Button size="sm" variant="outline" className="mt-3" disabled>
-              <Sparkles className="h-4 w-4 mr-2" />
-              {doc.summary ? "Regenerar resumo" : "Gerar resumo"}
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-3"
+              disabled={
+                summarize.isPending || !isSummarizableMime(doc.fileType)
+              }
+              title={
+                !isSummarizableMime(doc.fileType)
+                  ? "Apenas PDF e arquivos de texto"
+                  : undefined
+              }
+              data-testid="btn-summarize-doc"
+              onClick={() => {
+                summarize.mutate(doc.id, {
+                  onSuccess: () => {
+                    toast({
+                      title: "Resumo gerado",
+                      description: "O resumo foi atualizado.",
+                    });
+                  },
+                  onError: (err) => {
+                    toast({
+                      variant: "destructive",
+                      title: "Falha ao gerar resumo",
+                      description: (err as Error).message,
+                    });
+                  },
+                });
+              }}
+            >
+              {summarize.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-2" />
+              )}
+              {summarize.isPending
+                ? "Gerando…"
+                : doc.summary
+                  ? "Regenerar resumo"
+                  : "Gerar resumo"}
             </Button>
           </div>
         </section>

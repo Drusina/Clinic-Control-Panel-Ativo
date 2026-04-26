@@ -174,6 +174,27 @@ export async function getClinicDocumentSignedUrl(
   return r.url;
 }
 
+export function useSummarizeClinicDocument(clinicId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<ClinicDocument>(
+        `/api/clinics/${clinicId}/documents/${id}/summarize`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clinic-documents", clinicId] });
+    },
+  });
+}
+
+export function isSummarizableMime(mime: string | null): boolean {
+  if (!mime) return false;
+  if (mime === "application/pdf") return true;
+  if (mime.startsWith("text/")) return true;
+  return false;
+}
+
 export async function fixClinicDocumentEncoding(clinicId: string): Promise<number> {
   const r = await apiFetch<{ fixed: number }>(
     `/api/clinics/${clinicId}/documents/fix-encoding`,

@@ -20,6 +20,7 @@
     "express": "^5",
     "google-auth-library": "^10.6.2",
     "multer": "^2.1.1",
+    "openai": "^6.34.0",
     "pdf-lib": "^1.17.1",
     "pg-boss": "^12.16.0",
     "pino": "^9",
@@ -33,9 +34,11 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
     "@types/node": "catalog:",
+    "@types/pdf-parse": "^1.1.5",
     "@types/web-push": "^3.6.4",
     "esbuild": "^0.27.3",
     "esbuild-plugin-pino": "^2.3.3",
+    "pdf-parse": "1.1.1",
     "pino-pretty": "^13",
     "thread-stream": "3.1.0"
   }

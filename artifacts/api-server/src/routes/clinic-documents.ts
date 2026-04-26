@@ -9,6 +9,13 @@ import {
 } from "@workspace/db";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage.js";
 import { signToken } from "../middleware/auth.js";
+import {
+  summarizeDocument,
+  isSummarizableMimeType,
+  UnsupportedFileTypeError,
+  EmptyDocumentError,
+  PdfExtractionError,
+} from "../lib/aiSummarizer.js";
 
 const objectStorageService = new ObjectStorageService();
 const SIGNED_URL_TTL_SECONDS = 3600;
@@ -352,6 +359,94 @@ router.post(
     }
 
     res.json({ fixed });
+  },
+);
+
+router.post(
+  "/clinics/:clinicId/documents/:id/summarize",
+  async (req, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId)
+      ? req.params.clinicId[0]
+      : req.params.clinicId;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const [doc] = await db
+      .select()
+      .from(clinicDocumentsTable)
+      .where(
+        and(
+          eq(clinicDocumentsTable.id, id),
+          eq(clinicDocumentsTable.clinicId, clinicId),
+        ),
+      );
+
+    if (!doc) {
+      res.status(404).json({ error: "Documento não encontrado" });
+      return;
+    }
+
+    if (!isSummarizableMimeType(doc.fileType)) {
+      res.status(400).json({
+        error: `Tipo de arquivo não suportado para resumo (${doc.fileType ?? "desconhecido"}). Apenas PDF e arquivos de texto.`,
+      });
+      return;
+    }
+
+    if (!doc.storagePath.startsWith("/objects/")) {
+      res.status(410).json({
+        error: "Arquivo armazenado em local legado. Reenvie para gerar resumo.",
+      });
+      return;
+    }
+
+    let fileBuffer: Buffer;
+    try {
+      const file = await objectStorageService.getObjectEntityFile(doc.storagePath);
+      const [data] = await file.download();
+      fileBuffer = data;
+    } catch (err) {
+      if (err instanceof ObjectNotFoundError) {
+        res.status(404).json({ error: "Arquivo não encontrado no armazenamento." });
+        return;
+      }
+      console.error(
+        `[clinic-documents] storage read failed for doc ${id}:`,
+        err,
+      );
+      res.status(500).json({ error: "Falha ao ler o arquivo do armazenamento." });
+      return;
+    }
+
+    let result;
+    try {
+      result = await summarizeDocument(fileBuffer, doc.fileType);
+    } catch (err) {
+      if (
+        err instanceof UnsupportedFileTypeError ||
+        err instanceof EmptyDocumentError ||
+        err instanceof PdfExtractionError
+      ) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      console.error(`[clinic-documents] summarize failed for doc ${id}:`, err);
+      res.status(500).json({ error: "Falha ao gerar resumo. Tente novamente." });
+      return;
+    }
+
+    const summarizedAt = new Date();
+    const [updated] = await db
+      .update(clinicDocumentsTable)
+      .set({ summary: result.summary, summarizedAt })
+      .where(
+        and(
+          eq(clinicDocumentsTable.id, id),
+          eq(clinicDocumentsTable.clinicId, clinicId),
+        ),
+      )
+      .returning();
+
+    res.json(mapDoc(updated));
   },
 );
 
