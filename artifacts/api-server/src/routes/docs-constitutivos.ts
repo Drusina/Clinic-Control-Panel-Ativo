@@ -23,8 +23,43 @@ function mapDoc(d: typeof docsConstitutivoTable.$inferSelect) {
   };
 }
 
+const DEFAULT_DOCS: Array<{ categoria: string; nome: string; obrigatorio: boolean }> = [
+  { categoria: "Jurídico", nome: "Contrato Social", obrigatorio: true },
+  { categoria: "Jurídico", nome: "Cartão CNPJ", obrigatorio: true },
+  { categoria: "Funcionamento", nome: "Alvará de Funcionamento", obrigatorio: true },
+  { categoria: "Funcionamento", nome: "Licença Sanitária (VISA)", obrigatorio: true },
+  { categoria: "Funcionamento", nome: "CRM do Responsável Técnico", obrigatorio: false },
+  { categoria: "Financeiro", nome: "DRE", obrigatorio: false },
+  { categoria: "Financeiro", nome: "Balanço Patrimonial", obrigatorio: false },
+  { categoria: "Estrutura", nome: "Organograma", obrigatorio: false },
+  { categoria: "Seguros", nome: "Apólice RC Profissional", obrigatorio: false },
+];
+
+async function seedDefaultDocs(clinicId: string): Promise<void> {
+  const existing = await db
+    .select({ nome: docsConstitutivoTable.nome })
+    .from(docsConstitutivoTable)
+    .where(eq(docsConstitutivoTable.clinicId, clinicId));
+
+  const existingNomes = new Set(existing.map((r) => r.nome));
+  const toInsert = DEFAULT_DOCS.filter((d) => !existingNomes.has(d.nome));
+
+  if (toInsert.length > 0) {
+    await db.insert(docsConstitutivoTable).values(
+      toInsert.map((d) => ({
+        clinicId,
+        categoria: d.categoria,
+        nome: d.nome,
+        obrigatorio: d.obrigatorio,
+      }))
+    );
+  }
+}
+
 router.get("/clinics/:clinicId/docs-constitutivos", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+
+  await seedDefaultDocs(clinicId);
 
   const rows = await db
     .select()
