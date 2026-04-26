@@ -1,11 +1,18 @@
 import { Document, Page, Text, View } from "@react-pdf/renderer";
 import { PdfHeader, PdfFooter, PdfBody, SectionHeading, styles } from "./PdfTemplate";
 
+type DocConstitutivoFile = {
+  id: string;
+  fileName: string;
+  enviadoEm: string;
+};
+
 type DocConstitutivo = {
   id: string;
   categoria: string;
   nome: string;
   obrigatorio: boolean;
+  files?: DocConstitutivoFile[];
   storagePath: string | null;
   tamanho: number | null;
   enviadoEm: string | null;
@@ -17,10 +24,14 @@ type DocsConstitutivosPdfProps = {
   docs: DocConstitutivo[];
 };
 
+function hasFile(d: DocConstitutivo) {
+  return (d.files && d.files.length > 0) || !!d.storagePath;
+}
+
 export function DocsConstitutivosPdf({ clinicName, date, docs }: DocsConstitutivosPdfProps) {
-  const sent = docs.filter(d => d.storagePath).length;
-  const pending = docs.filter(d => !d.storagePath).length;
-  const required = docs.filter(d => d.obrigatorio && !d.storagePath).length;
+  const sent = docs.filter(hasFile).length;
+  const pending = docs.filter(d => !hasFile(d)).length;
+  const required = docs.filter(d => d.obrigatorio && !hasFile(d)).length;
 
   const grouped = docs.reduce((acc, doc) => {
     if (!acc[doc.categoria]) acc[doc.categoria] = [];
@@ -64,24 +75,31 @@ export function DocsConstitutivosPdf({ clinicName, date, docs }: DocsConstitutiv
                 <View style={styles.tableHeader}>
                   <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Documento</Text>
                   <Text style={styles.tableHeaderCell}>Obrigatório</Text>
-                  <Text style={styles.tableHeaderCell}>Status</Text>
-                  <Text style={styles.tableHeaderCell}>Enviado em</Text>
+                  <Text style={styles.tableHeaderCell}>Arquivos</Text>
+                  <Text style={styles.tableHeaderCell}>Último envio</Text>
                 </View>
-                {items.map((doc, i) => (
-                  <View key={doc.id} style={[styles.tableRow, { backgroundColor: i % 2 === 0 ? "#fafafa" : "#ffffff" }]}>
-                    <Text style={[styles.tableCell, { flex: 2 }]}>{doc.nome}</Text>
-                    <Text style={styles.tableCell}>{doc.obrigatorio ? "Sim" : "Não"}</Text>
-                    <Text style={[styles.tableCell, {
-                      color: doc.storagePath ? "#22c55e" : "#f59e0b",
-                      fontFamily: "Helvetica-Bold"
-                    }]}>
-                      {doc.storagePath ? "Enviado" : "Pendente"}
-                    </Text>
-                    <Text style={styles.tableCell}>
-                      {doc.enviadoEm ? new Date(doc.enviadoEm).toLocaleDateString("pt-BR") : "—"}
-                    </Text>
-                  </View>
-                ))}
+                {items.map((doc, i) => {
+                  const count = doc.files?.length ?? (doc.storagePath ? 1 : 0);
+                  const last =
+                    doc.files && doc.files.length > 0
+                      ? doc.files[doc.files.length - 1].enviadoEm
+                      : doc.enviadoEm;
+                  return (
+                    <View key={doc.id} style={[styles.tableRow, { backgroundColor: i % 2 === 0 ? "#fafafa" : "#ffffff" }]}>
+                      <Text style={[styles.tableCell, { flex: 2 }]}>{doc.nome}</Text>
+                      <Text style={styles.tableCell}>{doc.obrigatorio ? "Sim" : "Não"}</Text>
+                      <Text style={[styles.tableCell, {
+                        color: count > 0 ? "#22c55e" : "#f59e0b",
+                        fontFamily: "Helvetica-Bold"
+                      }]}>
+                        {count > 0 ? `${count} arquivo${count > 1 ? "s" : ""}` : "Pendente"}
+                      </Text>
+                      <Text style={styles.tableCell}>
+                        {last ? new Date(last).toLocaleDateString("pt-BR") : "—"}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
             </View>
           ))}

@@ -14,6 +14,7 @@ export * from "./perfil_operacional";
 export * from "./parceiros_externos";
 export * from "./sistemas_uso";
 export * from "./docs_constitutivos";
+export * from "./docs_constitutivos_files";
 export * from "./lgpd_termos";
 export * from "./perguntas";
 export * from "./respostas";

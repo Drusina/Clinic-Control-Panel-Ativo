@@ -267,9 +267,20 @@ export function useDeleteSistemaUso(clinicId: string) {
 
 // ─── Documentos Constitutivos ──────────────────────────────────────────────
 
+export interface DocConstitutivoFileData {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  tamanho: number | null;
+  sequenceNumber: number;
+  enviadoEm: string;
+}
+
 export interface DocConstitutivoData {
   id: string; clinicId: string; categoria: string; nome: string;
-  obrigatorio: boolean; storagePath?: string | null; tamanho?: number | null;
+  obrigatorio: boolean;
+  files: DocConstitutivoFileData[];
+  storagePath?: string | null; tamanho?: number | null;
   enviadoEm?: string | null; createdAt: string;
 }
 
@@ -281,13 +292,13 @@ export function useDocsConstitutivos(clinicId: string) {
   });
 }
 
-export function useUploadDocConstitutivo(clinicId: string) {
+export function useAddDocConstitutivoFile(clinicId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ docId, file }: { docId: string; file: File }) => {
       const fileBase64 = await fileToBase64(file);
-      return apiFetch<DocConstitutivoData>(
-        `/api/clinics/${clinicId}/docs-constitutivos/${docId}/upload`,
+      return apiFetch<DocConstitutivoFileData>(
+        `/api/clinics/${clinicId}/docs-constitutivos/${docId}/files`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -302,14 +313,48 @@ export function useUploadDocConstitutivo(clinicId: string) {
   });
 }
 
-export async function getSignedUrl(clinicId: string, docId: string): Promise<string> {
+export function useDeleteDocConstitutivoFile(clinicId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ docId, fileId }: { docId: string; fileId: string }) =>
+      apiFetch(
+        `/api/clinics/${clinicId}/docs-constitutivos/${docId}/files/${fileId}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["docs-constitutivos", clinicId] }),
+  });
+}
+
+async function fetchSignedUrl(path: string): Promise<string> {
   const token = getStoredToken();
   const BASE2 = import.meta.env.BASE_URL.replace(/\/$/, "");
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${BASE2}/api/clinics/${clinicId}/docs-constitutivos/${docId}/signed-url`, { headers });
-  const data = await res.json() as { url: string };
+  const res = await fetch(`${BASE2}${path}`, { headers });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const data = await res.json() as { error?: string };
+      detail = data?.error ?? "";
+    } catch {
+      // ignore body parse errors
+    }
+    throw new Error(detail || `Falha ao obter URL (HTTP ${res.status})`);
+  }
+  const data = (await res.json()) as { url?: string };
+  if (!data.url) throw new Error("Resposta inválida do servidor");
   return data.url;
+}
+
+export function getSignedFileUrl(clinicId: string, docId: string, fileId: string): Promise<string> {
+  return fetchSignedUrl(
+    `/api/clinics/${clinicId}/docs-constitutivos/${docId}/files/${fileId}/signed-url`,
+  );
+}
+
+// Legacy alias — opens the latest file
+export function getSignedUrl(clinicId: string, docId: string): Promise<string> {
+  return fetchSignedUrl(`/api/clinics/${clinicId}/docs-constitutivos/${docId}/signed-url`);
 }
 
 // ─── LGPD Termos ───────────────────────────────────────────────────────────
