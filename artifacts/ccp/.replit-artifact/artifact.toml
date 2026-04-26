@@ -16,6 +16,9 @@ localPort = 22570
 [services.development]
 run = "pnpm --filter @workspace/ccp run dev"
 
+[services.development.env]
+BASE_PATH = "/"
+
 [services.production]
 serve = "static"
 publicDir = "artifacts/ccp/dist/public"
