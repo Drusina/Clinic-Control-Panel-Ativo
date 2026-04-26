@@ -182,11 +182,26 @@ router.patch("/clinics/:clinicId/docs-constitutivos/:docId", async (req, res): P
   res.json(mapDoc(doc, files.map(mapFile)));
 });
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB decoded
+
+class PayloadTooLargeError extends Error {
+  readonly statusCode = 413;
+  constructor(message: string) {
+    super(message);
+    this.name = "PayloadTooLargeError";
+  }
+}
+
 async function uploadFileBuffer(
   fileBase64: string,
   mimeType: string | undefined,
 ): Promise<{ storagePath: string; size: number }> {
   const fileBuffer = Buffer.from(fileBase64, "base64");
+  if (fileBuffer.byteLength > MAX_UPLOAD_BYTES) {
+    throw new PayloadTooLargeError(
+      `Arquivo excede o limite de ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB`,
+    );
+  }
   const contentType = mimeType ?? "application/pdf";
 
   const uploadURL = await objectStorageService.getObjectEntityUploadURL();
@@ -266,7 +281,8 @@ router.post("/clinics/:clinicId/docs-constitutivos/:docId/upload", async (req, r
     const { storagePath, size } = await uploadFileBuffer(fileBase64, mimeType);
     await appendFileToDoc(docId, fileName, storagePath, size);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    const status = (err as PayloadTooLargeError).statusCode ?? 500;
+    res.status(status).json({ error: (err as Error).message });
     return;
   }
 
@@ -305,7 +321,8 @@ router.post("/clinics/:clinicId/docs-constitutivos/:docId/files", async (req, re
     const file = await appendFileToDoc(docId, fileName, storagePath, size);
     res.status(201).json(file);
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    const status = (err as PayloadTooLargeError).statusCode ?? 500;
+    res.status(status).json({ error: (err as Error).message });
   }
 });
 

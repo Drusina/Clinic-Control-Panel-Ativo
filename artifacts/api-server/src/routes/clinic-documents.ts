@@ -19,7 +19,7 @@ import {
 
 const objectStorageService = new ObjectStorageService();
 const SIGNED_URL_TTL_SECONDS = 3600;
-const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const upload = multer({
   storage: multer.memoryStorage(),

@@ -76,7 +76,12 @@ router.post("/clinics/:clinicId/evidencias/upload", async (req, res): Promise<vo
     return;
   }
 
+  const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB decoded
   const fileBuffer = Buffer.from(fileBase64, "base64");
+  if (fileBuffer.byteLength > MAX_UPLOAD_BYTES) {
+    res.status(413).json({ error: `Arquivo excede o limite de ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB` });
+    return;
+  }
   const safeFileName = sanitizeFileName(fileName);
   if (!safeFileName) {
     res.status(400).json({ error: "fileName inválido" });
