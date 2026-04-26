@@ -30,6 +30,7 @@ import RelatoriosPage from "@/pages/relatorios/index";
 import IcsTemplatesPage from "@/pages/ics-templates/index";
 import AdminConfiguracoesPage from "@/pages/admin-configuracoes/index";
 import ConvitePage from "@/pages/convite/index";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -382,9 +383,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <ErrorBoundary>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+        </ErrorBoundary>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

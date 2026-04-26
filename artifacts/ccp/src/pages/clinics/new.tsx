@@ -112,7 +112,8 @@ interface BrasilAPIResponse {
   cnae_fiscal_descricao?: string;
   data_inicio_atividade?: string;
   capital_social?: number;
-  situacao_cadastral?: string;
+  situacao_cadastral?: number;
+  descricao_situacao_cadastral?: string;
   qsa?: QSAPartner[];
 }
 
@@ -204,7 +205,7 @@ export default function NewClinic() {
 
       const cnaeParts = [data.cnae_fiscal, data.cnae_fiscal_descricao].filter(Boolean);
       form.setValue("cnae", cnaeParts.join(" – ") || "");
-      form.setValue("situacaoCadastral", data.situacao_cadastral || "");
+      form.setValue("situacaoCadastral", data.descricao_situacao_cadastral || (data.situacao_cadastral != null ? String(data.situacao_cadastral) : "") || "");
       form.setValue("capitalSocial", data.capital_social ?? 0);
       form.setValue("dataAbertura", data.data_inicio_atividade || "");
 
