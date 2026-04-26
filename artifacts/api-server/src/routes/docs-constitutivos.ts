@@ -26,7 +26,7 @@ function mapDoc(d: typeof docsConstitutivoTable.$inferSelect) {
 const DEFAULT_DOCS: Array<{ categoria: string; nome: string; obrigatorio: boolean }> = [
   { categoria: "Jurídico", nome: "Contrato Social", obrigatorio: true },
   { categoria: "Jurídico", nome: "Cartão CNPJ", obrigatorio: true },
-  { categoria: "Funcionamento", nome: "Alvará de Funcionamento", obrigatorio: true },
+  { categoria: "Funcionamento", nome: "Alvará", obrigatorio: true },
   { categoria: "Funcionamento", nome: "Licença Sanitária (VISA)", obrigatorio: true },
   { categoria: "Funcionamento", nome: "CRM do Responsável Técnico", obrigatorio: false },
   { categoria: "Financeiro", nome: "DRE", obrigatorio: false },
