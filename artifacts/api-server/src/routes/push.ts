@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { db, pushSubscriptionsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getVapidPublicKey, isPushConfigured } from "../lib/push.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -121,20 +121,9 @@ router.post("/push/subscribe", requireAuth, requireActiveTeamMember, async (req,
     return;
   }
 
-  const existingQuery = teamMemberId
-    ? db.select().from(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.teamMemberId, teamMemberId))
-    : db.select().from(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.email, userKey));
-
-  const existingForUser = await existingQuery;
-
-  const alreadyExists = existingForUser.some(
-    (row) => (row.subscription as { endpoint: string }).endpoint === subscription.endpoint
+  await db.delete(pushSubscriptionsTable).where(
+    sql`${pushSubscriptionsTable.subscription}->>'endpoint' = ${subscription.endpoint}`
   );
-
-  if (alreadyExists) {
-    res.json({ ok: true, created: false });
-    return;
-  }
 
   await db.insert(pushSubscriptionsTable).values({
     email: userKey,

@@ -125,7 +125,7 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
   sendPushToClinic(clinicId, delegationPushPayload).catch(() => {});
 
   if (responsavelEmail) {
-    sendPushToEmail(responsavelEmail, {
+    sendPushToEmail(responsavelEmail, clinicId, {
       title: "Nova delegação para você",
       body: `Você é responsável pelo pilar "${pilarNome}".`,
       tag: `delegacao-${pilarSlug}`,

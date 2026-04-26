@@ -101,13 +101,13 @@ export async function sendPushToTeamMember(teamMemberId: string, payload: PushPa
   return dispatchPush(subs, payload);
 }
 
-export async function sendPushToEmail(email: string, payload: PushPayload): Promise<{ sent: number; failed: number }> {
+export async function sendPushToEmail(email: string, clinicId: string, payload: PushPayload): Promise<{ sent: number; failed: number }> {
   if (!vapidConfigured) return { sent: 0, failed: 0 };
 
   const [member] = await db
     .select({ id: teamTable.id, temAcessoPlataforma: teamTable.temAcessoPlataforma })
     .from(teamTable)
-    .where(eq(teamTable.email, email))
+    .where(and(eq(teamTable.email, email), eq(teamTable.clinicId, clinicId)))
     .limit(1);
 
   if (member) {

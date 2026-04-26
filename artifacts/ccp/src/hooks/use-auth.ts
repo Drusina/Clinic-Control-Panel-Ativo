@@ -49,9 +49,29 @@ function clearAllCaches(queryClient: ReturnType<typeof useQueryClient>): void {
   }
 }
 
+async function revokePushEndpoint(token: string | null): Promise<void> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    await fetch("/api/push/subscribe", {
+      method: "DELETE",
+      headers,
+      body: JSON.stringify({ endpoint: sub.endpoint }),
+    }).catch(() => {});
+    await sub.unsubscribe().catch(() => {});
+  } catch {
+  }
+}
+
 export function useSwitchSession() {
   const queryClient = useQueryClient();
-  return (token: string) => {
+  return async (token: string) => {
+    const previousToken = getStoredToken();
+    await revokePushEndpoint(previousToken);
     storeToken(token);
     clearAllCaches(queryClient);
   };
@@ -59,7 +79,9 @@ export function useSwitchSession() {
 
 export function useLogout() {
   const queryClient = useQueryClient();
-  return () => {
+  return async () => {
+    const previousToken = getStoredToken();
+    await revokePushEndpoint(previousToken);
     clearToken();
     clearAllCaches(queryClient);
   };
