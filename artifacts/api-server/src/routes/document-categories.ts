@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, asc, max } from "drizzle-orm";
-import { db, documentCategoriesTable, clinicDocumentsTable } from "@workspace/db";
+import { eq, and, asc, max, sql } from "drizzle-orm";
+import { db, documentCategoriesTable, clinicDocumentsTable, clinicsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -36,28 +36,48 @@ function mapCategory(
   };
 }
 
-async function seedDefaultCategories(clinicId: string): Promise<void> {
-  const existing = await db
-    .select({ id: documentCategoriesTable.id })
-    .from(documentCategoriesTable)
-    .where(eq(documentCategoriesTable.clinicId, clinicId))
-    .limit(1);
+type SeedResult = { ok: true } | { error: "not_found" };
 
-  if (existing.length > 0) return;
+async function seedDefaultCategories(clinicId: string): Promise<SeedResult> {
+  return await db.transaction(async (tx) => {
+    // Lock the clinic row to serialize concurrent first-access seeders for the
+    // same clinic, and to validate that the clinic exists (avoiding a later
+    // FK error and giving the caller a clean 404).
+    const clinicRows = await tx.execute(
+      sql`SELECT id FROM ${clinicsTable} WHERE ${clinicsTable.id} = ${clinicId} FOR UPDATE`,
+    );
+    if (clinicRows.rows.length === 0) {
+      return { error: "not_found" as const };
+    }
 
-  await db.insert(documentCategoriesTable).values(
-    DEFAULT_CATEGORIES.map((name, i) => ({
-      clinicId,
-      name,
-      ordem: i,
-    })),
-  );
+    const existing = await tx
+      .select({ id: documentCategoriesTable.id })
+      .from(documentCategoriesTable)
+      .where(eq(documentCategoriesTable.clinicId, clinicId))
+      .limit(1);
+
+    if (existing.length > 0) return { ok: true as const };
+
+    await tx.insert(documentCategoriesTable).values(
+      DEFAULT_CATEGORIES.map((name, i) => ({
+        clinicId,
+        name,
+        ordem: i,
+      })),
+    );
+
+    return { ok: true as const };
+  });
 }
 
 router.get("/clinics/:clinicId/document-categories", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
 
-  await seedDefaultCategories(clinicId);
+  const seed = await seedDefaultCategories(clinicId);
+  if ("error" in seed) {
+    res.status(404).json({ error: "Clínica não encontrada" });
+    return;
+  }
 
   const cats = await db
     .select()
