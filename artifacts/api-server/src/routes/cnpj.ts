@@ -1,38 +1,10 @@
 import { Router, type IRouter } from "express";
+import { db, cnpjCacheTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
 const TTL_MS = 24 * 60 * 60 * 1000;
-const MAX_CACHE_SIZE = 1_000;
-
-interface CacheEntry {
-  data: unknown;
-  expiresAt: number;
-}
-
-const cache = new Map<string, CacheEntry>();
-
-function cacheGet(cnpj: string): CacheEntry | undefined {
-  const entry = cache.get(cnpj);
-  if (!entry) return undefined;
-  if (entry.expiresAt <= Date.now()) {
-    cache.delete(cnpj);
-    return undefined;
-  }
-  cache.delete(cnpj);
-  cache.set(cnpj, entry);
-  return entry;
-}
-
-function cacheSet(cnpj: string, entry: CacheEntry): void {
-  if (cache.has(cnpj)) {
-    cache.delete(cnpj);
-  } else if (cache.size >= MAX_CACHE_SIZE) {
-    const oldestKey = cache.keys().next().value as string;
-    cache.delete(oldestKey);
-  }
-  cache.set(cnpj, entry);
-}
 
 router.get("/cnpj/:cnpj", async (req, res): Promise<void> => {
   const cnpj = req.params.cnpj.replace(/\D/g, "");
@@ -42,8 +14,13 @@ router.get("/cnpj/:cnpj", async (req, res): Promise<void> => {
     return;
   }
 
-  const cached = cacheGet(cnpj);
-  if (cached) {
+  const [cached] = await db
+    .select()
+    .from(cnpjCacheTable)
+    .where(eq(cnpjCacheTable.cnpj, cnpj))
+    .limit(1);
+
+  if (cached && cached.expiresAt > new Date()) {
     res.json(cached.data);
     return;
   }
@@ -68,7 +45,16 @@ router.get("/cnpj/:cnpj", async (req, res): Promise<void> => {
     }
 
     const data = await response.json();
-    cacheSet(cnpj, { data, expiresAt: Date.now() + TTL_MS });
+    const expiresAt = new Date(Date.now() + TTL_MS);
+
+    await db
+      .insert(cnpjCacheTable)
+      .values({ cnpj, data, expiresAt })
+      .onConflictDoUpdate({
+        target: cnpjCacheTable.cnpj,
+        set: { data, expiresAt, updatedAt: new Date() },
+      });
+
     res.json(data);
   } catch {
     res.status(502).json({ error: "Erro de conexão ao consultar a Receita Federal." });
