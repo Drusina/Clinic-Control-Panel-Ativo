@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { db, docsConstitutivoTable, docsConstitutivoFilesTable } from "@workspace/db";
 import { ObjectStorageService } from "../lib/objectStorage.js";
 import { signToken } from "../middleware/auth.js";
@@ -103,10 +103,10 @@ async function loadFilesForDocs(docIds: string[]): Promise<Map<string, DocFileMa
   const rows = await db
     .select()
     .from(docsConstitutivoFilesTable)
+    .where(inArray(docsConstitutivoFilesTable.docId, docIds))
     .orderBy(docsConstitutivoFilesTable.sequenceNumber);
 
   for (const row of rows) {
-    if (!docIds.includes(row.docId)) continue;
     const arr = map.get(row.docId) ?? [];
     arr.push(mapFile(row));
     map.set(row.docId, arr);
