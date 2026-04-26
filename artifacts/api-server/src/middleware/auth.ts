@@ -85,6 +85,8 @@ export function requireSuperAdmin(
   next();
 }
 
+const SESSION_ROLES = new Set(["super_admin", "team_member"]);
+
 export function requireAuth(
   req: Request,
   res: Response,
@@ -98,6 +100,10 @@ export function requireAuth(
   const payload = verifyToken(token);
   if (!payload) {
     res.status(401).json({ error: "Unauthorized: invalid token" });
+    return;
+  }
+  if (!SESSION_ROLES.has(payload.role as string)) {
+    res.status(403).json({ error: "Forbidden: not a valid session token" });
     return;
   }
   (req as Request & { user: Record<string, unknown> }).user = payload;

@@ -103,7 +103,10 @@ export async function sendPushToClinic(clinicId: string, payload: PushPayload): 
         isNull(pushSubscriptionsTable.teamMemberId),
         or(
           eq(pushSubscriptionsTable.clinicId, clinicId),
-          isNull(pushSubscriptionsTable.clinicId)
+          and(
+            isNull(pushSubscriptionsTable.clinicId),
+            eq(pushSubscriptionsTable.email, "super_admin")
+          )
         )
       )
     );
