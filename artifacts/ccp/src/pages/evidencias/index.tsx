@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { downloadUrl } from "@/lib/download";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -158,12 +159,7 @@ export default function EvidenciasPage() {
     setLoadingFileId(ev.id);
     try {
       const url = await fetchSignedUrl(clinicId!, ev.id);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = ev.nome;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      a.click();
+      downloadUrl(url, ev.nome);
     } catch {
       toast({ variant: "destructive", title: "Erro ao baixar arquivo" });
     } finally {

@@ -21,6 +21,7 @@ import {
   useSummarizeClinicDocument,
 } from "@/hooks/use-clinic-documents";
 import { FileIcon, formatBytes, getFileKind } from "./file-icon";
+import { downloadUrl } from "@/lib/download";
 
 export function DetailPanel({
   doc,
@@ -103,12 +104,7 @@ export function DetailPanel({
         return;
       }
     }
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = doc!.fileName;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.click();
+    downloadUrl(url, doc!.fileName);
   }
 
   return (
