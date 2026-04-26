@@ -2,7 +2,9 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, lgpdTermosTable } from "@workspace/db";
-import { getConfig } from "../lib/config.js";
+import { ObjectStorageService } from "../lib/objectStorage.js";
+
+const objectStorageService = new ObjectStorageService();
 
 const PatchLgpdTermoBody = z.object({
   status: z.string().optional(),
@@ -141,36 +143,31 @@ router.post("/clinics/:clinicId/lgpd-termos/:termoId/upload-pdf", async (req, re
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   const termoId = Array.isArray(req.params.termoId) ? req.params.termoId[0] : req.params.termoId;
 
-  const supabaseUrl = await getConfig("supabase_url");
-  const serviceRoleKey = await getConfig("supabase_service_role_key");
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    res.status(501).json({ error: "Supabase Storage não configurado. Acesse Configurações → Integrações." });
-    return;
-  }
-
   const { fileName, fileBase64, mimeType } = req.body;
   if (!fileName || !fileBase64) {
     res.status(400).json({ error: "fileName and fileBase64 are required" });
     return;
   }
 
-  const storagePath = `clinics/${clinicId}/lgpd/${fileName}`;
   const fileBuffer = Buffer.from(fileBase64, "base64");
+  const contentType = mimeType ?? "application/pdf";
 
-  const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/signed-docs/${storagePath}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": mimeType ?? "application/pdf",
-      "x-upsert": "true",
-    },
-    body: fileBuffer,
-  });
-
-  if (!uploadRes.ok) {
-    const err = await uploadRes.text();
-    res.status(500).json({ error: `Upload failed: ${err}` });
+  let storagePath: string;
+  try {
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const uploadRes = await fetch(uploadURL, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: fileBuffer,
+    });
+    if (!uploadRes.ok) {
+      const err = await uploadRes.text();
+      res.status(500).json({ error: `Upload failed: ${err}` });
+      return;
+    }
+    storagePath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+  } catch (err) {
+    res.status(500).json({ error: `Upload failed: ${(err as Error).message}` });
     return;
   }
 
