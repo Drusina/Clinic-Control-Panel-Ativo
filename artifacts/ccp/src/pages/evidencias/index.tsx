@@ -159,7 +159,15 @@ export default function EvidenciasPage() {
     setLoadingFileId(ev.id);
     try {
       const url = await fetchSignedUrl(clinicId!, ev.id);
-      downloadUrl(url, ev.nome);
+      const result = downloadUrl(url, ev.nome);
+      if (result === "blocked") {
+        toast({
+          variant: "destructive",
+          title: "Download bloqueado pelo navegador",
+          description:
+            "Seu navegador bloqueou a abertura. Permita pop-ups deste site para baixar o arquivo.",
+        });
+      }
     } catch {
       toast({ variant: "destructive", title: "Erro ao baixar arquivo" });
     } finally {

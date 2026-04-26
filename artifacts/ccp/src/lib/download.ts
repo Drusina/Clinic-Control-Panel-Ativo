@@ -1,3 +1,5 @@
+export type DownloadResult = "opened" | "downloaded" | "blocked";
+
 export function isCrossOriginUrl(url: string): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -8,12 +10,13 @@ export function isCrossOriginUrl(url: string): boolean {
   }
 }
 
-export function downloadUrl(url: string, fileName: string): void {
-  if (typeof window === "undefined") return;
+export function downloadUrl(url: string, fileName: string): DownloadResult {
+  if (typeof window === "undefined") return "downloaded";
 
   if (isCrossOriginUrl(url)) {
     const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (opened) return;
+    if (opened) return "opened";
+    return "blocked";
   }
 
   const a = document.createElement("a");
@@ -22,4 +25,5 @@ export function downloadUrl(url: string, fileName: string): void {
   a.target = "_blank";
   a.rel = "noopener noreferrer";
   a.click();
+  return "downloaded";
 }

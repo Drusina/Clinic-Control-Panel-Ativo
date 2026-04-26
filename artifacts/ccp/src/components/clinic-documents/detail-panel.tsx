@@ -104,7 +104,15 @@ export function DetailPanel({
         return;
       }
     }
-    downloadUrl(url, doc!.fileName);
+    const result = downloadUrl(url, doc!.fileName);
+    if (result === "blocked") {
+      toast({
+        variant: "destructive",
+        title: "Download bloqueado pelo navegador",
+        description:
+          "Seu navegador bloqueou a abertura. Permita pop-ups deste site para baixar o arquivo.",
+      });
+    }
   }
 
   return (
