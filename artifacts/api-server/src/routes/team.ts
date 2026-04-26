@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, teamTable } from "@workspace/db";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
 import { signInviteToken } from "../middleware/auth";
-import { sendEmail, buildInviteEmail } from "../lib/email.js";
+import { sendEmail, buildInviteEmail, buildPushSetupEmail } from "../lib/email.js";
 
 const router: IRouter = Router();
 
@@ -51,17 +51,12 @@ async function sendPushSetupEmail(member: typeof teamTable.$inferSelect): Promis
   } catch {
     return;
   }
-  const conviteLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}&tok=${encodeURIComponent(inviteToken)}`;
+  const activationLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}&tok=${encodeURIComponent(inviteToken)}`;
 
   await sendEmail({
     to: member.email,
     subject: `[IONEX360] Ative suas notificações push`,
-    html: `
-      <p>Olá, ${member.nome},</p>
-      <p>Você pode ativar notificações push para receber alertas de delegações em tempo real, mesmo com o navegador fechado.</p>
-      <p><a href="${conviteLink}" style="background:#1a56db;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">Ativar notificações push</a></p>
-      <p style="color:#6b7280;font-size:12px;margin-top:16px;">Se você não esperava este e-mail, ignore-o.</p>
-    `,
+    html: buildPushSetupEmail({ nome: member.nome ?? "Usuário", activationLink }),
   });
 }
 

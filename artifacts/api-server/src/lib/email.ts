@@ -268,6 +268,35 @@ export function buildSigningRequestEmail(params: {
   return baseTemplate(`Assine: ${params.termoNome}`, body);
 }
 
+export function buildPushSetupEmail(params: { nome: string; activationLink: string }): string {
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Ative suas notificações push</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      Olá, <strong style="color:#e2e8f0;">${params.nome}</strong>. Você pode receber alertas em tempo real sobre delegações e atualizações da plataforma.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px;margin-bottom:24px;">
+      <tr>
+        <td>
+          <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Benefício</p>
+          <p style="margin:0;color:#e2e8f0;">Receba alertas mesmo com o navegador fechado, sem precisar entrar na plataforma.</p>
+        </td>
+      </tr>
+    </table>
+
+    <p style="color:#94a3b8;font-size:14px;line-height:1.7;">
+      Clique no botão abaixo para ativar as notificações no seu dispositivo.
+    </p>
+
+    ${primaryButton(params.activationLink, "Ativar notificações →")}
+
+    <p style="color:#475569;font-size:12px;margin-top:16px;">
+      Se você não esperava este e-mail, pode ignorá-lo com segurança.
+    </p>
+  `;
+  return baseTemplate("Ativar notificações push — IONEX360", body);
+}
+
 export async function sendEmail(params: {
   to: string | string[];
   subject: string;
