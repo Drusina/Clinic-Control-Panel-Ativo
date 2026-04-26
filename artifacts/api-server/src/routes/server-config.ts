@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { getConfig, setConfig, deleteConfig, CONFIGURABLE_KEYS, type ConfigKey } from "../lib/config.js";
 import { db, serverConfigTable } from "@workspace/db";
 import { sendEmailDetailed } from "../lib/email.js";
+import { getResendConnectorSettings } from "../lib/replit-connectors.js";
 import {
   rotateTokenSigningSecret,
   getTokenSigningSecretSource,
@@ -29,19 +30,40 @@ router.get("/admin/config/integrations", async (_req, res): Promise<void> => {
   const rows = await db.select().from(serverConfigTable);
   const dbMap = new Map(rows.map(r => [r.key, r.value]));
 
+  // Resolve once for the whole list. The connectors service is cached
+  // internally for 60s so this is cheap on repeat calls.
+  const resendConnector = await getResendConnectorSettings();
+
   const result = CONFIGURABLE_KEYS.map(({ key, label, sensitive, hint }) => {
     const dbValue = dbMap.get(key);
     const envValue = process.env[ENV_KEYS[key]];
+
+    let connectorValue: string | null = null;
+    if (resendConnector) {
+      if (key === "resend_api_key") connectorValue = resendConnector.api_key ?? null;
+      else if (key === "resend_from_address") connectorValue = resendConnector.from_email ?? null;
+    }
+
     const hasDbValue = !!dbValue;
     const hasEnvValue = !!envValue;
-    const configured = hasDbValue || hasEnvValue;
-    const source = hasDbValue ? "db" : hasEnvValue ? "env" : null;
+    const hasConnectorValue = !!connectorValue;
+    const configured = hasDbValue || hasEnvValue || hasConnectorValue;
+    // Priority must mirror getConfig(): db > env > integration.
+    const source: "db" | "env" | "integration" | null = hasDbValue
+      ? "db"
+      : hasEnvValue
+        ? "env"
+        : hasConnectorValue
+          ? "integration"
+          : null;
 
     let displayValue: string | null = null;
     if (hasDbValue) {
       displayValue = sensitive ? "••••••••" : dbValue!;
     } else if (hasEnvValue) {
       displayValue = sensitive ? "••••••••" : envValue!;
+    } else if (hasConnectorValue) {
+      displayValue = sensitive ? "••••••••" : connectorValue!;
     }
 
     return { key, label, sensitive, hint, configured, source, displayValue };

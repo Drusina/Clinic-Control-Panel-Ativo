@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db, serverConfigTable } from "@workspace/db";
+import { getResendConnectorSettings } from "./replit-connectors.js";
 
 const CONFIG_KEYS = {
   autentique_token: "AUTENTIQUE_TOKEN",
@@ -40,10 +41,30 @@ export async function getConfig(key: ConfigKey): Promise<string | null> {
     // fall through to env var
   }
 
-  const envVal = process.env[CONFIG_KEYS[key]] ?? null;
-  cache.set(key, envVal);
+  const envVal = process.env[CONFIG_KEYS[key]];
+  if (envVal) {
+    cache.set(key, envVal);
+    cacheTimestamps.set(key, now);
+    return envVal;
+  }
+
+  // Replit-managed Resend connector fallback. Operator overrides via DB or env
+  // var always take priority (above) so they can still drop in their own key
+  // for testing.
+  if (key === "resend_api_key" || key === "resend_from_address") {
+    const settings = await getResendConnectorSettings();
+    const fromConnector =
+      key === "resend_api_key" ? settings?.api_key : settings?.from_email;
+    if (fromConnector) {
+      cache.set(key, fromConnector);
+      cacheTimestamps.set(key, now);
+      return fromConnector;
+    }
+  }
+
+  cache.set(key, null);
   cacheTimestamps.set(key, now);
-  return envVal;
+  return null;
 }
 
 export function invalidateConfigCache(key?: ConfigKey) {

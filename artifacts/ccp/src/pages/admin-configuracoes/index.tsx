@@ -45,7 +45,7 @@ interface ConfigEntry {
   sensitive: boolean;
   hint: string;
   configured: boolean;
-  source: "db" | "env" | null;
+  source: "db" | "env" | "integration" | null;
   displayValue: string | null;
 }
 
@@ -122,10 +122,16 @@ function ConfigRow({ entry, onSaved }: { entry: ConfigEntry; onSaved: () => void
             {entry.source === "db" && (
               <Badge variant="outline" className="text-xs text-blue-700 border-blue-300 bg-blue-50">salvo no banco</Badge>
             )}
+            {entry.source === "integration" && (
+              <Badge variant="outline" className="text-xs text-emerald-700 border-emerald-400 bg-emerald-50">via integração Replit</Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">{entry.hint}</p>
           {entry.source === "env" && (
             <p className="text-xs text-yellow-700 mt-0.5">Lido da variável de ambiente. Configure aqui para sobrescrever.</p>
+          )}
+          {entry.source === "integration" && (
+            <p className="text-xs text-emerald-700 mt-0.5">Gerenciado pela integração Resend do Replit. Não é necessário inserir uma chave manualmente — configure aqui apenas se quiser sobrescrever.</p>
           )}
           {entry.configured && entry.displayValue && !editing && (
             <div className="flex items-center gap-2 mt-1">
