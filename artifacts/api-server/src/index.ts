@@ -4,8 +4,23 @@ import { initVapid, isPushConfigured } from "./lib/push.js";
 import { startScheduler, stopScheduler } from "./lib/scheduler.js";
 import { initTokenSigningSecret } from "./lib/token-secret.js";
 
-if (!process.env.SUPER_ADMIN_SECRET) {
-  throw new Error("SUPER_ADMIN_SECRET is required but not set. Configure it before starting the server.");
+if (!process.env.SUPER_ADMIN_SECRET || process.env.SUPER_ADMIN_SECRET.length === 0) {
+  throw new Error(
+    [
+      "SUPER_ADMIN_SECRET is required but is not set (or is empty).",
+      "",
+      "What it is: the shared password used to log in as the platform Super Admin.",
+      "",
+      "How to fix:",
+      "  1. Generate a strong random value (32+ chars). For example:",
+      "       node -e \"console.log(require('crypto').randomBytes(32).toString('base64url'))\"",
+      "  2. In the Replit Deployments panel, open Secrets and add SUPER_ADMIN_SECRET with that value.",
+      "  3. (Optional but recommended) Also set TOKEN_SIGNING_SECRET to a *different* random value of the",
+      "     same strength. If you skip TOKEN_SIGNING_SECRET, the server will bootstrap one automatically",
+      "     into the database on first boot — but it must NOT equal SUPER_ADMIN_SECRET.",
+      "  4. Re-deploy.",
+    ].join("\n"),
+  );
 }
 
 const rawPort = process.env["PORT"];
@@ -40,7 +55,18 @@ async function main(): Promise<void> {
   } catch (e) {
     logger.error(
       { err: e },
-      "Fatal: failed to initialize token signing secret — exiting so the process is restarted",
+      [
+        "Fatal: failed to initialize token signing secret — exiting so the process is restarted.",
+        "",
+        "The server tried to load TOKEN_SIGNING_SECRET from the environment and, when that was unset",
+        "or matched SUPER_ADMIN_SECRET, fell back to bootstrapping a value into the server_config table.",
+        "Both paths failed — most commonly because the database is unreachable.",
+        "",
+        "To unblock the deploy without depending on the DB, set TOKEN_SIGNING_SECRET in the Deployments",
+        "Secrets panel to a strong random value (32+ chars) that is DIFFERENT from SUPER_ADMIN_SECRET.",
+        "Generate one with:",
+        "  node -e \"console.log(require('crypto').randomBytes(32).toString('base64url'))\"",
+      ].join("\n"),
     );
     process.exit(1);
   }
