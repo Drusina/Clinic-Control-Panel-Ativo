@@ -20,6 +20,24 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    body: formData,
+    headers,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? res.statusText);
+  }
+  if (res.status === 204) return undefined as unknown as T;
+  return res.json();
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 export interface ClinicDocumentCategory {
@@ -112,35 +130,18 @@ export interface UploadDocumentInput {
   file: File;
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(
-      null,
-      Array.from(bytes.subarray(i, i + chunk)),
-    );
-  }
-  return btoa(binary);
-}
-
 export function useUploadClinicDocument(clinicId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ categoryId, title, file }: UploadDocumentInput) => {
-      const fileBase64 = await fileToBase64(file);
-      return apiFetch<ClinicDocument>(`/api/clinics/${clinicId}/documents`, {
-        method: "POST",
-        body: JSON.stringify({
-          categoryId,
-          title: title ?? file.name,
-          fileName: file.name,
-          fileBase64,
-          mimeType: file.type || "application/octet-stream",
-        }),
-      });
+      const fd = new FormData();
+      fd.append("categoryId", categoryId);
+      if (title) fd.append("title", title);
+      fd.append("file", file, file.name);
+      return apiUpload<ClinicDocument>(
+        `/api/clinics/${clinicId}/documents`,
+        fd,
+      );
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clinic-documents", clinicId] });

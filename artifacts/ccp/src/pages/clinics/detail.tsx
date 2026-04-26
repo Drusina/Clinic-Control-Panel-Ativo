@@ -83,9 +83,9 @@ export default function ClinicDetail() {
           <TabsTrigger value="status" className="min-w-fit" data-testid="tab-status">Status</TabsTrigger>
           <TabsTrigger value="usuarios" className="min-w-fit" data-testid="tab-usuarios">Usuários</TabsTrigger>
           <TabsTrigger value="atividade" className="min-w-fit" data-testid="tab-atividade">Atividade</TabsTrigger>
-          <TabsTrigger value="documentos" className="min-w-fit" data-testid="tab-documentos">Documentos</TabsTrigger>
           <TabsTrigger value="overview" className="min-w-fit">Visão Geral</TabsTrigger>
           <TabsTrigger value="kickoff" className="min-w-fit">Kickoff</TabsTrigger>
+          <TabsTrigger value="documentos" className="min-w-fit" data-testid="tab-documentos">Documentos</TabsTrigger>
           <TabsTrigger value="diagnostics" className="min-w-fit">Diagnóstico</TabsTrigger>
           <TabsTrigger value="actions" className="min-w-fit">Plano de Ação</TabsTrigger>
           <TabsTrigger value="risks" className="min-w-fit">Riscos</TabsTrigger>

@@ -1,4 +1,5 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import multer, { MulterError } from "multer";
 import { eq, and, desc, sql, asc } from "drizzle-orm";
 import {
   db,
@@ -12,6 +13,11 @@ import { signToken } from "../middleware/auth.js";
 const objectStorageService = new ObjectStorageService();
 const SIGNED_URL_TTL_SECONDS = 3600;
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_BYTES, files: 1 },
+});
 
 const router: IRouter = Router();
 
@@ -62,10 +68,9 @@ router.get("/clinics/:clinicId/documents", async (req, res): Promise<void> => {
 });
 
 async function uploadFileBuffer(
-  fileBase64: string,
+  fileBuffer: Buffer,
   mimeType: string | undefined,
 ): Promise<{ storagePath: string; size: number }> {
-  const fileBuffer = Buffer.from(fileBase64, "base64");
   if (fileBuffer.byteLength > MAX_FILE_BYTES) {
     throw new Error(
       `Arquivo excede o limite de ${Math.round(MAX_FILE_BYTES / 1024 / 1024)}MB`,
@@ -87,64 +92,107 @@ async function uploadFileBuffer(
   return { storagePath, size: fileBuffer.byteLength };
 }
 
-router.post("/clinics/:clinicId/documents", async (req, res): Promise<void> => {
-  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
-
-  const { categoryId, title, fileName, fileBase64, mimeType } = req.body ?? {};
-
-  if (!categoryId || typeof categoryId !== "string") {
-    res.status(400).json({ error: "categoryId é obrigatório" });
-    return;
+// Decodes a multipart filename which is sometimes received as latin1 bytes
+// when the client/proxy doesn't set RFC 5987 encoding. We re-interpret the
+// bytes as UTF-8 (since browsers send filenames as UTF-8 by default) and
+// normalize to NFC so accented characters render correctly.
+function decodeMultipartFilename(name: string): string {
+  if (!name) return name;
+  // Heuristic: if any code point is in the C1 range, the value is likely
+  // mis-decoded latin1 of UTF-8 bytes. Re-encode and decode.
+  let out = name;
+  if (/[\u0080-\u00ff]/.test(name)) {
+    try {
+      const reinterpreted = Buffer.from(name, "latin1").toString("utf8");
+      // Only adopt the reinterpreted value if it doesn't contain replacement chars
+      if (!reinterpreted.includes("\uFFFD")) out = reinterpreted;
+    } catch {
+      /* keep original */
+    }
   }
-  if (!fileName || typeof fileName !== "string") {
-    res.status(400).json({ error: "fileName é obrigatório" });
-    return;
-  }
-  if (!fileBase64 || typeof fileBase64 !== "string") {
-    res.status(400).json({ error: "fileBase64 é obrigatório" });
-    return;
-  }
+  return out.normalize("NFC");
+}
 
-  // Validate the category belongs to the clinic
-  const [cat] = await db
-    .select()
-    .from(documentCategoriesTable)
-    .where(
-      and(
-        eq(documentCategoriesTable.id, categoryId),
-        eq(documentCategoriesTable.clinicId, clinicId),
-      ),
-    );
-  if (!cat) {
-    res.status(404).json({ error: "Categoria não encontrada nesta clínica" });
-    return;
-  }
+function uploadSingleWithErrorHandler(req: Request, res: Response, next: NextFunction): void {
+  upload.single("file")(req, res, (err: unknown) => {
+    if (err) {
+      if (err instanceof MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+          error: `Arquivo excede o limite de ${Math.round(MAX_FILE_BYTES / 1024 / 1024)}MB`,
+        });
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Falha ao processar upload";
+      res.status(400).json({ error: message });
+      return;
+    }
+    next();
+  });
+}
 
-  // Validate clinic exists (defensive)
-  const [clinic] = await db
-    .select({ id: clinicsTable.id })
-    .from(clinicsTable)
-    .where(eq(clinicsTable.id, clinicId));
-  if (!clinic) {
-    res.status(404).json({ error: "Clínica não encontrada" });
-    return;
-  }
+router.post(
+  "/clinics/:clinicId/documents",
+  uploadSingleWithErrorHandler,
+  async (req: Request, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId)
+      ? req.params.clinicId[0]
+      : req.params.clinicId;
 
-  let storagePath: string;
-  let size: number;
-  try {
-    const upload = await uploadFileBuffer(fileBase64, mimeType);
-    storagePath = upload.storagePath;
-    size = upload.size;
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
-    return;
-  }
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const categoryId = typeof body.categoryId === "string" ? body.categoryId : "";
+    const titleRaw = typeof body.title === "string" ? body.title : "";
 
-  const cleanTitle =
-    typeof title === "string" && title.trim().length > 0
-      ? title.trim()
-      : fileName;
+    if (!categoryId) {
+      res.status(400).json({ error: "categoryId é obrigatório" });
+      return;
+    }
+    if (!file) {
+      res.status(400).json({ error: "Arquivo (campo 'file') é obrigatório" });
+      return;
+    }
+
+    const fileName = decodeMultipartFilename(file.originalname || "arquivo");
+    const mimeType = file.mimetype || "application/octet-stream";
+
+    // Validate the category belongs to the clinic
+    const [cat] = await db
+      .select()
+      .from(documentCategoriesTable)
+      .where(
+        and(
+          eq(documentCategoriesTable.id, categoryId),
+          eq(documentCategoriesTable.clinicId, clinicId),
+        ),
+      );
+    if (!cat) {
+      res.status(404).json({ error: "Categoria não encontrada nesta clínica" });
+      return;
+    }
+
+    // Validate clinic exists (defensive)
+    const [clinic] = await db
+      .select({ id: clinicsTable.id })
+      .from(clinicsTable)
+      .where(eq(clinicsTable.id, clinicId));
+    if (!clinic) {
+      res.status(404).json({ error: "Clínica não encontrada" });
+      return;
+    }
+
+    let storagePath: string;
+    let size: number;
+    try {
+      const uploaded = await uploadFileBuffer(file.buffer, mimeType);
+      storagePath = uploaded.storagePath;
+      size = uploaded.size;
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+      return;
+    }
+
+    const cleanTitle =
+      titleRaw.trim().length > 0 ? titleRaw.trim() : fileName;
 
   // Atomic sequence assignment per clinic, protected by SELECT FOR UPDATE on
   // the clinic row to serialize concurrent inserts.

@@ -43,6 +43,12 @@ router.use(healthRouter);
 router.use(storageRouter);
 router.use(authRouter);
 router.use(requireSuperAdmin, dashboardRouter);
+// Register the clinic-documents (library) routes BEFORE the generic clinics
+// router so the more specific paths like POST /clinics/:clinicId/documents
+// (multipart upload) take precedence over the legacy attachment endpoints
+// in clinics.ts.
+router.use(requireSuperAdmin, documentCategoriesRouter);
+router.use(requireSuperAdmin, clinicDocumentsRouter);
 router.use(requireSuperAdmin, clinicsRouter);
 router.use(requireSuperAdmin, statusHistoryRouter);
 router.use(requireSuperAdmin, sociosRouter);

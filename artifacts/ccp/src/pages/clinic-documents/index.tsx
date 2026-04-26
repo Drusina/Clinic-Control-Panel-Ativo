@@ -27,8 +27,14 @@ const ENCODING_FIX_KEY_PREFIX = "ccp:doc-encoding-fixed:";
 
 function nameLooksMojibake(s: string): boolean {
   if (!s) return false;
+  // Replacement char from a failed UTF-8 decode.
   if (s.includes("\uFFFD")) return true;
+  // Literal text "\u00xx" (escape sequence persisted as plain characters).
   if (/\\u00[0-9a-fA-F]{2}/.test(s)) return true;
+  // Plain "?" characters — these almost always appear in filenames as the
+  // result of a latin1↔utf8 mismatch (most filesystems disallow "?" in
+  // filenames), so any "?" is a strong signal of mojibake here.
+  if (s.includes("?")) return true;
   return false;
 }
 
