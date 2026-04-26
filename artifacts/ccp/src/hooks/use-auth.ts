@@ -37,8 +37,8 @@ export function useCurrentRole() {
     queryKey: AUTH_QUERY_KEY,
     queryFn: fetchCurrentRole,
     retry: false,
-    staleTime: 30 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 

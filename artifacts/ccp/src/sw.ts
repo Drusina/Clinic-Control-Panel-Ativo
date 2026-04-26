@@ -12,7 +12,9 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 self.addEventListener("message", (event: ExtendableMessageEvent) => {
   if (event.data?.type === "CLEAR_API_CACHE") {
-    event.waitUntil(caches.delete("api-cache"));
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+    );
   }
 });
 
