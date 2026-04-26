@@ -1,0 +1,240 @@
+Implemente um módulo completo de Gerenciamento de Documentos dentro de um 
+sistema web React + Express + PostgreSQL. O módulo deve funcionar da seguinte 
+forma:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONCEITO GERAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+O sistema permite que cada "entidade" (associação, empresa, cliente, etc.) 
+tenha seu próprio acervo de documentos organizados por categorias dinâmicas.
+O usuário pode criar, renomear e excluir categorias, e dentro de cada 
+categoria fazer upload de múltiplos arquivos. Cada documento pode ter um 
+resumo automático gerado por IA (via OpenAI).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BANCO DE DADOS — Duas tabelas novas
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Tabela: document_categories
+  - id: UUID (PK, gerado automaticamente)
+  - entityId: UUID (FK para a entidade dona do documento)
+  - name: text (nome da categoria, ex: "Atas", "Contratos")
+  - order: integer (ordem de exibição)
+  - createdAt: timestamp
+
+Tabela: documents (ou constitutive_documents)
+  - id: UUID (PK)
+  - entityId: UUID (FK)
+  - categoryId: UUID (FK → document_categories)
+  - sequenceNumber: integer (numeração sequencial por categoria, ex: 1, 2, 3...)
+  - title: text (nome amigável do documento)
+  - fileName: text (nome original do arquivo com encoding corrigido)
+  - fileUrl: text (URL do arquivo no armazenamento)
+  - fileSize: integer (tamanho em bytes)
+  - fileType: text (MIME type, ex: application/pdf, image/jpeg)
+  - summary: text nullable (resumo gerado pela IA)
+  - summarizedAt: timestamp nullable (quando o resumo foi gerado)
+  - uploadedBy: UUID (FK → usuário)
+  - createdAt: timestamp
+
+Regra do sequenceNumber: ao criar um documento, contar quantos documentos
+já existem naquela categoria e usar count + 1 como sequência.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ARMAZENAMENTO DE ARQUIVOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use armazenamento persistente (Replit Object Storage ou S3/similar).
+- Ao fazer upload, gerar um UUID como nome do arquivo + extensão original
+- Salvar a URL no banco no formato /objects/uploads/<uuid>.<ext>
+- Servir arquivos via rota autenticada: GET /objects/{*path}
+- Rota de download lê o arquivo do storage e faz stream para o cliente
+- Ao excluir documento, excluir também o arquivo do storage
+- Limite: 50MB por arquivo
+- Tipos aceitos: qualquer (PDF, Word, Excel, imagens, etc.)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ROTAS DA API (backend Express)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Todas as rotas exigem autenticação (middleware isAuthenticated).
+
+CATEGORIAS:
+  GET    /api/document-categories?entityId=xxx
+         → Retorna lista ordenada de categorias da entidade
+
+  POST   /api/document-categories
+         Body: { entityId, name, order }
+         → Cria nova categoria
+
+  PUT    /api/document-categories/:id
+         Body: { name, entityId }
+         → Renomeia categoria (valida que pertence à entidade)
+
+  DELETE /api/document-categories/:id
+         → Remove categoria. Retornar erro 400 se tiver documentos vinculados.
+
+  POST   /api/document-categories/seed-defaults
+         Body: { entityId }
+         → Cria categorias padrão se não existirem. Categorias padrão sugeridas:
+           "Atas", "Estatuto Social", "Contratos", 
+           "Documentos Contábeis", "Requerimentos e Editais"
+           (personalize conforme seu domínio)
+
+DOCUMENTOS:
+  GET    /api/documents?entityId=xxx
+         → Retorna todos os documentos da entidade, ordenados por 
+           categoryId + sequenceNumber
+
+  POST   /api/documents
+         multipart/form-data: file (binário), entityId, categoryId
+         → Upload do arquivo para o storage
+         → Extrai title do nome original (sem extensão, decodificado UTF-8)
+         → Calcula próximo sequenceNumber para a categoria
+         → Salva registro no banco
+
+  DELETE /api/documents/:id
+         → Remove do banco E do storage (arquivo físico)
+         → Retorna JSON { success: true }
+
+  POST   /api/documents/:id/summarize
+         → Lê o arquivo do storage
+         → Se PDF: extrai texto com pdf-parse
+         → Se texto: lê conteúdo direto
+         → Envia para OpenAI gpt-4o-mini com prompt de resumo
+         → Salva summary + summarizedAt no banco
+         → Retorna { summary, summarizedAt }
+         → Suportado apenas para PDF e text/*
+
+  POST   /api/documents/fix-encoding
+         Body: { entityId }
+         → Corrige nomes de arquivos com encoding quebrado (caracteres 
+           especiais como ç, ã, é que aparecem corrompidos)
+         → Aplica decodeURIComponent + normalize('NFC') em cada fileName
+         → Retorna { fixed: número de documentos corrigidos }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INTEGRAÇÃO COM IA (OpenAI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Dependências: pdf-parse (extração de texto de PDF), openai SDK
+
+Prompt para resumo de documento (gpt-4o-mini):
+  "Você é um assistente jurídico/administrativo. Analise o seguinte documento
+   e forneça um resumo executivo conciso em português com:
+   1. Tipo e natureza do documento
+   2. Partes envolvidas (se aplicável)
+   3. Principais pontos, decisões ou cláusulas
+   4. Data e vigência (se aplicável)
+   5. Observações relevantes
+   Seja objetivo e use no máximo 300 palavras."
+
+Configuração:
+  - Modelo: gpt-4o-mini
+  - max_tokens: 800
+  - Truncar texto do PDF para no máximo 8000 caracteres antes de enviar
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INTERFACE (React)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Layout em duas colunas side-by-side (altura total da tela):
+
+COLUNA ESQUERDA — Sidebar de Categorias (largura fixa ~420px)
+  Cabeçalho:
+  - Campo de busca (filtra documentos por título/nome em tempo real)
+  - Botão de ícone para criar nova categoria (FolderPlus)
+
+  Lista de categorias (cada uma é um item colapsável):
+  - Ícone de seta (ChevronRight/ChevronDown) + ícone de pasta + nome + badge 
+    com contagem de documentos
+  - Categorias iniciam COLAPSADAS por padrão
+  - Hover revela botões de ação: Upload (enviar arquivo) + Lápis (editar nome)
+  - Ao expandir: lista de documentos da categoria com indent
+    * Ícone por tipo (PDF=vermelho, Word=azul, Excel=verde, Imagem=roxo)
+    * Número sequencial em cinza + título do documento
+    * Ícone de estrela (Sparkles) se já tiver resumo IA
+    * Clique seleciona o documento e abre detalhes na coluna direita
+
+COLUNA DIREITA — Painel de Detalhes
+  Estado vazio: ícone + mensagem "Selecione um documento"
+  
+  Estado com documento selecionado:
+  Cabeçalho:
+  - Título do documento (h2)
+  - Nome do arquivo original (menor, truncado com tooltip)
+  - Metadados em linha: tamanho + data de upload + badge de categoria
+  - Botões de ação: "Visualizar" (abre em nova aba) + "Baixar" (download) + 
+    "Excluir" (vermelho, pede confirmação)
+
+  Preview inline:
+  - Se PDF: <iframe src={fileUrl} height=400px>
+  - Se imagem: <img>
+  - Outros tipos: sem preview
+
+  Seção "Resumo IA":
+  - Título com ícone de estrela (Sparkles)
+  - Botão "Gerar resumo" / "Regenerar resumo" (desabilitado para não-PDF/texto)
+  - Se já tem resumo: Card com texto do resumo + data de geração
+  - Se não tem: Card com texto explicativo + ícone
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DIÁLOGOS MODAIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Modal "Nova Categoria":
+   - Input para nome da categoria
+   - Botões: Cancelar / Criar
+
+2. Modal "Editar Categoria":
+   - Input pré-preenchido com nome atual
+   - Botões: Cancelar / Salvar
+
+3. Modal "Enviar Documentos" (Upload em lote):
+   - Exibe nome da categoria destino
+   - Input de arquivo com multiple=true (aceita qualquer tipo)
+   - Lista de arquivos selecionados com opção de remover individual
+   - Barra de progresso durante upload (ex: "Enviando 2 de 5...")
+   - Upload sequencial (um por vez, não paralelo)
+   - Se algum falha: mantém no modal apenas os que falharam para retentar
+   - Botões: Cancelar / Enviar (exibe spinner durante upload)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMPORTAMENTOS AUTOMÁTICOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Seed automático de categorias padrão: ao entrar na página, se a entidade 
+   não tiver nenhuma categoria, criar as categorias padrão automaticamente 
+   (sem precisar de ação do usuário)
+
+2. Correção de encoding: ao carregar documentos, se algum fileName tiver 
+   caracteres corrompidos, acionar endpoint fix-encoding automaticamente 
+   (uma única vez por sessão)
+
+3. Busca em tempo real: o filtro de busca não recarrega do servidor, 
+   filtra os dados já em memória (React state) por título e fileName
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DEPENDÊNCIAS NECESSÁRIAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Backend:
+  - multer (upload multipart)
+  - pdf-parse (extração de texto de PDFs)
+  - openai (SDK para resumo IA)
+  - uuid (geração de nomes únicos para arquivos)
+  - Replit Object Storage SDK ou aws-sdk/s3 (armazenamento persistente)
+
+Frontend (já incluso se usar shadcn/ui):
+  - lucide-react (ícones)
+  - @tanstack/react-query (data fetching)
+  - shadcn/ui components: Button, Input, Card, Dialog, Badge, Separator, Label
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OBSERVAÇÕES IMPORTANTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Todos os uploads usam FormData (não JSON) com credentials: 'include'
+- A rota DELETE de categoria retorna erro 400 com mensagem se tiver 
+  documentos vinculados (não permite exclusão com filhos)
+- O título do documento é derivado do fileName: remover extensão, 
+  substituir hífens e underscores por espaços, aplicar title case
+- O resumo IA só é gerado sob demanda (botão), nunca automaticamente 
+  ao fazer upload
+- Garantir que a rota de arquivos (storage) exija autenticação para 
+  evitar acesso público não autorizado
+- Ao excluir documento, se a exclusão do storage falhar, ainda excluir 
+  o registro do banco (não bloquear a operação)
