@@ -139,7 +139,9 @@ function Router() {
       <Route path="/notifications">
         {() => (
           <AppLayout>
-            <Notifications />
+            <SuperAdminGuard>
+              <Notifications />
+            </SuperAdminGuard>
           </AppLayout>
         )}
       </Route>

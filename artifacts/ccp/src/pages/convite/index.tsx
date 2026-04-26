@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Bell, BellRing, BellOff, CheckCircle2, Loader2, User, Building2, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { storeToken } from "@/hooks/use-auth";
+import { useSwitchSession } from "@/hooks/use-auth";
 import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { useToast } from "@/hooks/use-toast";
 
@@ -118,6 +118,7 @@ function PushSubscriptionCard({ clinicId }: { clinicId: string }) {
 }
 
 export default function ConvitePage() {
+  const switchSession = useSwitchSession();
   const [memberId, setMemberId] = useState<string | null>(null);
   const [memberInfo, setMemberInfo] = useState<MemberInfo | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "no_access">("loading");
@@ -182,7 +183,7 @@ export default function ConvitePage() {
           teamMemberId: string;
         };
 
-        storeToken(data.token);
+        switchSession(data.token);
         setMemberInfo({
           nome: data.nome,
           funcao: data.funcao,

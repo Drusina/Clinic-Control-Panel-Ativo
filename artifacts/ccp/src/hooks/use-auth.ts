@@ -37,19 +37,30 @@ export function useCurrentRole() {
     queryKey: AUTH_QUERY_KEY,
     queryFn: fetchCurrentRole,
     retry: false,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
     refetchOnWindowFocus: false,
   });
+}
+
+function clearAllCaches(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.clear();
+  if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: "CLEAR_API_CACHE" });
+  }
+}
+
+export function useSwitchSession() {
+  const queryClient = useQueryClient();
+  return (token: string) => {
+    storeToken(token);
+    clearAllCaches(queryClient);
+  };
 }
 
 export function useLogout() {
   const queryClient = useQueryClient();
   return () => {
     clearToken();
-    queryClient.setQueryData(AUTH_QUERY_KEY, { role: null });
-    queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY });
-    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: "CLEAR_API_CACHE" });
-    }
+    clearAllCaches(queryClient);
   };
 }
