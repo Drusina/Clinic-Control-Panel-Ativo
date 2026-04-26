@@ -51,14 +51,19 @@ export async function getConfig(key: ConfigKey): Promise<string | null> {
   // Replit-managed Resend connector fallback. Operator overrides via DB or env
   // var always take priority (above) so they can still drop in their own key
   // for testing.
-  if (key === "resend_api_key" || key === "resend_from_address") {
+  //
+  // We deliberately only source the API key from the integration — not the
+  // from-address. The Replit integration's `from_email` is whatever Replit
+  // account-email the user signed up with (e.g. a personal gmail), but Resend
+  // rejects sends from any unverified domain. The from-address is tied to the
+  // operator's verified Resend domain, so it stays operator-managed via the
+  // admin UI; when blank, sendEmail() falls back to Resend's sandbox sender.
+  if (key === "resend_api_key") {
     const settings = await getResendConnectorSettings();
-    const fromConnector =
-      key === "resend_api_key" ? settings?.api_key : settings?.from_email;
-    if (fromConnector) {
-      cache.set(key, fromConnector);
+    if (settings?.api_key) {
+      cache.set(key, settings.api_key);
       cacheTimestamps.set(key, now);
-      return fromConnector;
+      return settings.api_key;
     }
   }
 

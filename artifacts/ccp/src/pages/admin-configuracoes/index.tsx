@@ -131,7 +131,7 @@ function ConfigRow({ entry, onSaved }: { entry: ConfigEntry; onSaved: () => void
             <p className="text-xs text-yellow-700 mt-0.5">Lido da variável de ambiente. Configure aqui para sobrescrever.</p>
           )}
           {entry.source === "integration" && (
-            <p className="text-xs text-emerald-700 mt-0.5">Gerenciado pela integração Resend do Replit. Não é necessário inserir uma chave manualmente — configure aqui apenas se quiser sobrescrever.</p>
+            <p className="text-xs text-emerald-700 mt-0.5">Gerenciado pela integração Resend do Replit — chave rotacionada automaticamente.</p>
           )}
           {entry.configured && entry.displayValue && !editing && (
             <div className="flex items-center gap-2 mt-1">
@@ -147,7 +147,7 @@ function ConfigRow({ entry, onSaved }: { entry: ConfigEntry; onSaved: () => void
           )}
         </div>
         <div className="flex gap-2 shrink-0">
-          {!editing && (
+          {!editing && entry.source !== "integration" && (
             <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
               {entry.configured ? "Alterar" : "Configurar"}
             </Button>

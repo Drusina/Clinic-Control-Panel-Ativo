@@ -55,8 +55,9 @@ export async function getResendConnectorSettings(): Promise<ResendConnectorSetti
     );
 
     if (!res.ok) {
+      const body = await res.text().catch(() => "");
       logger.warn(
-        { status: res.status },
+        { status: res.status, body: body.slice(0, 300) },
         "Failed to fetch Resend connector from Replit connectors service",
       );
       resendCache = { settings: null, fetchedAt: now };

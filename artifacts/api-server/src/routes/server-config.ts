@@ -38,10 +38,13 @@ router.get("/admin/config/integrations", async (_req, res): Promise<void> => {
     const dbValue = dbMap.get(key);
     const envValue = process.env[ENV_KEYS[key]];
 
+    // Only the API key is sourced from the Replit integration. The
+    // from-address must point at a domain the operator has verified at
+    // Resend (Replit's account email is typically not), so it stays
+    // operator-managed via this UI.
     let connectorValue: string | null = null;
-    if (resendConnector) {
-      if (key === "resend_api_key") connectorValue = resendConnector.api_key ?? null;
-      else if (key === "resend_from_address") connectorValue = resendConnector.from_email ?? null;
+    if (resendConnector && key === "resend_api_key") {
+      connectorValue = resendConnector.api_key ?? null;
     }
 
     const hasDbValue = !!dbValue;
