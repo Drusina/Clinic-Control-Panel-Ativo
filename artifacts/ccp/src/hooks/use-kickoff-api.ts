@@ -217,6 +217,17 @@ export function useUpdateParceiroExterno(clinicId: string) {
   });
 }
 
+export function useDeleteParceiroExterno(clinicId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/api/clinics/${clinicId}/parceiros-externos/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["parceiros-externos", clinicId] }),
+  });
+}
+
 // ─── Sistemas em Uso ───────────────────────────────────────────────────────
 
 export interface SistemaUsoData {
