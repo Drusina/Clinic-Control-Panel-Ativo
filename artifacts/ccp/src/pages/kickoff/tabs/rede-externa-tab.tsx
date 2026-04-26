@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,10 +52,18 @@ const TIPOS_PADRAO = [
 
 const TIPOS_PADRAO_KEYS = new Set(TIPOS_PADRAO.map((t) => t.key));
 
+function humanizeSlug(slug: string): string {
+  return slug
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 function tipoLabel(tipo: string): { label: string; icon: string } {
   const padrao = TIPOS_PADRAO.find((t) => t.key === tipo);
   if (padrao) return { label: padrao.label, icon: padrao.icon };
-  return { label: tipo, icon: "🤝" };
+  return { label: humanizeSlug(tipo), icon: "🤝" };
 }
 
 interface PartnerFormState {
@@ -363,8 +371,11 @@ function AddPartnerDialog({ open, onOpenChange, isPending, onSubmit }: AddDialog
     setError(null);
   }
 
+  useEffect(() => {
+    if (!open) reset();
+  }, [open]);
+
   function handleOpenChange(next: boolean) {
-    if (!next) reset();
     onOpenChange(next);
   }
 
