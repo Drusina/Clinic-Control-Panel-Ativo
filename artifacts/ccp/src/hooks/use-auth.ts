@@ -15,13 +15,21 @@ export function clearToken(): void {
   localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
-async function fetchCurrentRole(): Promise<{ role: string | null }> {
+export interface CurrentUser {
+  role: string | null;
+  clinicId: string | null;
+  nome: string | null;
+  email: string | null;
+  teamMemberId: string | null;
+}
+
+async function fetchCurrentRole(): Promise<CurrentUser> {
   const token = getStoredToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch("/api/auth/me", { headers });
-  if (!res.ok) return { role: null };
-  return res.json() as Promise<{ role: string | null }>;
+  if (!res.ok) return { role: null, clinicId: null, nome: null, email: null, teamMemberId: null };
+  return res.json() as Promise<CurrentUser>;
 }
 
 export function useCurrentRole() {

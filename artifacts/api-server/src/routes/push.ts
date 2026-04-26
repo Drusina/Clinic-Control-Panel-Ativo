@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getVapidPublicKey, isPushConfigured } from "../lib/push.js";
 import { requireAuth } from "../middleware/auth.js";
 import { clinicsTable, teamTable } from "@workspace/db/schema";
+import { sendPushSetupEmail } from "./team.js";
 
 const router: IRouter = Router();
 
@@ -141,6 +142,39 @@ router.delete("/push/subscribe", requireAuth, async (req, res): Promise<void> =>
   }
 
   res.json({ ok: true });
+});
+
+router.post("/push/resend-setup-email", requireAuth, async (req, res): Promise<void> => {
+  const authedReq = req as AuthedRequest;
+  const teamMemberId = authedReq.user.teamMemberId as string | undefined;
+
+  if (!teamMemberId) {
+    res.status(403).json({ error: "Este recurso é exclusivo para membros de equipe" });
+    return;
+  }
+
+  const [member] = await db
+    .select()
+    .from(teamTable)
+    .where(eq(teamTable.id, teamMemberId))
+    .limit(1);
+
+  if (!member) {
+    res.status(404).json({ error: "Membro não encontrado" });
+    return;
+  }
+
+  if (!member.email) {
+    res.status(400).json({ error: "Este membro não possui e-mail cadastrado" });
+    return;
+  }
+
+  try {
+    await sendPushSetupEmail(member);
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Falha ao enviar o e-mail. Tente novamente mais tarde." });
+  }
 });
 
 export default router;

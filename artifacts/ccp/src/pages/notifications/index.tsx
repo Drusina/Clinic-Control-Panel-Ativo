@@ -1,23 +1,77 @@
 import { useListNotifications, getListNotificationsQueryKey, useMarkNotificationRead } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bell, CheckCircle, Info, AlertTriangle, Loader2, BellRing, BellOff } from "lucide-react";
+import { Bell, CheckCircle, Info, AlertTriangle, Loader2, BellRing, BellOff, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { usePushSubscription } from "@/hooks/usePushSubscription";
+import { useCurrentRole, getStoredToken } from "@/hooks/use-auth";
+import { useState } from "react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function resendPushEmail(): Promise<boolean> {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE}/api/push/resend-setup-email`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  return res.ok;
+}
 
 function PushSubscriptionBanner() {
   const { permission, isSubscribed, isLoading, subscribe, unsubscribe } = usePushSubscription();
+  const { data: currentUser } = useCurrentRole();
   const { toast } = useToast();
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  const teamMemberId = currentUser?.teamMemberId ?? null;
+
+  const handleResendEmail = async () => {
+    if (!teamMemberId) return;
+    setIsSendingEmail(true);
+    try {
+      const ok = await resendPushEmail();
+      if (ok) {
+        toast({ title: "E-mail enviado!", description: "Verifique sua caixa de entrada para ativar as notificações." });
+      } else {
+        toast({ variant: "destructive", title: "Erro", description: "Não foi possível enviar o e-mail. Tente novamente." });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível enviar o e-mail. Tente novamente." });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
 
   if (permission === "unsupported") return null;
   if (permission === "denied") {
     return (
-      <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-muted-foreground">
-        <BellOff className="h-4 w-4 shrink-0 text-destructive" />
-        <span>Notificações push bloqueadas. Altere as permissões do navegador para habilitar.</span>
+      <div className="flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-muted-foreground">
+        <div className="flex items-center gap-3">
+          <BellOff className="h-4 w-4 shrink-0 text-destructive" />
+          <span>Notificações push bloqueadas. Altere as permissões do navegador para habilitar.</span>
+        </div>
+        {teamMemberId && (
+          <div className="flex items-center gap-2 pl-7">
+            <span className="text-xs text-muted-foreground">Ou ative em outro dispositivo:</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={isSendingEmail}
+              onClick={handleResendEmail}
+            >
+              {isSendingEmail ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Mail className="h-3 w-3 mr-1" />}
+              Reenviar e-mail de ativação
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -46,27 +100,44 @@ function PushSubscriptionBanner() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
-      <div className="flex items-center gap-2 text-sm">
-        <Bell className="h-4 w-4 text-muted-foreground" />
-        <span className="text-foreground font-medium">Ativar notificações push</span>
-        <span className="text-muted-foreground hidden sm:inline">— receba alertas mesmo com o app fechado.</span>
+    <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/30 px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <Bell className="h-4 w-4 text-muted-foreground" />
+          <span className="text-foreground font-medium">Ativar notificações push</span>
+          <span className="text-muted-foreground hidden sm:inline">— receba alertas mesmo com o app fechado.</span>
+        </div>
+        <Button
+          size="sm"
+          disabled={isLoading}
+          onClick={async () => {
+            const ok = await subscribe();
+            if (ok) {
+              toast({ title: "Notificações push ativadas!" });
+            } else if (typeof Notification !== "undefined" && Notification.permission === "denied") {
+              toast({ variant: "destructive", title: "Permissão negada", description: "Altere as permissões do navegador." });
+            }
+          }}
+        >
+          {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <BellRing className="h-3 w-3 mr-1" />}
+          Ativar
+        </Button>
       </div>
-      <Button
-        size="sm"
-        disabled={isLoading}
-        onClick={async () => {
-          const ok = await subscribe();
-          if (ok) {
-            toast({ title: "Notificações push ativadas!" });
-          } else if (typeof Notification !== "undefined" && Notification.permission === "denied") {
-            toast({ variant: "destructive", title: "Permissão negada", description: "Altere as permissões do navegador." });
-          }
-        }}
-      >
-        {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <BellRing className="h-3 w-3 mr-1" />}
-        Ativar
-      </Button>
+      {teamMemberId && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground pl-6">
+          <span>Prefere ativar por e-mail ou em outro dispositivo?</span>
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs"
+            disabled={isSendingEmail}
+            onClick={handleResendEmail}
+          >
+            {isSendingEmail ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Reenviar e-mail de ativação
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

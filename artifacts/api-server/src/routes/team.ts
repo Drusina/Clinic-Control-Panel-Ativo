@@ -42,7 +42,7 @@ async function dispatchSupabaseInvite(email: string): Promise<boolean> {
   return res.ok;
 }
 
-async function sendPushSetupEmail(member: typeof teamTable.$inferSelect): Promise<void> {
+export async function sendPushSetupEmail(member: typeof teamTable.$inferSelect): Promise<void> {
   if (!member.email) return;
   const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
   let inviteToken: string;
