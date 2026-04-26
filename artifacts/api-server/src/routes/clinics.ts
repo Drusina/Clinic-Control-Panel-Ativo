@@ -466,7 +466,7 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
     memberId = existingMember[0].id;
     await db
       .update(teamTable)
-      .set({ inviteStatus: "pending", temAcessoPlataforma: true, funcao: role })
+      .set({ inviteStatus: "pending", temAcessoPlataforma: true, funcao: role, inviteRedeemedAt: null })
       .where(eq(teamTable.id, memberId));
   } else {
     const [newMember] = await db.insert(teamTable).values({

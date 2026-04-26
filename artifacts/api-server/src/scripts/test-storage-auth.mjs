@@ -12,7 +12,8 @@
 import { createHmac } from "crypto";
 
 const BASE_URL = process.env.API_URL ?? "http://localhost:8080";
-const SECRET = process.env.SUPER_ADMIN_SECRET;
+const TOKEN_SIGNING_SECRET = process.env.TOKEN_SIGNING_SECRET;
+const SUPER_ADMIN_SECRET = process.env.SUPER_ADMIN_SECRET;
 const TEST_PATH = "/api/storage/objects/__auth_test_nonexistent__.pdf";
 
 let passed = 0;
@@ -33,11 +34,12 @@ function b64url(str) {
 }
 
 function makeToken(payload) {
-  if (!SECRET) throw new Error("SUPER_ADMIN_SECRET is not set");
+  const signingSecret = TOKEN_SIGNING_SECRET;
+  if (!signingSecret) throw new Error("TOKEN_SIGNING_SECRET is not set");
   const now = Math.floor(Date.now() / 1000);
   const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const body = b64url(JSON.stringify({ ...payload, iat: now, exp: now + 3600 }));
-  const sig = createHmac("sha256", SECRET).update(`${header}.${body}`).digest("base64url");
+  const sig = createHmac("sha256", signingSecret).update(`${header}.${body}`).digest("base64url");
   return `${header}.${body}.${sig}`;
 }
 
@@ -49,8 +51,13 @@ async function get(url, headers = {}) {
 async function main() {
   console.log(`Testing storage auth protection against ${BASE_URL}${TEST_PATH}\n`);
 
-  if (!SECRET) {
+  if (!SUPER_ADMIN_SECRET) {
     console.error("SUPER_ADMIN_SECRET env var is not set — cannot run auth tests");
+    process.exit(1);
+  }
+
+  if (!TOKEN_SIGNING_SECRET) {
+    console.error("TOKEN_SIGNING_SECRET env var is not set — cannot run auth tests");
     process.exit(1);
   }
 

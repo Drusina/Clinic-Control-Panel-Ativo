@@ -136,7 +136,7 @@ router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
   if (parsed.data.temAcessoPlataforma && parsed.data.email) {
     try {
       const status = await dispatchPlatformInvite(member, req);
-      await db.update(teamTable).set({ inviteStatus: status }).where(eq(teamTable.id, member.id));
+      await db.update(teamTable).set({ inviteStatus: status, inviteRedeemedAt: null }).where(eq(teamTable.id, member.id));
       member.inviteStatus = status;
     } catch {
       member.inviteStatus = "error";
@@ -179,6 +179,7 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
         const memberForInvite = { ...existing, ...updates, email: emailToUse } as typeof teamTable.$inferSelect;
         const status = await dispatchPlatformInvite(memberForInvite, req);
         updates.inviteStatus = status;
+        updates.inviteRedeemedAt = null;
       } catch {
         updates.inviteStatus = "error";
       }
@@ -187,6 +188,7 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
     }
   } else if (d.temAcessoPlataforma === false && existing.temAcessoPlataforma) {
     updates.inviteStatus = null;
+    updates.inviteRedeemedAt = null;
   }
 
   const [member] = await db.update(teamTable).set(updates).where(eq(teamTable.id, id)).returning();

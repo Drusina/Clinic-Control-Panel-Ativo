@@ -1,8 +1,8 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { Request, Response, NextFunction } from "express";
 
-function getSecret(): string | null {
-  return process.env.SUPER_ADMIN_SECRET ?? null;
+function getSigningSecret(): string | null {
+  return process.env.TOKEN_SIGNING_SECRET ?? null;
 }
 
 function base64urlEncode(data: string): string {
@@ -17,14 +17,14 @@ const SESSION_TTL_SECONDS = 8 * 60 * 60;
 const INVITE_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 export function signToken(payload: Record<string, unknown>, ttlSeconds = SESSION_TTL_SECONDS): string {
-  const secret = getSecret();
-  if (!secret) throw new Error("SUPER_ADMIN_SECRET is not configured");
+  const signingSecret = getSigningSecret();
+  if (!signingSecret) throw new Error("TOKEN_SIGNING_SECRET is not configured");
   const now = Math.floor(Date.now() / 1000);
   const header = base64urlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const body = base64urlEncode(
     JSON.stringify({ ...payload, iat: now, exp: now + ttlSeconds })
   );
-  const sig = createHmac("sha256", secret)
+  const sig = createHmac("sha256", signingSecret)
     .update(`${header}.${body}`)
     .digest("base64url");
   return `${header}.${body}.${sig}`;
@@ -35,13 +35,13 @@ export function signInviteToken(memberId: string): string {
 }
 
 export function verifyToken(token: string): Record<string, unknown> | null {
-  const secret = getSecret();
-  if (!secret) return null;
+  const signingSecret = getSigningSecret();
+  if (!signingSecret) return null;
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
     const [header, body, sig] = parts;
-    const expectedSig = createHmac("sha256", secret)
+    const expectedSig = createHmac("sha256", signingSecret)
       .update(`${header}.${body}`)
       .digest("base64url");
     const expectedBuf = Buffer.from(expectedSig);

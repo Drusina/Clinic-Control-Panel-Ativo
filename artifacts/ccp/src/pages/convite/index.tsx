@@ -190,6 +190,7 @@ export default function ConvitePage() {
           clinicId: data.clinicId,
           teamMemberId: data.teamMemberId,
         });
+        history.replaceState(null, "", window.location.pathname);
         setStatus("ready");
       } catch {
         setStatus("error");

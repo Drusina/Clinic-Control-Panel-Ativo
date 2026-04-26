@@ -3,6 +3,21 @@ import { logger } from "./lib/logger";
 import { initVapid, isPushConfigured } from "./lib/push.js";
 import { startScheduler, stopScheduler } from "./lib/scheduler.js";
 
+if (!process.env.SUPER_ADMIN_SECRET) {
+  throw new Error("SUPER_ADMIN_SECRET is required but not set. Configure it before starting the server.");
+}
+
+if (!process.env.TOKEN_SIGNING_SECRET) {
+  throw new Error("TOKEN_SIGNING_SECRET is required but not set. Configure it as a secure secret before starting the server.");
+}
+
+if (process.env.SUPER_ADMIN_SECRET === process.env.TOKEN_SIGNING_SECRET) {
+  throw new Error(
+    "TOKEN_SIGNING_SECRET must be different from SUPER_ADMIN_SECRET. " +
+    "Using the same value for both defeats privilege separation between the admin login credential and the token signing key."
+  );
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

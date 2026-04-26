@@ -16,6 +16,7 @@ export const teamTable = pgTable("equipe_interna", {
   whatsapp: text("whatsapp"),
   temAcessoPlataforma: boolean("tem_acesso_plataforma").default(false),
   inviteStatus: text("invite_status"),
+  inviteRedeemedAt: timestamp("invite_redeemed_at", { withTimezone: true }),
   lastAccessAt: timestamp("last_access_at", { withTimezone: true }),
   notificationPreferences: jsonb("notification_preferences").$type<{
     emailEnabled: boolean;

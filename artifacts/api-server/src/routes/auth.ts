@@ -3,7 +3,7 @@ import type { Request } from "express";
 import { signToken, verifyToken, extractToken } from "../middleware/auth";
 import { db } from "@workspace/db";
 import { teamTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -12,7 +12,7 @@ const MAX_ATTEMPTS = 10;
 const loginAttempts = new Map<string, { count: number; windowStart: number }>();
 
 function getClientIp(req: Request): string {
-  return req.socket?.remoteAddress ?? "unknown";
+  return req.ip ?? req.socket?.remoteAddress ?? "unknown";
 }
 
 router.post("/auth/login", (req, res): void => {
@@ -93,6 +93,18 @@ router.post("/auth/convite", async (req, res): Promise<void> => {
     return;
   }
 
+  const now = new Date();
+  const redeemed = await db
+    .update(teamTable)
+    .set({ lastAccessAt: now, inviteRedeemedAt: now })
+    .where(and(eq(teamTable.id, member.id), isNull(teamTable.inviteRedeemedAt)))
+    .returning({ id: teamTable.id });
+
+  if (redeemed.length === 0) {
+    res.status(401).json({ error: "Token de convite já utilizado. Solicite um novo convite." });
+    return;
+  }
+
   const sessionToken = signToken({
     role: "team_member",
     sub: member.email,
@@ -101,11 +113,6 @@ router.post("/auth/convite", async (req, res): Promise<void> => {
     teamMemberId: member.id,
     nome: member.nome,
   });
-
-  await db
-    .update(teamTable)
-    .set({ lastAccessAt: new Date() })
-    .where(eq(teamTable.id, member.id));
 
   res.json({
     token: sessionToken,
