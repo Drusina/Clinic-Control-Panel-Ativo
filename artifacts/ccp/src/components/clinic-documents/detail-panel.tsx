@@ -251,7 +251,7 @@ export function DetailPanel({
               }
               title={
                 !isSummarizableMime(doc.fileType)
-                  ? "Apenas PDF e arquivos de texto"
+                  ? "Apenas PDF e texto"
                   : undefined
               }
               data-testid="btn-summarize-doc"
