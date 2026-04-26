@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, teamTable } from "@workspace/db";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
 import { signInviteToken } from "../middleware/auth";
+import { sendEmail, buildInviteEmail } from "../lib/email.js";
 
 const router: IRouter = Router();
 
@@ -41,7 +42,8 @@ async function dispatchSupabaseInvite(email: string): Promise<boolean> {
   return res.ok;
 }
 
-async function sendPushSetupEmail(member: typeof teamTable.$inferSelect, resendKey: string): Promise<void> {
+async function sendPushSetupEmail(member: typeof teamTable.$inferSelect): Promise<void> {
+  if (!member.email) return;
   const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
   let inviteToken: string;
   try {
@@ -51,41 +53,26 @@ async function sendPushSetupEmail(member: typeof teamTable.$inferSelect, resendK
   }
   const conviteLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}&tok=${encodeURIComponent(inviteToken)}`;
 
-  await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "IONEX360 <noreply@ionex360.com.br>",
-      to: [member.email!],
-      subject: `[IONEX360] Ative suas notificações push`,
-      html: `
-        <p>Olá, ${member.nome},</p>
-        <p>Você pode ativar notificações push para receber alertas de delegações em tempo real, mesmo com o navegador fechado.</p>
-        <p><a href="${conviteLink}" style="background:#1a56db;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">Ativar notificações push</a></p>
-        <p style="color:#6b7280;font-size:12px;margin-top:16px;">Se você não esperava este e-mail, ignore-o.</p>
-      `,
-    }),
-  }).catch(() => {});
+  await sendEmail({
+    to: member.email,
+    subject: `[IONEX360] Ative suas notificações push`,
+    html: `
+      <p>Olá, ${member.nome},</p>
+      <p>Você pode ativar notificações push para receber alertas de delegações em tempo real, mesmo com o navegador fechado.</p>
+      <p><a href="${conviteLink}" style="background:#1a56db;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">Ativar notificações push</a></p>
+      <p style="color:#6b7280;font-size:12px;margin-top:16px;">Se você não esperava este e-mail, ignore-o.</p>
+    `,
+  });
 }
 
 async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect): Promise<string> {
   if (!member.email) return "no_email";
 
-  const resendKey = process.env.RESEND_API_KEY;
   const supabaseInvited = await dispatchSupabaseInvite(member.email);
 
   if (supabaseInvited) {
-    if (resendKey) {
-      sendPushSetupEmail(member, resendKey).catch(() => {});
-    }
+    sendPushSetupEmail(member).catch(() => {});
     return "sent";
-  }
-
-  if (!resendKey) {
-    return "pending";
   }
 
   const appUrl = process.env.APP_URL ?? "https://ionex360.com.br";
@@ -97,32 +84,17 @@ async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect): Pr
   }
   const inviteLink = `${appUrl}/convite?ref=${encodeURIComponent(member.id)}&tok=${encodeURIComponent(inviteToken)}`;
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "IONEX360 <noreply@ionex360.com.br>",
-      to: [member.email],
-      subject: `Você foi convidado para a plataforma IONEX360`,
-      html: `
-        <p>Olá, ${member.nome},</p>
-        <p>Você foi convidado para acessar a plataforma de gestão <strong>IONEX360</strong>.</p>
-        <p>Sua função: <strong>${member.funcao ?? "—"}</strong></p>
-        <p><a href="${inviteLink}" style="background:#1a56db;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">Acessar plataforma</a></p>
-        <p style="color:#6b7280;font-size:12px;margin-top:16px;">Se você não esperava este convite, ignore este e-mail.</p>
-      `,
+  const sent = await sendEmail({
+    to: member.email,
+    subject: `Você foi convidado para a plataforma IONEX360`,
+    html: buildInviteEmail({
+      email: member.email,
+      role: member.funcao ?? "colaborador",
+      magicLink: inviteLink,
     }),
   });
 
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Resend error: ${err}`);
-  }
-
-  return "sent";
+  return sent ? "sent" : "pending";
 }
 
 router.get("/team/all", async (_req, res): Promise<void> => {

@@ -1,5 +1,5 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_ADDRESS = "IONEX360 <noreply@ionex360.com.br>";
+const FROM_ADDRESS = process.env.RESEND_FROM_ADDRESS ?? "IONEX360 <onboarding@resend.dev>";
 const APP_URL = process.env.APP_URL ?? "https://ionex360.com.br";
 
 function baseTemplate(title: string, bodyHtml: string): string {
@@ -61,18 +61,24 @@ function primaryButton(href: string, label: string): string {
   return `<a href="${href}" style="display:inline-block;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:14px 32px;border-radius:8px;margin:24px 0;">${label}</a>`;
 }
 
-export function buildInviteEmail(params: { email: string; role: string; magicLink: string }): string {
+export function buildInviteEmail(params: { email: string; role: string; magicLink: string; clinicName?: string }): string {
   const body = `
     <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Bem-vindo(a) à plataforma IONEX360</h1>
-    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">Você foi convidado(a) a acessar o painel clínico.</p>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      Você foi convidado(a) a acessar o painel clínico${params.clinicName ? ` da <strong style="color:#e2e8f0;">${params.clinicName}</strong>` : ""}.
+    </p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px;margin-bottom:24px;">
-      <tr>
+      ${params.clinicName ? `<tr>
         <td>
-          <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Email</p>
-          <p style="margin:0;color:#e2e8f0;font-weight:600;">${params.email}</p>
+          <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Clínica</p>
+          <p style="margin:0;color:#3b82f6;font-weight:600;">${params.clinicName}</p>
         </td>
-      </tr>
+      </tr>` : ""}
+      <tr><td style="${params.clinicName ? "padding-top:16px;" : ""}">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Email</p>
+        <p style="margin:0;color:#e2e8f0;font-weight:600;">${params.email}</p>
+      </td></tr>
       <tr><td style="padding-top:16px;">
         <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Perfil de acesso</p>
         <p style="margin:0;color:#f59e0b;font-weight:600;">${params.role}</p>
@@ -80,10 +86,15 @@ export function buildInviteEmail(params: { email: string; role: string; magicLin
     </table>
 
     <p style="color:#94a3b8;font-size:14px;line-height:1.7;">
-      Clique no botão abaixo para definir sua senha e acessar a plataforma. Este link é válido por 24 horas.
+      Clique no botão abaixo para definir sua senha e acessar a plataforma. Este link é válido por <strong style="color:#e2e8f0;">7 dias</strong>.
     </p>
 
     ${primaryButton(params.magicLink, "Acessar a plataforma →")}
+
+    <p style="color:#475569;font-size:12px;margin-top:8px;">
+      Ou copie e cole este link no navegador:<br/>
+      <span style="color:#3b82f6;word-break:break-all;">${params.magicLink}</span>
+    </p>
 
     <p style="color:#475569;font-size:12px;margin-top:16px;">
       Se você não esperava este convite, pode ignorar este email com segurança.

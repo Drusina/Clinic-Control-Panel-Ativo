@@ -492,7 +492,7 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
     autorNome: "Super Admin",
   });
 
-  const inviteHtml = buildInviteEmail({ email, role, magicLink: inviteLink });
+  const inviteHtml = buildInviteEmail({ email, role, magicLink: inviteLink, clinicName: clinic.nome ?? undefined });
   sendEmail({
     to: email,
     subject: `[IONEX360] Você foi convidado para a plataforma — ${clinic.nome}`,
