@@ -34,7 +34,7 @@ const FIXED_TERMS = [
   {
     slug: "consentimento-dados",
     nome: "Consentimento para Tratamento de Dados Pessoais",
-    descricao: "Autorização expressa para coleta e tratamento de dados pessoais de pacientes e colaboradores.",
+    descricao: "Autorização expressa para coleta e tratamento de dados pessoais de colaboradores.",
   },
   {
     slug: "autorizacao-imagem",
