@@ -62,12 +62,14 @@ function warnIfAppUrlLooksLikeMarketingSite(url: string): void {
   } catch {
     return;
   }
-  const host = parsed.host.toLowerCase();
-  if (host !== "clinionex.com.br" && !host.endsWith(".clinionex.com.br")) return;
-  if (host === "app.clinionex.com.br") return;
-  // Dedupe by canonical origin (protocol + host) so query strings or path
-  // variants don't blow up the cache.
-  const key = `${parsed.protocol}//${host}`;
+  // Use hostname (no port) for the equality check so explicit-port variants
+  // like `https://app.clinionex.com.br:443` aren't falsely flagged.
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname !== "clinionex.com.br" && !hostname.endsWith(".clinionex.com.br")) return;
+  if (hostname === "app.clinionex.com.br") return;
+  // Dedupe by canonical origin (protocol + host with port if any) so query
+  // strings or path variants don't blow up the cache.
+  const key = `${parsed.protocol}//${parsed.host.toLowerCase()}`;
   if (warnedAppUrls.has(key)) return;
   if (warnedAppUrls.size >= WARNED_APP_URLS_MAX) warnedAppUrls.clear();
   warnedAppUrls.add(key);
