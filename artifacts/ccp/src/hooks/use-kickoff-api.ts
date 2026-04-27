@@ -479,6 +479,37 @@ export async function downloadSignedPdf(clinicId: string, termoId: string, filen
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/**
+ * Triggers a download of a freshly rendered termo PDF, with placeholders
+ * substituted by the current clinic + contractor data. Works in any termo
+ * status — does not depend on a stored copy. Use as a universal "Baixar
+ * PDF preenchido" action.
+ */
+export async function downloadFilledPdf(
+  clinicId: string,
+  termoId: string,
+  filename?: string,
+): Promise<void> {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE}/api/clinics/${clinicId}/lgpd-termos/${termoId}/render-pdf`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? "Falha ao gerar PDF");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  if (filename) a.download = filename;
+  else a.target = "_blank";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export function useUploadLgpdPdf(clinicId: string) {
   const qc = useQueryClient();
   return useMutation({

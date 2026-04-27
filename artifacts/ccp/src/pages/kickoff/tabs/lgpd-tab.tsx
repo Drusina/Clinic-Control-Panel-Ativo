@@ -23,6 +23,7 @@ import {
   Upload,
   FileSignature,
   Download,
+  FileDown,
   RefreshCw,
   Eye,
   ExternalLink,
@@ -34,6 +35,7 @@ import {
   useResendLgpdSigningEmail,
   useUploadLgpdPdf,
   downloadSignedPdf,
+  downloadFilledPdf,
   type LgpdTermoData,
 } from "@/hooks/use-kickoff-api";
 
@@ -165,6 +167,14 @@ export default function LgpdTab({ clinicId }: Props) {
     }
   }
 
+  async function handleDownloadFilled(termo: LgpdTermoData) {
+    try {
+      await downloadFilledPdf(clinicId, termo.id, `${termo.slug}-preenchido.pdf`);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro ao baixar PDF", description: (e as Error).message });
+    }
+  }
+
   function handlePdfUpload(termo: LgpdTermoData, file: File) {
     uploadPdf.mutate(
       { termoId: termo.id, file },
@@ -261,6 +271,15 @@ export default function LgpdTab({ clinicId }: Props) {
                     )}
                   </div>
                   <div className="flex gap-2 shrink-0 flex-wrap">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDownloadFilled(termo)}
+                      data-testid={`btn-download-filled-${termo.slug}`}
+                    >
+                      <FileDown className="h-3.5 w-3.5 mr-1" />
+                      Baixar PDF preenchido
+                    </Button>
                     {isSigned && (
                       <Button
                         size="sm"

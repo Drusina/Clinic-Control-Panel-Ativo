@@ -342,6 +342,63 @@ protectedRouter.post(
   },
 );
 
+// ─── PROTECTED: render filled PDF on-demand ───────────────────────────────
+//
+// Returns a freshly rendered PDF for the given termo, with placeholders
+// substituted by the current clinic + contractor data. Does NOT depend on
+// any storage path — works in any termo status (pendente / enviado /
+// anexado / assinado). Useful as a universal "Baixar PDF preenchido"
+// fallback that the clinic manager can always click.
+
+protectedRouter.get(
+  "/clinics/:clinicId/lgpd-termos/:termoId/render-pdf",
+  async (req, res): Promise<void> => {
+    const clinicId = req.params.clinicId as string;
+    const termoId = req.params.termoId as string;
+
+    try {
+      const [termo] = await db
+        .select()
+        .from(lgpdTermosTable)
+        .where(and(eq(lgpdTermosTable.id, termoId), eq(lgpdTermosTable.clinicId, clinicId)));
+      if (!termo) {
+        res.status(404).json({ error: "Termo não encontrado" });
+        return;
+      }
+
+      const tpl = await getOrSeedTemplate(termo.slug);
+      if (!tpl) {
+        res.status(400).json({ error: `Modelo "${termo.slug}" não encontrado` });
+        return;
+      }
+
+      const contratada = await loadContratada();
+      const clinic = await loadContratante(clinicId);
+      if (!clinic) {
+        res.status(404).json({ error: "Clínica não encontrada" });
+        return;
+      }
+
+      const { bytes } = await renderTermoPdf({
+        titulo: tpl.titulo,
+        corpo: tpl.corpo,
+        versao: tpl.versao,
+        contratada,
+        contratante: clinic.info,
+      });
+
+      const filename = `${termo.slug}-preenchido.pdf`;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+      res.setHeader("Cache-Control", "private, max-age=0, no-store");
+      res.send(Buffer.from(bytes));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao gerar PDF";
+      res.status(500).json({ error: msg });
+    }
+  },
+);
+
 // ─── PROTECTED: download signed PDF ───────────────────────────────────────
 
 protectedRouter.get(
