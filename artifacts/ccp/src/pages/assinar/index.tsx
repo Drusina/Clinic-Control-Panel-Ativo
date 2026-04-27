@@ -326,12 +326,27 @@ export default function AssinarPage() {
                 )}
               </div>
 
-              <div className="text-xs text-muted-foreground space-y-1 rounded-md border bg-muted/30 p-2.5">
-                <div><strong className="text-foreground">E-mail:</strong> {info.signatarioEmail}</div>
-                {info.signatarioCargo && (
-                  <div><strong className="text-foreground">Cargo:</strong> {info.signatarioCargo}</div>
-                )}
+              <div className="space-y-1.5">
+                <Label htmlFor="signer-email">E-mail</Label>
+                <Input
+                  id="signer-email"
+                  data-testid="input-signer-email"
+                  value={info.signatarioEmail}
+                  readOnly
+                  disabled
+                  aria-readonly="true"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  E-mail definido pela clínica solicitante. Para alterá-lo, peça uma nova
+                  emissão do documento.
+                </p>
               </div>
+
+              {info.signatarioCargo && (
+                <div className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-2.5">
+                  <strong className="text-foreground">Cargo:</strong> {info.signatarioCargo}
+                </div>
+              )}
 
               <div className="flex items-start gap-2 pt-1">
                 <Checkbox

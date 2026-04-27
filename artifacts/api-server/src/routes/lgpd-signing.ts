@@ -6,6 +6,7 @@ import {
   db,
   lgpdTermosTable,
   lgpdTermoTemplatesTable,
+  lgpdSignatureRequestsTable,
   clinicsTable,
 } from "@workspace/db";
 import { ObjectStorageService } from "../lib/objectStorage.js";
@@ -39,7 +40,6 @@ function generateToken(): string {
 }
 
 function generateVerificationCode(): string {
-  // Short human-readable code: 8 chars uppercase alphanumeric
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const buf = randomBytes(8);
   let s = "";
@@ -196,7 +196,6 @@ protectedRouter.post(
         return;
       }
 
-      // Render PDF + compute hash
       const { bytes, hash } = await renderTermoPdf({
         titulo: tpl.titulo,
         corpo: tpl.corpo,
@@ -211,11 +210,40 @@ protectedRouter.post(
         buildOriginalPath(clinicId, termo.slug, termoId, tpl.versao),
       );
 
-      // Token + 30-day expiry (matches the validity window communicated to the
-      // signer in the request e-mail; renew via "Reemitir" if it expires).
+      // 30-day token validity, mirroring the window stated in the e-mail.
       const token = generateToken();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const now = new Date();
 
+      // Mark any prior in-flight request for this termo as 'reissued' so the
+      // audit log preserves the chain of "Reemitir" actions.
+      await db
+        .update(lgpdSignatureRequestsTable)
+        .set({ status: "reissued", reissuedAt: now })
+        .where(
+          and(
+            eq(lgpdSignatureRequestsTable.termoId, termoId),
+            eq(lgpdSignatureRequestsTable.status, "enviado"),
+          ),
+        );
+
+      // Insert the new immutable signature-request audit record.
+      await db.insert(lgpdSignatureRequestsTable).values({
+        termoId,
+        clinicId,
+        signingToken: token,
+        signingTokenExpiresAt: expiresAt,
+        signatarioNome: parsed.data.signerName,
+        signatarioEmail: parsed.data.signerEmail,
+        signatarioCargo: parsed.data.signerCargo ?? null,
+        storagePath: originalPath,
+        docHash: hash,
+        templateVersion: tpl.versao,
+        status: "enviado",
+        requestedAt: now,
+      });
+
+      // Update the termo summary row (latest state for the LGPD tab UI).
       await db
         .update(lgpdTermosTable)
         .set({
@@ -234,7 +262,7 @@ protectedRouter.post(
           signerIp: null,
           signerUserAgent: null,
           assinadoEm: null,
-          enviadoEm: new Date(),
+          enviadoEm: now,
           autentiqueDocId: null,
           acaoUrl: null,
         })
@@ -460,6 +488,9 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
   // gated on (token, status='enviado', expiry > now) so a second concurrent
   // submit gets zero rows back and is rejected.
   const claimedAt = new Date();
+  // Claim happens on lgpd_termos (the row that holds the live token + status
+  // for the LGPD tab). The mirror in lgpd_signature_requests is updated
+  // immediately afterwards inside the try block.
   const claimed = await db
     .update(lgpdTermosTable)
     .set({ status: "assinando", assinadoEm: claimedAt })
@@ -496,7 +527,6 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
 
   const termo = claimed[0];
   if (!termo.storagePath || !termo.docHash) {
-    // Roll back the claim so the admin can re-emit
     await db
       .update(lgpdTermosTable)
       .set({ status: "enviado", assinadoEm: null })
@@ -505,8 +535,29 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
     return;
   }
 
+  // Locate the matching audit row so we can mirror state into it. There must
+  // be exactly one row with status='enviado' for this token (created by
+  // send-for-signing). If missing the request is corrupt — bail out and roll
+  // back the live claim so an admin can reissue cleanly.
+  const [auditRow] = await db
+    .select()
+    .from(lgpdSignatureRequestsTable)
+    .where(
+      and(
+        eq(lgpdSignatureRequestsTable.signingToken, token),
+        eq(lgpdSignatureRequestsTable.status, "enviado"),
+      ),
+    );
+  if (!auditRow) {
+    await db
+      .update(lgpdTermosTable)
+      .set({ status: "enviado", assinadoEm: null })
+      .where(eq(lgpdTermosTable.id, termo.id));
+    res.status(500).json({ error: "Registro de solicitação ausente — solicite reenvio" });
+    return;
+  }
+
   try {
-    // Download the original PDF
     const originalBytes = await downloadPdfBytes(termo.storagePath);
 
     // ─── Integrity check ────────────────────────────────────────────────
@@ -530,7 +581,6 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
     const ip = clientIp(req);
     const ua = (req.headers["user-agent"] as string | undefined) ?? "";
 
-    // Stamp signature page
     const signedBytes = await stampSignedPdf(originalBytes, {
       signerName: parsed.data.signerName,
       signerEmail: termo.signatarioEmail ?? "",
@@ -549,7 +599,22 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
       buildSignedPath(termo.clinicId, termo.slug, termo.id),
     );
 
-    // Finalize: transition to "assinado" and persist all signature evidence.
+    // Finalize: write signature evidence to BOTH the audit row (immutable
+    // history) and the lgpd_termos summary row (UI surface).
+    await db
+      .update(lgpdSignatureRequestsTable)
+      .set({
+        status: "assinado",
+        signatarioNome: parsed.data.signerName,
+        signerCpf: formatCpf(cleanCpf),
+        signerIp: ip,
+        signerUserAgent: ua,
+        signedStoragePath: signedPath,
+        verificationCode,
+        signedAt,
+      })
+      .where(eq(lgpdSignatureRequestsTable.id, auditRow.id));
+
     await db
       .update(lgpdTermosTable)
       .set({
@@ -560,12 +625,9 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
         signerUserAgent: ua,
         signedStoragePath: signedPath,
         assinadoEm: signedAt,
-        // We deliberately keep signingToken non-NULL so /assinar/info still
-        // renders the success state when the signer revisits the link.
       })
       .where(eq(lgpdTermosTable.id, termo.id));
 
-    // Send confirmation emails (non-blocking but await for visibility)
     const [clinic] = await db.select().from(clinicsTable).where(eq(clinicsTable.id, termo.clinicId));
     const clinicName = clinic?.fantasia ?? clinic?.nome ?? "—";
     const formattedSignedAt = formatBRT(signedAt);
@@ -590,7 +652,9 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
       }).catch(() => {});
     }
 
-    // (2) operator
+    // (2) operator notification — fall back through configured addresses, and
+    // if none is set, log a SUPER_ADMIN warning so the signature event is
+    // never silently lost in production.
     const operatorEmail =
       (await getConfig("contratada_email_notificacao")) ??
       (await getConfig("reply_to_address")) ??
@@ -612,7 +676,16 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
         to: operatorEmail,
         subject: `[IONEX360] Termo assinado por ${clinicName} — ${termo.nome}`,
         html,
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        console.error(
+          `[lgpd-signing][SUPER_ADMIN] operator notification failed termoId=${termo.id} clinicId=${termo.clinicId} verificationCode=${verificationCode}:`,
+          err,
+        );
+      });
+    } else {
+      console.error(
+        `[lgpd-signing][SUPER_ADMIN] operator notification skipped — no contratada_email_notificacao or reply_to_address configured. termoId=${termo.id} clinicId=${termo.clinicId} verificationCode=${verificationCode}`,
+      );
     }
 
     res.json({
@@ -625,9 +698,9 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
       signedPdfBase64: pdfBase64,
     });
   } catch (err) {
-    // Compensating rollback: any failure after the atomic claim must release the
-    // row back to "enviado" so the admin can re-emit and the signer can retry.
-    // Without this the termo would be deadlocked in "assinando".
+    // Compensating rollback: release the live claim so the signer can retry.
+    // The audit row is left at status='enviado' (its initial state) so the
+    // history remains consistent with the released live state.
     try {
       await db
         .update(lgpdTermosTable)
@@ -639,7 +712,7 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
           ),
         );
     } catch {
-      /* swallow — best-effort rollback */
+      /* best-effort */
     }
     const msg = err instanceof Error ? err.message : "Erro ao processar assinatura";
     res.status(500).json({ error: msg });
