@@ -11,6 +11,40 @@ const router: IRouter = Router();
 
 type AuthedRequest = Request & { user: Record<string, unknown> };
 
+/**
+ * Resolve the active `equipe_interna` member for the current team_member token.
+ *
+ * Supports both legacy v:1 tokens (carry `teamMemberId`) and v:2 tokens that
+ * identify the manager by `email`/`sub` only. For v:2 — where a single user
+ * can be member of multiple clinics — we accept ANY row with
+ * `tem_acesso_plataforma=true`. Push subscriptions are per-device (one row per
+ * endpoint), so picking one of the access rows is sufficient.
+ *
+ * Returns null when no eligible row is found.
+ */
+async function resolveActiveTeamMember(
+  user: Record<string, unknown>,
+): Promise<{ id: string; email: string | null } | null> {
+  const tokenTeamMemberId = (user.teamMemberId as string | null | undefined) ?? null;
+  if (tokenTeamMemberId) {
+    const [byId] = await db
+      .select({ id: teamTable.id, email: teamTable.email, temAcessoPlataforma: teamTable.temAcessoPlataforma })
+      .from(teamTable)
+      .where(eq(teamTable.id, tokenTeamMemberId))
+      .limit(1);
+    if (byId && byId.temAcessoPlataforma) return { id: byId.id, email: byId.email ?? null };
+  }
+  const email = ((user.email as string | undefined) ?? (user.sub as string | undefined) ?? "").trim();
+  if (!email) return null;
+  const [byEmail] = await db
+    .select({ id: teamTable.id, email: teamTable.email })
+    .from(teamTable)
+    .where(and(sql`lower(${teamTable.email}) = lower(${email})`, eq(teamTable.temAcessoPlataforma, true)))
+    .limit(1);
+  if (byEmail) return { id: byEmail.id, email: byEmail.email ?? null };
+  return null;
+}
+
 async function requireActiveTeamMember(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authedReq = req as AuthedRequest;
   const role = String(authedReq.user?.role ?? "");
@@ -18,20 +52,14 @@ async function requireActiveTeamMember(req: Request, res: Response, next: NextFu
     next();
     return;
   }
-  const teamMemberId = authedReq.user?.teamMemberId as string | null | undefined;
-  if (!teamMemberId) {
-    res.status(403).json({ error: "Token de membro inválido" });
-    return;
-  }
-  const [member] = await db
-    .select({ id: teamTable.id, temAcessoPlataforma: teamTable.temAcessoPlataforma })
-    .from(teamTable)
-    .where(eq(teamTable.id, teamMemberId))
-    .limit(1);
-  if (!member || !member.temAcessoPlataforma) {
+  const member = await resolveActiveTeamMember(authedReq.user);
+  if (!member) {
     res.status(403).json({ error: "Acesso revogado. Solicite um novo convite ao responsável da sua clínica." });
     return;
   }
+  // Cache the resolved teamMemberId on the request so handlers below can reuse it
+  // without an extra DB roundtrip.
+  (authedReq.user as Record<string, unknown>).teamMemberId = member.id;
   next();
 }
 
@@ -98,15 +126,8 @@ router.post("/push/subscribe", requireAuth, requireActiveTeamMember, async (req,
 
   let teamMemberId: string | null = null;
   if (userRole === "team_member") {
-    const tokenTeamMemberId = authedReq.user.teamMemberId as string | null | undefined;
-    if (tokenTeamMemberId) {
-      const [found] = await db
-        .select({ id: teamTable.id })
-        .from(teamTable)
-        .where(eq(teamTable.id, tokenTeamMemberId))
-        .limit(1);
-      teamMemberId = found?.id ?? null;
-    }
+    // requireActiveTeamMember already cached the resolved id on req.user.
+    teamMemberId = (authedReq.user.teamMemberId as string | null | undefined) ?? null;
   } else {
     const teamMember = await db
       .select({ id: teamTable.id })
@@ -137,7 +158,7 @@ router.post("/push/subscribe", requireAuth, requireActiveTeamMember, async (req,
 
 router.delete("/push/subscribe", requireAuth, requireActiveTeamMember, async (req, res): Promise<void> => {
   const authedReq = req as AuthedRequest;
-  const userKey = String(authedReq.user.sub ?? "unknown");
+  const userKey = String(authedReq.user.email ?? authedReq.user.sub ?? "unknown");
   const userRole = String(authedReq.user.role ?? "");
   const teamMemberId = authedReq.user.teamMemberId as string | null | undefined;
   const { endpoint } = req.body as { endpoint?: string };
@@ -165,6 +186,7 @@ router.delete("/push/subscribe", requireAuth, requireActiveTeamMember, async (re
 
 router.post("/push/resend-setup-email", requireAuth, requireActiveTeamMember, async (req, res): Promise<void> => {
   const authedReq = req as AuthedRequest;
+  // requireActiveTeamMember populates teamMemberId for v:2 tokens too.
   const teamMemberId = authedReq.user.teamMemberId as string | undefined;
 
   if (!teamMemberId) {

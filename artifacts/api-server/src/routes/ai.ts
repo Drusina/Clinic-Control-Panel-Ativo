@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { eq } from "drizzle-orm";
 import { db, diagnosticsTable, perguntasTable, respostasTable } from "@workspace/db";
 import { recalculateScores } from "../lib/score-calculator";
+import { assertClinicAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -46,6 +47,7 @@ router.post("/ai/analyze-diagnostico", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Diagnostic not found" });
       return;
     }
+    if (await assertClinicAccess(req, res, diagnostic.clinicId)) return;
 
     scores = (diagnostic.scoresPilares as Record<string, number>) || {};
 
@@ -207,6 +209,7 @@ router.post("/diagnostics/:id/calculate-scores", async (req, res): Promise<void>
     res.status(404).json({ error: "Diagnostic not found" });
     return;
   }
+  if (await assertClinicAccess(req, res, diagnostic.clinicId)) return;
 
   await recalculateScores(id);
 

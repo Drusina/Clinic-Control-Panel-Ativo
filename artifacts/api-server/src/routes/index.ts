@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { requireSuperAdmin } from "../middleware/auth";
+import { requireSuperAdmin, requireClinicAccess, requireAuth } from "../middleware/auth";
 import healthRouter from "./health";
 import storageRouter from "./storage";
 import authRouter from "./auth";
-import clinicsRouter from "./clinics";
+import meRouter from "./me";
+import clinicsRouter, { clinicsAdminRouter } from "./clinics";
 import dashboardRouter from "./dashboard";
 import activityRouter from "./activity";
 import kickoffsRouter from "./kickoffs";
@@ -50,46 +51,75 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(storageRouter);
 router.use(authRouter);
+// `meRouter` exposes `/api/me/clinics`. Mounted with no extra middleware
+// because it gates itself with `requireAuth` per-route (super_admin and
+// team_member both consume it).
+router.use(meRouter);
 // Public LGPD signing endpoints (no auth) — gated only by the signing token.
-// MUST be registered BEFORE the first `router.use(requireSuperAdmin, …)` layer
-// because passing requireSuperAdmin to `router.use(mw, subRouter)` actually
+// MUST be registered BEFORE the first `router.use(requireXxx, …)` layer
+// because passing middleware to `router.use(mw, subRouter)` actually
 // installs it as a global layer that runs on every subsequent request.
 router.use(lgpdSigningPublicRouter);
-router.use(requireSuperAdmin, dashboardRouter);
-// Register the clinic-documents (library) routes BEFORE the generic clinics
-// router so the more specific paths like POST /clinics/:clinicId/documents
-// (multipart upload) take precedence over the legacy attachment endpoints
-// in clinics.ts.
-router.use(requireSuperAdmin, documentCategoriesRouter);
-router.use(requireSuperAdmin, clinicDocumentsRouter);
-router.use(requireSuperAdmin, clinicsRouter);
-router.use(requireSuperAdmin, statusHistoryRouter);
-router.use(requireSuperAdmin, sociosRouter);
-router.use(requireSuperAdmin, activityRouter);
-router.use(requireSuperAdmin, kickoffsRouter);
-router.use(requireSuperAdmin, diagnosticsRouter);
-router.use(requireSuperAdmin, perguntasRouter);
-router.use(requireSuperAdmin, aiRouter);
-router.use(requireSuperAdmin, actionsRouter);
-router.use(requireSuperAdmin, risksRouter);
-router.use(requireSuperAdmin, teamRouter);
-router.use(requireSuperAdmin, faturasRouter);
-router.use(requireSuperAdmin, perfilOperacionalRouter);
-router.use(requireSuperAdmin, parceirosExternosRouter);
-router.use(requireSuperAdmin, sistemasUsoRouter);
-router.use(requireSuperAdmin, docsConstitutivoRouter);
-router.use(requireSuperAdmin, lgpdTermosRouter);
-router.use(requireSuperAdmin, lgpdTemplatesAdminRouter);
-router.use(requireSuperAdmin, lgpdSigningProtectedRouter);
-// (lgpdSigningPublicRouter is mounted near the top of the chain — see comment above.)
-router.use(requireSuperAdmin, delegacoesRouter);
-router.use(requireSuperAdmin, processosRouter);
-router.use(requireSuperAdmin, evidenciasRouter);
-router.use(requireSuperAdmin, documentosRouter);
-router.use(requireSuperAdmin, notificationsRouter);
-router.use(requireSuperAdmin, jobsRouter);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPORTANT — middleware mounting note
+// `router.use(mw, subRouter)` registers `mw` as a global layer that runs on
+// EVERY subsequent request, not just on requests that match a route inside
+// `subRouter`. As a consequence, the order below matters: routers that need
+// looser auth must come BEFORE routers that need tighter auth.
+//
+// Strategy:
+//   1. requireClinicAccess group  → super_admin OR team_member with the
+//      clinicId from the URL in their `equipe_interna` access list.
+//   2. requireAuth group          → super_admin OR team_member; routes
+//      enforce clinic ownership inline (look up record → assertClinicAccess).
+//   3. requireSuperAdmin group    → super_admin only (global admin).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// (1) Clinic-scoped routers — the URL always carries `:clinicId` (or `:id`
+//     for clinicsRouter), so requireClinicAccess can authorise per-route.
+//     Register clinic-documents BEFORE clinicsRouter so the more specific
+//     POST /clinics/:clinicId/documents (multipart) wins over the legacy
+//     attachment endpoints in clinics.ts.
+router.use(requireClinicAccess, documentCategoriesRouter);
+router.use(requireClinicAccess, clinicDocumentsRouter);
+router.use(requireClinicAccess, clinicsRouter);
+router.use(requireClinicAccess, statusHistoryRouter);
+router.use(requireClinicAccess, sociosRouter);
+router.use(requireClinicAccess, activityRouter);
+router.use(requireClinicAccess, kickoffsRouter);
+router.use(requireClinicAccess, actionsRouter);
+router.use(requireClinicAccess, risksRouter);
+router.use(requireClinicAccess, faturasRouter);
+router.use(requireClinicAccess, perfilOperacionalRouter);
+router.use(requireClinicAccess, parceirosExternosRouter);
+router.use(requireClinicAccess, sistemasUsoRouter);
+router.use(requireClinicAccess, docsConstitutivoRouter);
+router.use(requireClinicAccess, lgpdTermosRouter);
+router.use(requireClinicAccess, lgpdSigningProtectedRouter);
+router.use(requireClinicAccess, delegacoesRouter);
+router.use(requireClinicAccess, processosRouter);
+router.use(requireClinicAccess, evidenciasRouter);
+router.use(requireClinicAccess, documentosRouter);
+
+// (2) Mixed routers — some endpoints are URL-scoped, others use
+//     ID lookups (member id, diagnostic id). Mounted with requireAuth and
+//     enforce access via `assertClinicAccess` inside each handler.
+router.use(requireAuth, teamRouter);
+router.use(requireAuth, diagnosticsRouter);
+router.use(requireAuth, perguntasRouter);
+router.use(requireAuth, aiRouter);
+
+// User-scoped (no clinic context) — mounted as plain auth-protected.
 router.use(notificationPreferencesRouter);
 router.use(pushRouter);
+
+// (3) Super-admin-only — global resources (operator-side).
+router.use(requireSuperAdmin, dashboardRouter);
+router.use(requireSuperAdmin, clinicsAdminRouter);
+router.use(requireSuperAdmin, lgpdTemplatesAdminRouter);
+router.use(requireSuperAdmin, notificationsRouter);
+router.use(requireSuperAdmin, jobsRouter);
 router.use(requireSuperAdmin, icsTemplatesRouter);
 router.use(requireSuperAdmin, serverConfigRouter);
 router.use(requireSuperAdmin, documentAccessLogRouter);

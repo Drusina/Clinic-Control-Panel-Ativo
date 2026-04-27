@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, documentosTable } from "@workspace/db";
+import { assertClinicAccess } from "../middleware/auth";
 import path from "path";
 
 function sanitizeFileName(raw: string): string {
@@ -56,6 +57,14 @@ router.post("/clinics/:clinicId/documentos", async (req, res): Promise<void> => 
 
 router.patch("/documentos/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [existingDoc] = await db
+    .select({ clinicId: documentosTable.clinicId })
+    .from(documentosTable)
+    .where(eq(documentosTable.id, id))
+    .limit(1);
+  if (!existingDoc) { res.status(404).json({ error: "Not found" }); return; }
+  if (await assertClinicAccess(req, res, existingDoc.clinicId)) return;
+
   const d = req.body;
   const updates: Partial<typeof documentosTable.$inferInsert> = { updatedAt: new Date() };
   if (d.nome !== undefined) updates.nome = d.nome;
@@ -73,6 +82,22 @@ router.patch("/documentos/:id", async (req, res): Promise<void> => {
 router.post("/clinics/:clinicId/documentos/:docId/upload", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   const docId = Array.isArray(req.params.docId) ? req.params.docId[0] : req.params.docId;
+
+  // Defense-in-depth: even though `requireClinicAccess` already authorised the
+  // caller for `clinicId`, the route mixes two ids — verify that `docId`
+  // actually belongs to `clinicId` so a manager from clinic A cannot mutate
+  // (or replace the storage path of) clinic B's document by guessing its uuid.
+  const [docOwner] = await db
+    .select({ clinicId: documentosTable.clinicId })
+    .from(documentosTable)
+    .where(eq(documentosTable.id, docId))
+    .limit(1);
+  if (!docOwner) { res.status(404).json({ error: "Not found" }); return; }
+  if (docOwner.clinicId !== clinicId) {
+    res.status(403).json({ error: "Forbidden: documento não pertence à clínica" });
+    return;
+  }
+
   const { fileName, fileBase64, mimeType } = req.body;
 
   if (!fileName || !fileBase64) {
@@ -133,8 +158,14 @@ router.post("/clinics/:clinicId/documentos/:docId/upload", async (req, res): Pro
 
 router.delete("/documentos/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [row] = await db.delete(documentosTable).where(eq(documentosTable.id, id)).returning();
-  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  const [existingDoc] = await db
+    .select({ clinicId: documentosTable.clinicId })
+    .from(documentosTable)
+    .where(eq(documentosTable.id, id))
+    .limit(1);
+  if (!existingDoc) { res.status(404).json({ error: "Not found" }); return; }
+  if (await assertClinicAccess(req, res, existingDoc.clinicId)) return;
+  await db.delete(documentosTable).where(eq(documentosTable.id, id));
   res.sendStatus(204);
 });
 

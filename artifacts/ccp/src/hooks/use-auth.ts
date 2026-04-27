@@ -2,6 +2,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const AUTH_TOKEN_KEY = "ccp_admin_token";
 const AUTH_QUERY_KEY = ["auth", "me"] as const;
+const MY_CLINICS_QUERY_KEY = ["me", "clinics"] as const;
+const ACTIVE_CLINIC_KEY = "ccp_active_clinic_id";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(AUTH_TOKEN_KEY);
@@ -21,13 +25,15 @@ export interface CurrentUser {
   nome: string | null;
   email: string | null;
   teamMemberId: string | null;
+  /** Token version. v=1 (legacy) tokens carry clinicId/teamMemberId; v=2 are email-only. */
+  v?: number;
 }
 
 async function fetchCurrentRole(): Promise<CurrentUser> {
   const token = getStoredToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch("/api/auth/me", { headers });
+  const res = await fetch(`${BASE}/api/auth/me`, { headers });
   if (!res.ok) return { role: null, clinicId: null, nome: null, email: null, teamMemberId: null };
   return res.json() as Promise<CurrentUser>;
 }
@@ -40,6 +46,65 @@ export function useCurrentRole() {
     staleTime: 0,
     refetchOnWindowFocus: true,
   });
+}
+
+/**
+ * Compact clinic card returned by `GET /api/me/clinics`. Used by the
+ * `/me/clinicas` chooser, the clinic switcher in the header, and the
+ * `ClinicAccessGuard` to verify whether a `:clinicId` URL param is
+ * accessible to the current session.
+ */
+export interface MyClinicCard {
+  id: string;
+  nome: string;
+  fantasia: string | null;
+  status: string | null;
+  plano: string | null;
+  etapa: string | null;
+  progresso: number;
+  cidade: string | null;
+  uf: string | null;
+}
+
+export interface MyClinicsResponse {
+  role: "super_admin" | "team_member";
+  clinics: MyClinicCard[];
+}
+
+async function fetchMyClinics(): Promise<MyClinicsResponse | null> {
+  const token = getStoredToken();
+  if (!token) return null;
+  const res = await fetch(`${BASE}/api/me/clinics`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  return res.json() as Promise<MyClinicsResponse>;
+}
+
+/**
+ * Lists every clinic the current session can reach. Returns `null` when the
+ * user is not authenticated. For super admins this is the full clinics
+ * table (mapped to a narrow card shape); for team members it is the subset
+ * resolved from `equipe_interna` by email.
+ */
+export function useMyClinics() {
+  return useQuery({
+    queryKey: MY_CLINICS_QUERY_KEY,
+    queryFn: fetchMyClinics,
+    retry: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/** Persisted "currently selected clinic" used by the header switcher. */
+export function getActiveClinicId(): string | null {
+  return localStorage.getItem(ACTIVE_CLINIC_KEY);
+}
+
+export function setActiveClinicId(id: string | null): void {
+  if (id) localStorage.setItem(ACTIVE_CLINIC_KEY, id);
+  else localStorage.removeItem(ACTIVE_CLINIC_KEY);
 }
 
 function clearAllCaches(queryClient: ReturnType<typeof useQueryClient>): void {
@@ -73,6 +138,7 @@ export function useSwitchSession() {
     const previousToken = getStoredToken();
     await revokePushEndpoint(previousToken);
     storeToken(token);
+    setActiveClinicId(null);
     clearAllCaches(queryClient);
   };
 }
@@ -83,6 +149,7 @@ export function useLogout() {
     const previousToken = getStoredToken();
     await revokePushEndpoint(previousToken);
     clearToken();
+    setActiveClinicId(null);
     clearAllCaches(queryClient);
   };
 }

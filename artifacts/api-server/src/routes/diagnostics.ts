@@ -6,6 +6,7 @@ import {
   CompleteDiagnosticResponse,
 } from "@workspace/api-zod";
 import { recalculateScores } from "../lib/score-calculator";
+import { assertClinicAccess, type AuthenticatedRequest as AuthRequest } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -26,6 +27,14 @@ function mapDiagnostic(d: typeof diagnosticsTable.$inferSelect) {
 }
 
 router.get("/diagnostics/latest-active", async (req, res): Promise<void> => {
+  // Global super-admin overview only — used by the legacy super-admin
+  // dashboard. Team members do not need this; they reach diagnostics
+  // through `/clinics/:clinicId/diagnostics`.
+  const user = (req as AuthRequest).user;
+  if (!user || user.role !== "super_admin") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const [diagnostic] = await db
     .select()
     .from(diagnosticsTable)
@@ -43,6 +52,7 @@ router.get("/diagnostics/latest-active", async (req, res): Promise<void> => {
 
 router.get("/clinics/:clinicId/diagnostics", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  if (await assertClinicAccess(req, res, clinicId)) return;
 
   const diagnostics = await db
     .select()
@@ -55,6 +65,7 @@ router.get("/clinics/:clinicId/diagnostics", async (req, res): Promise<void> => 
 
 router.post("/clinics/:clinicId/diagnostics", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  if (await assertClinicAccess(req, res, clinicId)) return;
 
   const existing = await db
     .select()
@@ -83,6 +94,7 @@ router.get("/diagnostics/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Diagnostic not found" });
     return;
   }
+  if (await assertClinicAccess(req, res, diagnostic.clinicId)) return;
 
   res.json(mapDiagnostic(diagnostic));
 });
@@ -95,6 +107,7 @@ router.post("/diagnostics/:id/calculate-scores", async (req, res): Promise<void>
     res.status(404).json({ error: "Diagnostic not found" });
     return;
   }
+  if (await assertClinicAccess(req, res, existing[0].clinicId)) return;
 
   await recalculateScores(id);
 
@@ -110,6 +123,7 @@ router.post("/diagnostics/:id/complete", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Diagnostic not found" });
     return;
   }
+  if (await assertClinicAccess(req, res, existing[0].clinicId)) return;
 
   await recalculateScores(id);
 

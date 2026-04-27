@@ -14,6 +14,7 @@ import AdminLogin from "@/pages/admin-login";
 import KickoffPage from "@/pages/kickoff/index";
 import KickoffSelectPage from "@/pages/kickoff/select";
 import { SuperAdminGuard } from "@/components/super-admin-guard";
+import { ClinicAccessGuard } from "@/components/clinic-access-guard";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { getStoredToken } from "@/hooks/use-auth";
 import DiagnosticoSelectPage from "@/pages/diagnostico/select";
@@ -32,6 +33,7 @@ import AdminConfiguracoesPage from "@/pages/admin-configuracoes/index";
 import ConvitePage from "@/pages/convite/index";
 import ClinicDocumentsPage from "@/pages/clinic-documents/index";
 import AssinarPage from "@/pages/assinar/index";
+import MeClinicasPage from "@/pages/me/clinicas";
 import { ErrorBoundary } from "@/components/error-boundary";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -83,6 +85,16 @@ function Router() {
 
       <Route path="/convite" component={ConvitePage} />
 
+      {/* Multi-clinic chooser for team members (post-login landing). */}
+      <Route path="/me/clinicas">
+        {() => (
+          <AppLayout>
+            <MeClinicasPage />
+          </AppLayout>
+        )}
+      </Route>
+
+      {/* Dashboard (super admin only). */}
       <Route path="/">
         {() => (
           <AppLayout>
@@ -93,6 +105,7 @@ function Router() {
         )}
       </Route>
 
+      {/* Global clinics list — super admin only. */}
       <Route path="/admin/clinicas">
         {() => (
           <AppLayout>
@@ -112,20 +125,20 @@ function Router() {
         )}
       </Route>
       <Route path="/admin/clinicas/:id/documentos">
-        {() => (
+        {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.id}>
               <ClinicDocumentsPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/admin/clinicas/:id">
-        {() => (
+        {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.id}>
               <ClinicDetail />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
@@ -140,12 +153,13 @@ function Router() {
         {(params) => <Redirect to={`/admin/clinicas/${params.id}`} />}
       </Route>
 
+      {/* Notifications: any authenticated session. */}
       <Route path="/notifications">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <Notifications />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
@@ -155,63 +169,66 @@ function Router() {
       </Route>
       <Route path="/kickoff/select">
         <AppLayout>
-          <SuperAdminGuard>
+          <ClinicAccessGuard>
             <KickoffSelectPage />
-          </SuperAdminGuard>
+          </ClinicAccessGuard>
         </AppLayout>
       </Route>
       <Route path="/kickoff/:clinicId">
         {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.clinicId}>
               <KickoffPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
 
+      {/* Diagnóstico: routes carry diagnostic id (NOT clinic id). The backend
+          resolves the clinic from the diagnostic id and authorises inline.
+          The guard here only verifies the session is authenticated. */}
       <Route path="/diagnostico">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <DiagnosticoEntrypoint />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/diagnostico/select">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <DiagnosticoSelectPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/diagnostico/comparar">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <DiagnosticoComparar />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/diagnostico/:id/resultado">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <DiagnosticoResultado />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/diagnostico/:id">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <DiagnosticoWizard />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
@@ -222,18 +239,18 @@ function Router() {
       <Route path="/delegacao/select">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <DelegacaoPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/delegacao/:clinicId">
-        {() => (
+        {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.clinicId}>
               <DelegacaoPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
@@ -244,18 +261,18 @@ function Router() {
       <Route path="/riscos/select">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <RiscosPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/riscos/:clinicId">
-        {() => (
+        {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.clinicId}>
               <RiscosPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
@@ -266,18 +283,18 @@ function Router() {
       <Route path="/acao/select">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <AcaoPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/acao/:clinicId">
-        {() => (
+        {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.clinicId}>
               <AcaoPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
@@ -288,18 +305,18 @@ function Router() {
       <Route path="/processos/select">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <ProcessosPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/processos/:clinicId">
-        {() => (
+        {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.clinicId}>
               <ProcessosPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
@@ -310,18 +327,18 @@ function Router() {
       <Route path="/evidencias/select">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <EvidenciasPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/evidencias/:clinicId">
-        {() => (
+        {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.clinicId}>
               <EvidenciasPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
@@ -332,18 +349,18 @@ function Router() {
       <Route path="/documentos/select">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <DocumentosPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/documentos/:clinicId">
-        {() => (
+        {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.clinicId}>
               <DocumentosPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
@@ -354,22 +371,23 @@ function Router() {
       <Route path="/relatorios/select">
         {() => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard>
               <RelatoriosPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
       <Route path="/relatorios/:clinicId">
-        {() => (
+        {(params) => (
           <AppLayout>
-            <SuperAdminGuard>
+            <ClinicAccessGuard clinicId={params.clinicId}>
               <RelatoriosPage />
-            </SuperAdminGuard>
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
 
+      {/* Global super-admin only configuration. */}
       <Route path="/admin/ics-templates">
         {() => (
           <AppLayout>

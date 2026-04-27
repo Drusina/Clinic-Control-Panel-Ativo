@@ -1,9 +1,9 @@
 import { Link, useLocation } from "wouter";
-import { 
-  Building2, 
-  LayoutDashboard, 
-  Bell, 
-  Settings, 
+import {
+  Building2,
+  LayoutDashboard,
+  Bell,
+  Settings,
   Menu,
   Activity,
   ClipboardList,
@@ -17,16 +17,58 @@ import {
   BarChart3,
   Wand2,
   Plug,
+  LogOut,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useGetDashboardSummary } from "@workspace/api-client-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { NotificationPreferencesModal } from "@/components/notification-preferences-modal";
+import {
+  useCurrentRole,
+  useMyClinics,
+  useLogout,
+  getActiveClinicId,
+  setActiveClinicId,
+} from "@/hooks/use-auth";
+
+interface NavItem {
+  name: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+}
+
+/**
+ * Determine the "active clinic" for routing context-aware nav items
+ * (e.g. /delegacao/select → /delegacao/<activeClinic>). Resolution
+ * order:
+ *   1. Clinic id present in the current URL (from /xxx/<id>)
+ *   2. localStorage ccp_active_clinic_id
+ *   3. First clinic in the user's clinic list
+ */
+function resolveActiveClinicId(
+  location: string,
+  myClinicIds: string[],
+): string | null {
+  const urlMatch = location.match(/\/[a-z]+\/([a-f0-9-]{8,})/i);
+  if (urlMatch && myClinicIds.includes(urlMatch[1])) return urlMatch[1];
+  const stored = getActiveClinicId();
+  if (stored && myClinicIds.includes(stored)) return stored;
+  return myClinicIds[0] ?? null;
+}
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [operacionalOpen, setOperacionalOpen] = useState(
     location.startsWith("/delegacao") || location.startsWith("/riscos") || location.startsWith("/acao")
   );
@@ -35,25 +77,106 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   );
   const [prefsOpen, setPrefsOpen] = useState(false);
 
-  const navigation = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Clínicas", href: "/admin/clinicas", icon: Building2 },
-    { name: "Diagnóstico 360°", href: "/diagnostico/select", icon: ClipboardList },
-    { name: "Notificações", href: "/notifications", icon: Bell },
+  const { data: user } = useCurrentRole();
+  const { data: myClinicsData } = useMyClinics();
+  const logout = useLogout();
+
+  const isSuperAdmin = user?.role === "super_admin";
+  const isTeamMember = user?.role === "team_member";
+  const myClinics = myClinicsData?.clinics ?? [];
+
+  const activeClinicId = useMemo(
+    () => resolveActiveClinicId(location, myClinics.map((c) => c.id)),
+    [location, myClinics],
+  );
+  const activeClinic = myClinics.find((c) => c.id === activeClinicId) ?? null;
+
+  // For team members, point clinic-scoped /select links straight at the
+  // active clinic so a single-click flow is preserved.
+  const scopedHref = (base: string, selectPath: string): string => {
+    if (isSuperAdmin || !activeClinicId) return selectPath;
+    return `${base}/${activeClinicId}`;
+  };
+
+  const navigation: NavItem[] = isSuperAdmin
+    ? [
+        { name: "Dashboard", href: "/", icon: LayoutDashboard },
+        { name: "Clínicas", href: "/admin/clinicas", icon: Building2 },
+        { name: "Diagnóstico 360°", href: "/diagnostico/select", icon: ClipboardList },
+        { name: "Notificações", href: "/notifications", icon: Bell },
+      ]
+    : [
+        { name: "Minhas clínicas", href: "/me/clinicas", icon: Building2 },
+        ...(activeClinicId
+          ? [
+              { name: "Diagnóstico 360°", href: "/diagnostico/select", icon: ClipboardList },
+              { name: "Notificações", href: "/notifications", icon: Bell },
+            ]
+          : []),
+      ];
+
+  const operacionalNav: NavItem[] = [
+    { name: "Delegação", href: scopedHref("/delegacao", "/delegacao/select"), icon: Users },
+    { name: "Mapa de Riscos", href: scopedHref("/riscos", "/riscos/select"), icon: ShieldAlert },
+    { name: "Plano de Ação", href: scopedHref("/acao", "/acao/select"), icon: KanbanSquare },
   ];
 
-  const operacionalNav = [
-    { name: "Delegação", href: "/delegacao/select", icon: Users },
-    { name: "Mapa de Riscos", href: "/riscos/select", icon: ShieldAlert },
-    { name: "Plano de Ação", href: "/acao/select", icon: KanbanSquare },
+  const complementarNav: NavItem[] = [
+    { name: "Processos", href: scopedHref("/processos", "/processos/select"), icon: GitFork },
+    { name: "Evidências", href: scopedHref("/evidencias", "/evidencias/select"), icon: Image },
+    { name: "Documentos", href: scopedHref("/documentos", "/documentos/select"), icon: FileText },
+    { name: "Relatórios", href: scopedHref("/relatorios", "/relatorios/select"), icon: BarChart3 },
   ];
 
-  const complementarNav = [
-    { name: "Processos", href: "/processos/select", icon: GitFork },
-    { name: "Evidências", href: "/evidencias/select", icon: Image },
-    { name: "Documentos", href: "/documentos/select", icon: FileText },
-    { name: "Relatórios", href: "/relatorios/select", icon: BarChart3 },
-  ];
+  const showOperationalSections = isSuperAdmin || (isTeamMember && !!activeClinicId);
+
+  const ClinicSwitcher = () => {
+    if (!isTeamMember) return null;
+    if (myClinics.length < 2) return null;
+    return (
+      <div className="px-4 pb-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full justify-between text-left font-normal"
+              data-testid="clinic-switcher-trigger"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <Building2 className="h-4 w-4 shrink-0 text-primary" />
+                <span className="truncate">
+                  {activeClinic?.fantasia || activeClinic?.nome || "Selecionar clínica"}
+                </span>
+              </span>
+              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-64">
+            <DropdownMenuLabel>Trocar de clínica</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {myClinics.map((c) => (
+              <DropdownMenuItem
+                key={c.id}
+                onSelect={() => {
+                  setActiveClinicId(c.id);
+                  navigate(`/admin/clinicas/${c.id}`);
+                }}
+                data-testid={`clinic-switcher-item-${c.id}`}
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-4 w-4",
+                    activeClinicId === c.id ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                <span className="truncate">{c.fantasia || c.nome}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  };
 
   const SidebarContent = () => (
     <div className="flex h-full flex-col gap-4 py-4">
@@ -61,6 +184,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <Activity className="h-6 w-6 text-primary" />
         <span className="text-xl font-bold tracking-tight text-sidebar-primary">IONEX<span className="text-sidebar-foreground">360</span></span>
       </div>
+      <ClinicSwitcher />
       <div className="flex-1 px-4 overflow-y-auto">
         <nav className="flex flex-col gap-1">
           {navigation.map((item) => {
@@ -79,86 +203,96 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             );
           })}
 
-          <div className="mt-2">
-            <button
-              onClick={() => setOperacionalOpen(o => !o)}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider hover:text-sidebar-foreground/70 transition-colors"
-            >
-              <span>Operacional</span>
-              <ChevronDown className={cn("h-3 w-3 transition-transform", operacionalOpen ? "rotate-180" : "")} />
-            </button>
-            {operacionalOpen && (
-              <div className="flex flex-col gap-1">
-                {operacionalNav.map((item) => {
-                  const isActive = location.startsWith(item.href.split("/select")[0]);
-                  return (
-                    <Link key={item.name} href={item.href}>
-                      <Button
-                        variant={isActive ? "secondary" : "ghost"}
-                        aria-current={isActive ? "page" : undefined}
-                        className={`w-full justify-start gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
-                      >
-                        <item.icon className="h-4 w-4" />
-                        {item.name}
-                      </Button>
-                    </Link>
-                  );
-                })}
+          {showOperationalSections && (
+            <>
+              <div className="mt-2">
+                <button
+                  onClick={() => setOperacionalOpen(o => !o)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider hover:text-sidebar-foreground/70 transition-colors"
+                >
+                  <span>Operacional</span>
+                  <ChevronDown className={cn("h-3 w-3 transition-transform", operacionalOpen ? "rotate-180" : "")} />
+                </button>
+                {operacionalOpen && (
+                  <div className="flex flex-col gap-1">
+                    {operacionalNav.map((item) => {
+                      const baseHref = item.href.split("/select")[0].split("/").slice(0, 2).join("/");
+                      const isActive = location.startsWith(baseHref);
+                      return (
+                        <Link key={item.name} href={item.href}>
+                          <Button
+                            variant={isActive ? "secondary" : "ghost"}
+                            aria-current={isActive ? "page" : undefined}
+                            className={`w-full justify-start gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
+                          >
+                            <item.icon className="h-4 w-4" />
+                            {item.name}
+                          </Button>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="mt-2">
-            <button
-              onClick={() => setComplementarOpen(o => !o)}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider hover:text-sidebar-foreground/70 transition-colors"
-            >
-              <span>Complementar</span>
-              <ChevronDown className={cn("h-3 w-3 transition-transform", complementarOpen ? "rotate-180" : "")} />
-            </button>
-            {complementarOpen && (
-              <div className="flex flex-col gap-1">
-                {complementarNav.map((item) => {
-                  const isActive = location.startsWith(item.href.split("/select")[0]);
-                  return (
-                    <Link key={item.name} href={item.href}>
-                      <Button
-                        variant={isActive ? "secondary" : "ghost"}
-                        aria-current={isActive ? "page" : undefined}
-                        className={`w-full justify-start gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
-                      >
-                        <item.icon className="h-4 w-4" />
-                        {item.name}
-                      </Button>
-                    </Link>
-                  );
-                })}
+              <div className="mt-2">
+                <button
+                  onClick={() => setComplementarOpen(o => !o)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider hover:text-sidebar-foreground/70 transition-colors"
+                >
+                  <span>Complementar</span>
+                  <ChevronDown className={cn("h-3 w-3 transition-transform", complementarOpen ? "rotate-180" : "")} />
+                </button>
+                {complementarOpen && (
+                  <div className="flex flex-col gap-1">
+                    {complementarNav.map((item) => {
+                      const baseHref = item.href.split("/select")[0].split("/").slice(0, 2).join("/");
+                      const isActive = location.startsWith(baseHref);
+                      return (
+                        <Link key={item.name} href={item.href}>
+                          <Button
+                            variant={isActive ? "secondary" : "ghost"}
+                            aria-current={isActive ? "page" : undefined}
+                            className={`w-full justify-start gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
+                          >
+                            <item.icon className="h-4 w-4" />
+                            {item.name}
+                          </Button>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </nav>
       </div>
       <div className="px-4 mt-auto space-y-1">
-        <Link href="/admin/ics-templates">
-          <Button
-            variant={location.startsWith("/admin/ics-templates") ? "secondary" : "ghost"}
-            aria-current={location.startsWith("/admin/ics-templates") ? "page" : undefined}
-            className={`w-full justify-start gap-3 ${location.startsWith("/admin/ics-templates") ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
-          >
-            <Wand2 className="h-4 w-4" />
-            Templates ICS
-          </Button>
-        </Link>
-        <Link href="/admin/configuracoes">
-          <Button
-            variant={location.startsWith("/admin/configuracoes") ? "secondary" : "ghost"}
-            aria-current={location.startsWith("/admin/configuracoes") ? "page" : undefined}
-            className={`w-full justify-start gap-3 ${location.startsWith("/admin/configuracoes") ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
-          >
-            <Plug className="h-4 w-4" />
-            Integrações
-          </Button>
-        </Link>
+        {isSuperAdmin && (
+          <>
+            <Link href="/admin/ics-templates">
+              <Button
+                variant={location.startsWith("/admin/ics-templates") ? "secondary" : "ghost"}
+                aria-current={location.startsWith("/admin/ics-templates") ? "page" : undefined}
+                className={`w-full justify-start gap-3 ${location.startsWith("/admin/ics-templates") ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
+              >
+                <Wand2 className="h-4 w-4" />
+                Templates ICS
+              </Button>
+            </Link>
+            <Link href="/admin/configuracoes">
+              <Button
+                variant={location.startsWith("/admin/configuracoes") ? "secondary" : "ghost"}
+                aria-current={location.startsWith("/admin/configuracoes") ? "page" : undefined}
+                className={`w-full justify-start gap-3 ${location.startsWith("/admin/configuracoes") ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
+              >
+                <Plug className="h-4 w-4" />
+                Integrações
+              </Button>
+            </Link>
+          </>
+        )}
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-sidebar-foreground/70"
@@ -167,6 +301,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <Settings className="h-4 w-4" />
           Configurações
         </Button>
+        {isTeamMember && (
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 text-sidebar-foreground/70"
+            onClick={async () => {
+              await logout();
+              navigate("/admin/login");
+            }}
+            data-testid="logout-button"
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -192,6 +340,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <Activity className="h-5 w-5 text-primary" />
                 <span className="text-lg font-bold">IONEX360</span>
              </div>
+             {isTeamMember && activeClinic && (
+               <span className="text-xs text-muted-foreground truncate max-w-[140px]">
+                 {activeClinic.fantasia || activeClinic.nome}
+               </span>
+             )}
           </div>
         </div>
       </header>

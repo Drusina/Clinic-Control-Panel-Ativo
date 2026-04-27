@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, risksTable, clinicsTable } from "@workspace/db";
+import { assertClinicAccess } from "../middleware/auth";
 import { CreateRiskBody, UpdateRiskBody, UpdateRiskResponse } from "@workspace/api-zod";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 
@@ -77,6 +78,7 @@ router.patch("/risks/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Risk not found" });
     return;
   }
+  if (await assertClinicAccess(req, res, existing.clinicId)) return;
 
   const d = parsed.data;
   const probabilidade = d.probabilidade ?? existing.probabilidade;
@@ -143,12 +145,18 @@ router.post("/clinics/:clinicId/risks/seed", async (req, res): Promise<void> => 
 router.delete("/risks/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
-  const [risk] = await db.delete(risksTable).where(eq(risksTable.id, id)).returning();
-  if (!risk) {
+  const [existing] = await db
+    .select({ clinicId: risksTable.clinicId })
+    .from(risksTable)
+    .where(eq(risksTable.id, id))
+    .limit(1);
+  if (!existing) {
     res.status(404).json({ error: "Risk not found" });
     return;
   }
+  if (await assertClinicAccess(req, res, existing.clinicId)) return;
 
+  await db.delete(risksTable).where(eq(risksTable.id, id));
   res.sendStatus(204);
 });
 

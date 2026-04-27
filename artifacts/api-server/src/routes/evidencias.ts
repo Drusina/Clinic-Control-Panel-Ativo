@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, evidenciasTable } from "@workspace/db";
+import { assertClinicAccess } from "../middleware/auth";
 import path from "path";
 
 function sanitizeFileName(raw: string): string {
@@ -186,8 +187,14 @@ router.get("/clinics/:clinicId/evidencias/:evidenciaId/signed-url", async (req, 
 
 router.delete("/evidencias/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [row] = await db.delete(evidenciasTable).where(eq(evidenciasTable.id, id)).returning();
-  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  const [existingEv] = await db
+    .select({ clinicId: evidenciasTable.clinicId })
+    .from(evidenciasTable)
+    .where(eq(evidenciasTable.id, id))
+    .limit(1);
+  if (!existingEv) { res.status(404).json({ error: "Not found" }); return; }
+  if (await assertClinicAccess(req, res, existingEv.clinicId)) return;
+  await db.delete(evidenciasTable).where(eq(evidenciasTable.id, id));
   res.sendStatus(204);
 });
 

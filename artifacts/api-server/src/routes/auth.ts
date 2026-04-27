@@ -108,13 +108,22 @@ router.post("/auth/convite", async (req, res): Promise<void> => {
     return;
   }
 
+  // v:2 token — identifies the team member by email and does NOT pin a single
+  // clinicId. The list of clinics the user can access is resolved server-side
+  // by `requireClinicAccess` / `listAccessibleClinicIds` from `equipe_interna`,
+  // which means a gestor invited later by another clinic gains access without
+  // having to re-issue the JWT.
+  //
+  // We still return clinicId/teamMemberId in the response body for backwards
+  // compatibility with the convite UI (it deep-links into the clinic the
+  // invite came from), but the server no longer uses those fields from the
+  // token to enforce access.
   const sessionToken = signToken({
     role: "team_member",
     sub: member.email,
     email: member.email,
-    clinicId: member.clinicId,
-    teamMemberId: member.id,
     nome: member.nome,
+    v: 2,
   });
 
   res.json({
@@ -141,12 +150,16 @@ router.get("/auth/me", (req, res): void => {
     res.json({ role: null });
     return;
   }
+  // Backwards compat: v1 team_member tokens carried `clinicId` and
+  // `teamMemberId`. v2 tokens are email-only — we still surface those
+  // legacy fields when present so older UI codepaths keep working.
   res.json({
     role: payload.role ?? null,
     clinicId: payload.clinicId ?? null,
     nome: payload.nome ?? null,
-    email: payload.sub ?? null,
+    email: (payload.email ?? payload.sub) ?? null,
     teamMemberId: payload.teamMemberId ?? null,
+    v: payload.v ?? 1,
   });
 });
 

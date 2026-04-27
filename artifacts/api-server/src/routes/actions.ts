@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, actionsTable, clinicsTable } from "@workspace/db";
+import { assertClinicAccess } from "../middleware/auth";
 import {
   CreateActionBody,
   UpdateActionBody,
@@ -84,6 +85,17 @@ router.patch("/actions/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  const [existingAction] = await db
+    .select({ clinicId: actionsTable.clinicId })
+    .from(actionsTable)
+    .where(eq(actionsTable.id, id))
+    .limit(1);
+  if (!existingAction) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, existingAction.clinicId)) return;
+
   const updates: Partial<typeof actionsTable.$inferInsert> = {};
   const d = parsed.data;
   if (d.titulo != null) updates.titulo = d.titulo;
@@ -160,12 +172,18 @@ router.post("/clinics/:clinicId/actions/seed", async (req, res): Promise<void> =
 router.delete("/actions/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
-  const [action] = await db.delete(actionsTable).where(eq(actionsTable.id, id)).returning();
-  if (!action) {
+  const [existingAction] = await db
+    .select({ clinicId: actionsTable.clinicId })
+    .from(actionsTable)
+    .where(eq(actionsTable.id, id))
+    .limit(1);
+  if (!existingAction) {
     res.status(404).json({ error: "Action not found" });
     return;
   }
+  if (await assertClinicAccess(req, res, existingAction.clinicId)) return;
 
+  await db.delete(actionsTable).where(eq(actionsTable.id, id));
   res.sendStatus(204);
 });
 

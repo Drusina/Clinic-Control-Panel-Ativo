@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, faturasTable } from "@workspace/db";
+import { assertClinicAccess } from "../middleware/auth";
 import { CreateFaturaBody, UpdateFaturaBody, UpdateFaturaResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -63,6 +64,17 @@ router.patch("/faturas/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+
+  const [existing] = await db
+    .select({ clinicId: faturasTable.clinicId })
+    .from(faturasTable)
+    .where(eq(faturasTable.id, id))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Fatura not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, existing.clinicId)) return;
 
   const updates: Partial<typeof faturasTable.$inferInsert> = {};
   const d = parsed.data;

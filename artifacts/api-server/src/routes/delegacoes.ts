@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, count } from "drizzle-orm";
 import { db, delegacoesTable, clinicsTable, risksTable, actionsTable } from "@workspace/db";
+import { assertClinicAccess } from "../middleware/auth";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { z } from "zod";
 import { sendEmail, buildDelegationEmail, resolveAppUrl } from "../lib/email.js";
@@ -180,6 +181,17 @@ router.patch("/delegacoes/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  const [existingDeleg] = await db
+    .select({ clinicId: delegacoesTable.clinicId })
+    .from(delegacoesTable)
+    .where(eq(delegacoesTable.id, id))
+    .limit(1);
+  if (!existingDeleg) {
+    res.status(404).json({ error: "Delegation not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, existingDeleg.clinicId)) return;
+
   const updates: Partial<typeof delegacoesTable.$inferInsert> = { updatedAt: new Date() };
   const d = parsed.data;
   if (d.responsavelNome !== undefined) updates.responsavelNome = d.responsavelNome;
@@ -250,16 +262,18 @@ router.post("/clinics/:clinicId/delegacoes/seed", async (req, res): Promise<void
 router.delete("/delegacoes/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
-  const [delegacao] = await db
-    .delete(delegacoesTable)
+  const [existingDeleg] = await db
+    .select({ clinicId: delegacoesTable.clinicId })
+    .from(delegacoesTable)
     .where(eq(delegacoesTable.id, id))
-    .returning();
-
-  if (!delegacao) {
+    .limit(1);
+  if (!existingDeleg) {
     res.status(404).json({ error: "Delegation not found" });
     return;
   }
+  if (await assertClinicAccess(req, res, existingDeleg.clinicId)) return;
 
+  await db.delete(delegacoesTable).where(eq(delegacoesTable.id, id));
   res.sendStatus(204);
 });
 

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, teamTable } from "@workspace/db";
 import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
-import { generateInviteCode } from "../middleware/auth";
+import { generateInviteCode, assertClinicAccess, type AuthenticatedRequest as AuthRequest } from "../middleware/auth";
 import { sendEmail, buildInviteEmail, buildPushSetupEmail, resolveAppUrl } from "../lib/email.js";
 
 const router: IRouter = Router();
@@ -101,7 +101,15 @@ async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect, req
   return sent ? "sent" : "pending";
 }
 
-router.get("/team/all", async (_req, res): Promise<void> => {
+// /team/all is a super-admin overview (it lists members across every clinic).
+// Mounted under requireAuth in routes/index.ts; we gate it inline because the
+// router also serves clinic-scoped paths that any team_member with access can use.
+router.get("/team/all", async (req, res): Promise<void> => {
+  const user = (req as AuthRequest).user;
+  if (!user || user.role !== "super_admin") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   const members = await db
     .select()
     .from(teamTable)
@@ -116,12 +124,14 @@ router.get("/team/all", async (_req, res): Promise<void> => {
 
 router.get("/clinics/:clinicId/team", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  if (await assertClinicAccess(req, res, clinicId)) return;
   const members = await db.select().from(teamTable).where(eq(teamTable.clinicId, clinicId));
   res.json(members.map(mapTeamMember));
 });
 
 router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  if (await assertClinicAccess(req, res, clinicId)) return;
   const parsed = CreateTeamMemberBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -168,6 +178,10 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Team member not found" });
     return;
   }
+  // Look up the member first, then enforce clinic access. We cannot use the
+  // route-level middleware because the URL only carries the member id, not
+  // the clinic id.
+  if (await assertClinicAccess(req, res, existing.clinicId)) return;
 
   const updates: Partial<typeof teamTable.$inferInsert> = {};
   const d = parsed.data;
@@ -214,6 +228,13 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
 
 router.delete("/team/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  // Look up clinic id of the member first to authorise the action.
+  const [existing] = await db.select({ clinicId: teamTable.clinicId }).from(teamTable).where(eq(teamTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Team member not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, existing.clinicId)) return;
 
   const [member] = await db.delete(teamTable).where(eq(teamTable.id, id)).returning();
   if (!member) {

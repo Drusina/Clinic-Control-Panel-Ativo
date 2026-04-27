@@ -22,6 +22,22 @@ const InviteUserBody = z.object({
   role: z.string(),
 });
 
+/**
+ * Clinics router is split in two:
+ *
+ *   - `clinicsAdminRouter`  → endpoints that operate on the clinics table
+ *     globally (list all, create, delete, change status, send platform invite).
+ *     Mounted under `requireSuperAdmin` in `routes/index.ts`.
+ *
+ *   - `clinicsScopedRouter` → endpoints scoped to a single clinic by URL
+ *     param `:id` (read clinic, update clinic, upload/remove legacy
+ *     proposal/contract attachments). Mounted under `requireClinicAccess`
+ *     so a `team_member` who manages that clinic also has access.
+ *
+ * Both routers are exported; the default export remains the scoped router
+ * for any consumer that imports it directly.
+ */
+const clinicsAdminRouter: IRouter = Router();
 const router: IRouter = Router();
 
 function mapClinic(c: typeof clinicsTable.$inferSelect) {
@@ -61,7 +77,7 @@ function mapClinic(c: typeof clinicsTable.$inferSelect) {
   };
 }
 
-router.get("/clinics", async (req, res): Promise<void> => {
+clinicsAdminRouter.get("/clinics", async (req, res): Promise<void> => {
   const params = ListClinicsQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -97,7 +113,7 @@ router.get("/clinics", async (req, res): Promise<void> => {
   );
 });
 
-router.post("/clinics", async (req, res): Promise<void> => {
+clinicsAdminRouter.post("/clinics", async (req, res): Promise<void> => {
   const parsed = CreateClinicBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -234,7 +250,7 @@ router.patch("/clinics/:id", async (req, res): Promise<void> => {
   res.json(UpdateClinicResponse.parse(mapClinic(clinic)));
 });
 
-router.delete("/clinics/:id", async (req, res): Promise<void> => {
+clinicsAdminRouter.delete("/clinics/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   const [clinic] = await db.delete(clinicsTable).where(eq(clinicsTable.id, id)).returning();
@@ -246,7 +262,7 @@ router.delete("/clinics/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-router.patch("/clinics/:id/status", async (req, res): Promise<void> => {
+clinicsAdminRouter.patch("/clinics/:id/status", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const parsed = UpdateClinicStatusBody.safeParse(req.body);
   if (!parsed.success) {
@@ -438,7 +454,7 @@ router.delete("/clinics/:id/documents", async (req, res): Promise<void> => {
   res.json({ success: true, type: docType, storageDeleted });
 });
 
-router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
+clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   const parsed = InviteUserBody.safeParse(req.body);
@@ -511,4 +527,5 @@ router.post("/clinics/:id/invite-user", async (req, res): Promise<void> => {
   });
 });
 
+export { clinicsAdminRouter };
 export default router;

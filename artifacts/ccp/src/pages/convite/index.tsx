@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Bell, BellRing, BellOff, CheckCircle2, Loader2, User, Building2, Briefcase } from "lucide-react";
+import { useLocation } from "wouter";
+import { Bell, BellRing, BellOff, CheckCircle2, Loader2, User, Building2, Briefcase, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useSwitchSession } from "@/hooks/use-auth";
@@ -119,6 +120,7 @@ function PushSubscriptionCard({ clinicId }: { clinicId: string }) {
 
 export default function ConvitePage() {
   const switchSession = useSwitchSession();
+  const [, navigate] = useLocation();
   const [memberInfo, setMemberInfo] = useState<MemberInfo | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "no_access">("loading");
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -281,6 +283,11 @@ export default function ConvitePage() {
             Você está conectado como membro da equipe. Suas notificações serão vinculadas a este dispositivo e navegador.
           </p>
         </div>
+
+        <Button className="w-full" onClick={() => navigate("/me/clinicas")}>
+          Acessar minhas clínicas
+          <ArrowRight className="h-4 w-4 ml-2" />
+        </Button>
       </div>
     </div>
   );

@@ -1,7 +1,30 @@
 import { Router, type IRouter } from "express";
-import { db, perguntasTable, respostasTable } from "@workspace/db";
+import { db, perguntasTable, respostasTable, diagnosticsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { recalculateScores } from "../lib/score-calculator";
+import { assertClinicAccess } from "../middleware/auth";
+
+/**
+ * Helper: resolve the clinic id from a diagnostic id, then enforce access.
+ * The /diagnostics/:diagnosticoId/respostas endpoints are not naturally
+ * scoped by clinic in the URL, so we look up the diagnostic first.
+ * Returns true if the response was already sent (caller should `return`).
+ */
+async function assertAccessByDiagnostic(
+  req: Parameters<typeof assertClinicAccess>[0],
+  res: Parameters<typeof assertClinicAccess>[1],
+  diagnosticoId: string,
+): Promise<boolean> {
+  const [d] = await db
+    .select({ clinicId: diagnosticsTable.clinicId })
+    .from(diagnosticsTable)
+    .where(eq(diagnosticsTable.id, diagnosticoId));
+  if (!d) {
+    res.status(404).json({ error: "Diagnostic not found" });
+    return true;
+  }
+  return assertClinicAccess(req, res, d.clinicId);
+}
 
 const router: IRouter = Router();
 
@@ -89,6 +112,7 @@ router.get("/diagnostics/:diagnosticoId/respostas", async (req, res): Promise<vo
   const diagnosticoId = Array.isArray(req.params.diagnosticoId)
     ? req.params.diagnosticoId[0]
     : req.params.diagnosticoId;
+  if (await assertAccessByDiagnostic(req, res, diagnosticoId)) return;
 
   const respostas = await db
     .select()
@@ -113,6 +137,7 @@ router.put("/diagnostics/:diagnosticoId/respostas/:perguntaId", async (req, res)
   const perguntaId = Array.isArray(req.params.perguntaId)
     ? req.params.perguntaId[0]
     : req.params.perguntaId;
+  if (await assertAccessByDiagnostic(req, res, diagnosticoId)) return;
 
   const { valor } = req.body;
   if (valor === undefined || valor === null) {
@@ -145,6 +170,7 @@ router.post("/diagnostics/:diagnosticoId/respostas/batch", async (req, res): Pro
   const diagnosticoId = Array.isArray(req.params.diagnosticoId)
     ? req.params.diagnosticoId[0]
     : req.params.diagnosticoId;
+  if (await assertAccessByDiagnostic(req, res, diagnosticoId)) return;
 
   const { respostas } = req.body as { respostas: Array<{ perguntaId: string; valor: string }> };
   if (!Array.isArray(respostas) || respostas.length === 0) {

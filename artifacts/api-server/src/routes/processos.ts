@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, processosTable } from "@workspace/db";
+import { assertClinicAccess } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -55,6 +56,14 @@ router.post("/clinics/:clinicId/processos", async (req, res): Promise<void> => {
 
 router.patch("/processos/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const [existingProc] = await db
+    .select({ clinicId: processosTable.clinicId })
+    .from(processosTable)
+    .where(eq(processosTable.id, id))
+    .limit(1);
+  if (!existingProc) { res.status(404).json({ error: "Not found" }); return; }
+  if (await assertClinicAccess(req, res, existingProc.clinicId)) return;
+
   const d = req.body;
   const updates: Partial<typeof processosTable.$inferInsert> = { updatedAt: new Date() };
   if (d.nome !== undefined) updates.nome = d.nome;
@@ -73,8 +82,14 @@ router.patch("/processos/:id", async (req, res): Promise<void> => {
 
 router.delete("/processos/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const [row] = await db.delete(processosTable).where(eq(processosTable.id, id)).returning();
-  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  const [existingProc] = await db
+    .select({ clinicId: processosTable.clinicId })
+    .from(processosTable)
+    .where(eq(processosTable.id, id))
+    .limit(1);
+  if (!existingProc) { res.status(404).json({ error: "Not found" }); return; }
+  if (await assertClinicAccess(req, res, existingProc.clinicId)) return;
+  await db.delete(processosTable).where(eq(processosTable.id, id));
   res.sendStatus(204);
 });
 
