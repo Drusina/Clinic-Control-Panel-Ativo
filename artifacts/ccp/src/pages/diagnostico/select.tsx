@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, ClipboardList, BarChart3, GitCompare, CheckSquare, Square } from "lucide-react";
-import { getStoredToken } from "@/hooks/use-auth";
+import { getStoredToken, useCurrentRole, useMyClinics, getActiveClinicId } from "@/hooks/use-auth";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -26,7 +26,7 @@ async function apiFetch(path: string, opts?: RequestInit) {
 interface Clinic {
   id: string;
   nome: string;
-  fantasia?: string;
+  fantasia?: string | null;
 }
 
 interface Diagnostic {
@@ -46,10 +46,34 @@ export default function DiagnosticoSelectPage() {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelected, setCompareSelected] = useState<string[]>([]);
 
-  const { data: clinics, isLoading: loadingClinics } = useQuery<{ data: Clinic[] }>({
+  const { data: user } = useCurrentRole();
+  const isSuperAdmin = user?.role === "super_admin";
+
+  // Super admin → carrega lista global de clínicas (endpoint protegido por
+  // requireSuperAdmin). Team member → usa /api/me/clinics, que devolve só
+  // as clínicas autorizadas pelo equipe_interna.
+  const { data: superAdminClinics, isLoading: loadingSuperAdmin } = useQuery<{ data: Clinic[] }>({
     queryKey: ["clinics-list"],
     queryFn: () => apiFetch("/clinics?pageSize=200"),
+    enabled: isSuperAdmin,
   });
+  const { data: myClinics, isLoading: loadingMyClinics } = useMyClinics();
+
+  const clinics: { data: Clinic[] } | undefined = isSuperAdmin
+    ? superAdminClinics
+    : myClinics
+      ? { data: myClinics.clinics.map((c) => ({ id: c.id, nome: c.nome, fantasia: c.fantasia ?? undefined })) }
+      : undefined;
+  const loadingClinics = isSuperAdmin ? loadingSuperAdmin : loadingMyClinics;
+
+  // Atalho UX: se o gestor já tem uma clínica ativa no header (ou só uma
+  // clínica vinculada), pré-seleciona para evitar dois cliques.
+  useEffect(() => {
+    if (isSuperAdmin || selectedClinic || !clinics?.data?.length) return;
+    const active = getActiveClinicId();
+    const match = (active && clinics.data.find((c) => c.id === active)) || (clinics.data.length === 1 ? clinics.data[0] : undefined);
+    if (match) setSelectedClinic(match.id);
+  }, [isSuperAdmin, selectedClinic, clinics]);
 
   const { data: diagnostics, isLoading: loadingDiags } = useQuery<Diagnostic[]>({
     queryKey: ["diagnostics", selectedClinic],

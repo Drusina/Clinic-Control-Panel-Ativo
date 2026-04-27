@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { Bell, BellRing, BellOff, CheckCircle2, Loader2, User, Building2, Briefcase, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useSwitchSession } from "@/hooks/use-auth";
+import { setActiveClinicId, useSwitchSession, type MyClinicsResponse } from "@/hooks/use-auth";
 import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { useToast } from "@/hooks/use-toast";
 
@@ -191,6 +191,31 @@ export default function ConvitePage() {
           clinicId: data.clinicId,
           teamMemberId: data.teamMemberId,
         });
+
+        // Pós-login automático (Task #136 spec):
+        //  0 clínicas → /me/clinicas (mostra empty-state)
+        //  1 clínica  → workspace direto
+        //  2+         → /me/clinicas (grid de seleção)
+        // Se /me/clinics falhar, deixa o usuário no card de boas-vindas como
+        // fallback para ele escolher manualmente.
+        try {
+          const meRes = await fetch(`${BASE}/api/me/clinics`, {
+            headers: { Authorization: `Bearer ${data.token}` },
+          });
+          if (meRes.ok) {
+            const me = (await meRes.json()) as MyClinicsResponse;
+            const list = me.clinics ?? [];
+            if (list.length === 1) {
+              setActiveClinicId(list[0].id);
+              navigate(`/admin/clinicas/${list[0].id}`, { replace: true });
+              return;
+            }
+            navigate("/me/clinicas", { replace: true });
+            return;
+          }
+        } catch {
+          // ignore — fall through to ready state
+        }
         setStatus("ready");
       } catch {
         setStatus("error");
