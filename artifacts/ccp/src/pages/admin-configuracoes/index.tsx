@@ -91,12 +91,65 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// Validates the `app_url` config value the same way the backend does, so the
+// admin gets immediate feedback without round-tripping. Returns a hard error
+// (blocks save) and a soft warning (allows save but flags the value).
+//
+// Heuristic matches resolveAppUrl()/warnIfAppUrlLooksLikeMarketingSite() in
+// artifacts/api-server/src/lib/email.ts.
+function validateAppUrl(raw: string): { error: string | null; warning: string | null } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { error: null, warning: null };
+  if (/[\s\r\n]/.test(trimmed)) {
+    return { error: "URL não pode conter espaços ou quebras de linha", warning: null };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { error: "URL inválida — use o formato https://app.exemplo.com", warning: null };
+  }
+  if (parsed.protocol !== "https:") {
+    return { error: "URL deve começar com https://", warning: null };
+  }
+  if (!/^[a-zA-Z0-9.\-]+(:\d{1,5})?$/.test(parsed.host)) {
+    return { error: "Host inválido na URL", warning: null };
+  }
+  if ((parsed.pathname && parsed.pathname !== "/") || parsed.search || parsed.hash) {
+    return {
+      error: "Use apenas o domínio raiz (sem caminho, query ou fragmento)",
+      warning: null,
+    };
+  }
+  // Heuristic warning: the marketing site (clinionex.com.br without `app.`)
+  // does not host the SPA routes, so links generated against it 404. This
+  // already happened once, so we surface a visible amber warning before save.
+  if (
+    /clinionex\.com\.br/i.test(parsed.host) &&
+    !/^app\.clinionex\.com\.br$/i.test(parsed.host)
+  ) {
+    return {
+      error: null,
+      warning:
+        'Esse domínio parece ser o site institucional. Os links nos e-mails só funcionam quando apontam para "https://app.clinionex.com.br".',
+    };
+  }
+  return { error: null, warning: null };
+}
+
 function ConfigRow({ entry, onSaved }: { entry: ConfigEntry; onSaved: () => void }) {
   const { toast } = useToast();
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState(false);
   const [showValue, setShowValue] = useState(false);
   const qc = useQueryClient();
+
+  const isAppUrl = entry.key === "app_url";
+  const appUrlValidation = isAppUrl ? validateAppUrl(value) : { error: null, warning: null };
+  // Strip trailing slash so the preview matches what the backend will store
+  // and use when assembling the final link.
+  const appUrlPreviewBase = isAppUrl ? value.trim().replace(/\/$/, "") : "";
+  const saveDisabledByValidation = isAppUrl && (!value.trim() || !!appUrlValidation.error);
 
   const saveMut = useMutation({
     mutationFn: () =>
@@ -185,29 +238,70 @@ function ConfigRow({ entry, onSaved }: { entry: ConfigEntry; onSaved: () => void
       </div>
 
       {editing && (
-        <div className="flex gap-2 mt-2">
-          <Input
-            type={entry.sensitive ? "password" : "text"}
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            placeholder={entry.configured ? "Novo valor (deixe em branco para cancelar)" : "Insira o valor"}
-            className="font-mono text-sm"
-            autoFocus
-          />
-          <Button
-            size="sm"
-            onClick={() => saveMut.mutate()}
-            disabled={!value.trim() || saveMut.isPending}
-          >
-            {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => { setEditing(false); setValue(""); }}
-          >
-            Cancelar
-          </Button>
+        <div className="mt-2 space-y-2">
+          <div className="flex gap-2">
+            <Input
+              type={entry.sensitive ? "password" : "text"}
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              placeholder={
+                isAppUrl
+                  ? "https://app.clinionex.com.br"
+                  : entry.configured
+                    ? "Novo valor (deixe em branco para cancelar)"
+                    : "Insira o valor"
+              }
+              className="font-mono text-sm"
+              autoFocus
+              data-testid={isAppUrl ? "input-app-url" : undefined}
+              aria-invalid={isAppUrl && !!appUrlValidation.error}
+            />
+            <Button
+              size="sm"
+              onClick={() => saveMut.mutate()}
+              disabled={
+                !value.trim() ||
+                saveMut.isPending ||
+                saveDisabledByValidation
+              }
+              data-testid={isAppUrl ? "btn-save-app-url" : undefined}
+            >
+              {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setEditing(false); setValue(""); }}
+            >
+              Cancelar
+            </Button>
+          </div>
+          {isAppUrl && appUrlValidation.error && (
+            <p
+              className="text-xs text-destructive flex items-start gap-1.5"
+              data-testid="app-url-error"
+            >
+              <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>{appUrlValidation.error}</span>
+            </p>
+          )}
+          {isAppUrl && appUrlValidation.warning && !appUrlValidation.error && (
+            <div
+              className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+              data-testid="app-url-warning"
+            >
+              <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{appUrlValidation.warning}</span>
+            </div>
+          )}
+          {isAppUrl && value.trim() && !appUrlValidation.error && (
+            <p className="text-xs text-muted-foreground" data-testid="app-url-preview">
+              Os links em e-mails vão começar com{" "}
+              <code className="font-mono bg-muted px-1.5 py-0.5 rounded">
+                {appUrlPreviewBase}/assinar/...
+              </code>
+            </p>
+          )}
         </div>
       )}
     </div>

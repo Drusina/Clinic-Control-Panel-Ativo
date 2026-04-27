@@ -17,16 +17,70 @@ const BRAND_SITE_LABEL = "clinionex.com.br";
  */
 export async function resolveAppUrl(req?: Request): Promise<string> {
   const configured = await getConfig("app_url");
-  if (configured) return configured;
+  if (configured) {
+    warnIfAppUrlLooksLikeMarketingSite(configured);
+    return configured;
+  }
   if (req) {
     const host = req.get("host");
     // Defensive: only accept hosts that look like a normal hostname[:port].
     // Rejects newlines, spaces, commas (multi-host injection) and other injection vectors.
     if (host && /^[a-zA-Z0-9.\-]+(:\d{1,5})?$/.test(host)) {
-      return `${req.protocol}://${host}`;
+      const fromReq = `${req.protocol}://${host}`;
+      warnIfAppUrlLooksLikeMarketingSite(fromReq);
+      return fromReq;
     }
   }
   return DEFAULT_APP_URL;
+}
+
+/**
+ * Heuristic: if the resolved app URL points at the marketing site
+ * (`clinionex.com.br` without the `app.` subdomain) the email links will
+ * 404 because the marketing site does not host the SPA routes
+ * (`/assinar/<token>`, `/convite/<token>`, etc.). This already happened
+ * once in production (Apr 2026 — the operator pasted the marketing URL in
+ * /admin/configuracoes), so we now log a SUPER_ADMIN-level warning every
+ * time we resolve such a value to make recurrences obvious in the logs.
+ * We only log; we do not rewrite the URL, in case some operator legitimately
+ * wants a non-app subdomain in the future.
+ */
+// Bounded dedupe set so a sustained stream of distinct bad request hosts
+// (worst-case: req-derived URLs from a misbehaving proxy) cannot grow this
+// without limit. We keep the most recent N entries; once the cap is hit we
+// drop everything (simpler than LRU, and the warning is intentionally
+// repeatable — losing the dedupe just means it logs again).
+const WARNED_APP_URLS_MAX = 100;
+let warnedAppUrls = new Set<string>();
+function warnIfAppUrlLooksLikeMarketingSite(url: string): void {
+  // Parse the URL so we match on the host exactly, not on a substring of the
+  // full URL. Otherwise a path like `https://example.com/clinionex.com.br/x`
+  // would falsely trip the warning.
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return;
+  }
+  const host = parsed.host.toLowerCase();
+  if (host !== "clinionex.com.br" && !host.endsWith(".clinionex.com.br")) return;
+  if (host === "app.clinionex.com.br") return;
+  // Dedupe by canonical origin (protocol + host) so query strings or path
+  // variants don't blow up the cache.
+  const key = `${parsed.protocol}//${host}`;
+  if (warnedAppUrls.has(key)) return;
+  if (warnedAppUrls.size >= WARNED_APP_URLS_MAX) warnedAppUrls.clear();
+  warnedAppUrls.add(key);
+  console.error(
+    `[SUPER_ADMIN] app_url está configurado como "${key}", que aponta para o site institucional (sem subdomínio "app."). ` +
+      `Os links nos e-mails vão levar a 404. Corrija em /admin/configuracoes para "https://app.clinionex.com.br".`,
+  );
+}
+
+// Test/utility hook — clear the dedupe cache. Not exported in the public
+// surface; only used by unit tests to reset between cases.
+export function __resetAppUrlWarningCacheForTests(): void {
+  warnedAppUrls = new Set<string>();
 }
 
 function baseTemplate(title: string, bodyHtml: string): string {

@@ -117,6 +117,49 @@ router.put("/admin/config/integrations/:key", async (req, res): Promise<void> =>
     }
   }
 
+  // app_url is rendered into the body of every email link (/assinar/<token>,
+  // /convite/<token>, etc.). A typo here breaks signing for every recipient,
+  // so we validate the shape strictly: must parse as https://, no whitespace
+  // or control chars, no path/query/fragment, and the host must look like a
+  // normal hostname[:port] (same regex used by resolveAppUrl for Host-header
+  // sanitization).
+  if (key === "app_url") {
+    const trimmed = value.trim();
+    if (/[\s\r\n]/.test(trimmed)) {
+      res.status(400).json({ error: "URL não pode conter espaços ou quebras de linha" });
+      return;
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      res.status(400).json({ error: "URL inválida — use o formato https://app.exemplo.com" });
+      return;
+    }
+    if (parsed.protocol !== "https:") {
+      res.status(400).json({ error: "URL deve começar com https://" });
+      return;
+    }
+    if (!/^[a-zA-Z0-9.\-]+(:\d{1,5})?$/.test(parsed.host)) {
+      res.status(400).json({ error: "Host inválido na URL" });
+      return;
+    }
+    if (
+      (parsed.pathname && parsed.pathname !== "/") ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      res.status(400).json({ error: "URL deve ser apenas o domínio raiz (sem caminho, query ou fragmento)" });
+      return;
+    }
+    // Persist without a trailing slash so links like `${appUrl}/assinar/...`
+    // never produce double-slashes.
+    const normalized = `${parsed.protocol}//${parsed.host}`;
+    await setConfig(key, normalized);
+    res.json({ success: true, key });
+    return;
+  }
+
   await setConfig(key, value.trim());
   res.json({ success: true, key });
 });
