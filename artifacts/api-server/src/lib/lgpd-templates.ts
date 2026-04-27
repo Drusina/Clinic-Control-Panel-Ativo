@@ -132,41 +132,46 @@ A Contratante declara ciência integral desta Política e compromete-se a observ
 const CONSENTIMENTO_DADOS_BODY = `
 ## 1. Identificação
 
-A clínica **{{contratante.razao_social}}** (CNPJ {{contratante.cnpj}}), na qualidade de **Controladora**, solicita ao titular o consentimento para tratamento de dados pessoais conforme as finalidades abaixo descritas.
+A clínica **{{contratante.razao_social}}** (CNPJ {{contratante.cnpj}}), na qualidade de **Controladora**, solicita ao colaborador o consentimento para o tratamento dos dados pessoais estritamente necessários ao uso da plataforma de gestão IONEX360.
+
+> **Importante:** este termo **não abrange dados de pacientes**. A plataforma IONEX360 é uma ferramenta administrativa, financeira e operacional da clínica e **não armazena** prontuário, histórico clínico, dados sensíveis de saúde, fotografias ou qualquer outro dado de paciente.
 
 ## 2. Dados Coletados
 
-- Dados de identificação: nome completo, CPF, RG, data de nascimento, sexo, endereço, telefone, e-mail.
-- Dados sensíveis de saúde: histórico clínico, alergias, medicações em uso, fotografias antes/depois, evolução de tratamentos estéticos.
-- Dados financeiros: forma de pagamento, parcelamentos, histórico de cobrança.
+São tratados **apenas** os dados do colaborador necessários ao acesso e à operação da plataforma:
+
+- Nome completo, e-mail e telefone para contato.
+- Função, área e vínculo com a clínica.
+- Registros de acesso e ações realizadas na plataforma (logs de auditoria), para fins de segurança e rastreabilidade.
+
+Não são coletados dados sensíveis (saúde, biometria, origem racial, convicção política ou religiosa) nem dados financeiros pessoais do colaborador.
 
 ## 3. Finalidades
 
-- Prestação dos serviços estéticos contratados.
-- Manutenção do prontuário e histórico clínico do paciente.
-- Acompanhamento pós-tratamento e comunicação assistencial.
-- Cumprimento de obrigações legais e regulatórias (Anvisa, CFM, CRM, CFF, conforme aplicável).
-- Gestão financeira e cobrança.
+- Conceder acesso individualizado à plataforma IONEX360.
+- Permitir que o colaborador participe das rotinas de gestão atribuídas (kickoff, ações, riscos, documentos da clínica).
+- Manter trilha de auditoria das ações realizadas, em cumprimento à LGPD.
+- Enviar comunicações operacionais relacionadas ao uso da plataforma (convites, notificações de aprovação, lembretes de tarefas).
 
 ## 4. Compartilhamento
 
-Os dados poderão ser compartilhados com: (i) profissionais credenciados da clínica envolvidos no tratamento; (ii) operadores contratados para suporte tecnológico (incluindo a plataforma IONEX360); (iii) autoridades públicas, quando exigido por lei; (iv) terceiros expressamente autorizados pelo titular.
+Os dados são compartilhados **apenas** com a IONEX360, na qualidade de **Operadora**, para fins de hospedagem, suporte e segurança da plataforma. Não há compartilhamento com terceiros para fins comerciais ou publicitários.
 
 ## 5. Tempo de Guarda
 
-Os dados de saúde serão mantidos pelo prazo de **20 (vinte) anos** após o último atendimento, conforme orientação dos Conselhos de Classe. Demais dados, pelo prazo legal aplicável.
+Os dados pessoais serão mantidos enquanto o colaborador possuir acesso ativo à plataforma. Após o encerramento do vínculo ou a revogação do acesso, os dados pessoais serão **eliminados em até 30 dias**, sendo preservados apenas os logs de auditoria pelo prazo legal aplicável (até **5 anos**), nos termos do art. 16 da LGPD.
 
 ## 6. Direitos do Titular
 
-O titular pode exercer, a qualquer momento, seus direitos previstos no art. 18 da LGPD: confirmação, acesso, correção, anonimização, portabilidade, eliminação (quando permitido por lei), informação sobre compartilhamento, revogação do consentimento.
+O colaborador pode exercer, a qualquer momento, seus direitos previstos no art. 18 da LGPD: confirmação, acesso, correção, anonimização, portabilidade, eliminação (quando permitida por lei), informação sobre compartilhamento e revogação do consentimento.
 
 ## 7. Consentimento
 
-Ao assinar este termo, o titular **consente livre, informada e expressamente** com o tratamento de seus dados pessoais nas condições aqui descritas, podendo revogar este consentimento a qualquer tempo, ressalvado o tratamento decorrente de obrigação legal.
+Ao assinar este termo, o colaborador **consente livre, informada e expressamente** com o tratamento dos seus dados pessoais nas condições aqui descritas, podendo revogar este consentimento a qualquer tempo, observada a manutenção dos logs exigidos por lei.
 
 ## 8. Canal de Atendimento
 
-Para exercer seus direitos ou esclarecer dúvidas, o titular pode entrar em contato com a clínica pelo telefone ou e-mail informados em seu cadastro.
+Para exercer seus direitos ou esclarecer dúvidas, o colaborador pode entrar em contato com a clínica pelo telefone ou e-mail informados em seu cadastro, ou com a IONEX360 pelo canal de suporte.
 `.trim();
 
 const AUTORIZACAO_IMAGEM_BODY = `
@@ -299,7 +304,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   {
     slug: "consentimento-dados",
     titulo: "Consentimento para Tratamento de Dados Pessoais",
-    descricao: "Autorização expressa para coleta e tratamento de dados pessoais de pacientes e colaboradores.",
+    descricao: "Consentimento dos colaboradores para o tratamento mínimo de dados pessoais necessário ao uso da plataforma IONEX360. Não abrange dados de pacientes.",
     corpo: CONSENTIMENTO_DADOS_BODY,
   },
   {

@@ -142,18 +142,78 @@ export function requireAuth(
  * so `req.params` is empty at this point. As a fallback we parse the URL path
  * directly looking for the conventional `/clinics/<uuid>` segment used across
  * every clinic-scoped router in this codebase.
+ *
+ * Security: the URL must be **decoded** before regex matching. Otherwise an
+ * attacker can percent-encode characters of the UUID (e.g. `%2d` for `-`) so
+ * the regex no longer matches, the middleware falls through to `next()`,
+ * and the request bypasses clinic-access enforcement entirely. We also flag
+ * paths that *look* clinic-scoped (`/clinics/<anything>`) but contain a
+ * non-UUID segment so we can deny them outright instead of falling through.
  */
-const CLINIC_PATH_RE = /\/clinics\/([0-9a-fA-F-]{36})(?:\/|$|\?)/;
+// Both regexes are intentionally case-insensitive: Express defaults to
+// case-insensitive routing (`case sensitive routing` is off), so a request
+// to `/api/CLINICS/<uuid>/...` would still resolve to the same handler — we
+// must therefore detect "clinic-scoped" identically to Express, otherwise an
+// attacker could bypass the access check by varying the casing of the path.
+const CLINIC_UUID_RE = /\/clinics\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:\/|$)/i;
+const CLINIC_ANY_RE = /\/clinics\/([^/?#]+)/i;
 
-function extractClinicIdFromParams(req: Request): string | undefined {
+function safeDecodeUrl(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Strip the query string and fragment from a URL so the regex above only
+ * inspects the pathname. Otherwise a benign query like `?foo=/clinics/xyz`
+ * could trigger spurious matches.
+ */
+function pathnameOnly(url: string): string {
+  const qIdx = url.indexOf("?");
+  const hIdx = url.indexOf("#");
+  let end = url.length;
+  if (qIdx >= 0) end = Math.min(end, qIdx);
+  if (hIdx >= 0) end = Math.min(end, hIdx);
+  return url.slice(0, end);
+}
+
+interface ClinicContext {
+  clinicId?: string;
+  /**
+   * True when the URL targets a clinic-scoped route (i.e. contains
+   * `/clinics/<segment>`). When `clinicId` is undefined and this is true,
+   * the segment was not a valid UUID — likely a tampering attempt — and
+   * the request must be denied rather than allowed to fall through.
+   */
+  isClinicScoped: boolean;
+}
+
+function extractClinicContext(req: Request): ClinicContext {
   const cid = req.params.clinicId;
-  if (typeof cid === "string" && cid.length > 0) return cid;
+  if (typeof cid === "string" && cid.length > 0) {
+    return { clinicId: cid, isClinicScoped: true };
+  }
   const id = req.params.id;
-  if (typeof id === "string" && id.length > 0) return id;
-  const url = req.originalUrl || req.url || "";
-  const m = CLINIC_PATH_RE.exec(url);
-  if (m) return m[1];
-  return undefined;
+  if (typeof id === "string" && id.length > 0) {
+    return { clinicId: id, isClinicScoped: true };
+  }
+  const raw = req.originalUrl || req.url || "";
+  // 1. Drop query/fragment so they can't influence the regex.
+  // 2. Decode once to neutralise single-pass percent-encoding attacks
+  //    (e.g. `%2d` instead of `-`). Express only decodes route params when
+  //    matching, not the full URL, so without this step encoded UUIDs would
+  //    slip past the regex below.
+  const decoded = safeDecodeUrl(pathnameOnly(raw));
+  const matchUuid = CLINIC_UUID_RE.exec(decoded);
+  if (matchUuid) return { clinicId: matchUuid[1], isClinicScoped: true };
+  // Path mentions `/clinics/<segment>` but the segment isn't a valid UUID.
+  // Flag the request as clinic-scoped (so callers deny it) instead of
+  // letting it fall through unprotected.
+  if (CLINIC_ANY_RE.test(decoded)) return { isClinicScoped: true };
+  return { isClinicScoped: false };
 }
 
 /**
@@ -222,8 +282,16 @@ export async function requireClinicAccess(
     return;
   }
 
-  const clinicId = extractClinicIdFromParams(req);
-  if (!clinicId) {
+  const ctx = extractClinicContext(req);
+  if (!ctx.clinicId) {
+    if (ctx.isClinicScoped) {
+      // The URL targets a clinic-scoped route but the segment after
+      // `/clinics/` isn't a valid UUID — almost always a tampering attempt
+      // (e.g. percent-encoded characters trying to slip past the regex).
+      // Refuse rather than fall through.
+      res.status(400).json({ error: "Identificação de clínica inválida" });
+      return;
+    }
     // No clinic context in the URL → this isn't a clinic-scoped route. Because
     // `router.use(mw, subRouter)` actually installs `mw` as a global layer that
     // runs on EVERY subsequent request (not just paths matched by subRouter),
@@ -236,6 +304,7 @@ export async function requireClinicAccess(
     return;
   }
 
+  const clinicId = ctx.clinicId;
   const email = (payload.email as string | undefined) ?? (payload.sub as string | undefined);
   if (!email) {
     res.status(403).json({ error: "Forbidden: token sem identificação de email" });
