@@ -103,9 +103,43 @@ router.post("/push/subscribe", requireAuth, requireActiveTeamMember, async (req,
   const { clinicId: requestedClinicId, subscription } = parsed.data;
 
   let effectiveClinicId: string | null = null;
+  let teamMemberId: string | null = null;
 
   if (userRole === "team_member") {
-    effectiveClinicId = null;
+    // Multi-clinic managers (JWT v:2) precisam vincular a assinatura push à
+    // clínica correta. Se o cliente envia clinicId no payload, resolvemos a
+    // row de equipe_interna por (email, clinicId, tem_acesso_plataforma=true)
+    // para garantir que o gestor da clínica A não acabe assinando como gestor
+    // da clínica B só por compartilhar o mesmo e-mail.
+    const email = String(authedReq.user.email ?? authedReq.user.sub ?? "").trim();
+    if (requestedClinicId && email) {
+      const [scopedRow] = await db
+        .select({ id: teamTable.id })
+        .from(teamTable)
+        .where(
+          and(
+            sql`lower(${teamTable.email}) = lower(${email})`,
+            eq(teamTable.clinicId, requestedClinicId),
+            eq(teamTable.temAcessoPlataforma, true),
+          ),
+        )
+        .limit(1);
+      if (!scopedRow) {
+        res.status(403).json({ error: "Sem acesso à clínica informada" });
+        return;
+      }
+      teamMemberId = scopedRow.id;
+      effectiveClinicId = requestedClinicId;
+    } else {
+      // Fallback (sem clinicId no payload): usa qualquer linha já resolvida
+      // por requireActiveTeamMember; assinatura fica sem vínculo de clínica.
+      teamMemberId = (authedReq.user.teamMemberId as string | null | undefined) ?? null;
+      effectiveClinicId = null;
+    }
+    if (!teamMemberId) {
+      res.status(403).json({ error: "Membro de equipe não encontrado" });
+      return;
+    }
   } else if (userKey === "super_admin") {
     if (requestedClinicId) {
       const clinic = await db
@@ -119,26 +153,14 @@ router.post("/push/subscribe", requireAuth, requireActiveTeamMember, async (req,
       }
       effectiveClinicId = requestedClinicId;
     }
-  } else if (requestedClinicId) {
-    res.status(403).json({ error: "Clinic-scoped subscriptions require super admin or team member access" });
-    return;
-  }
-
-  let teamMemberId: string | null = null;
-  if (userRole === "team_member") {
-    // requireActiveTeamMember already cached the resolved id on req.user.
-    teamMemberId = (authedReq.user.teamMemberId as string | null | undefined) ?? null;
-  } else {
     const teamMember = await db
       .select({ id: teamTable.id })
       .from(teamTable)
       .where(eq(teamTable.email, userKey))
       .limit(1);
     teamMemberId = teamMember[0]?.id ?? null;
-  }
-
-  if (userRole === "team_member" && !teamMemberId) {
-    res.status(403).json({ error: "Membro de equipe não encontrado" });
+  } else if (requestedClinicId) {
+    res.status(403).json({ error: "Clinic-scoped subscriptions require super admin or team member access" });
     return;
   }
 
