@@ -108,10 +108,15 @@ async function extractText(
   return text;
 }
 
+export type AnalysisMode = "text" | "vision";
+
 export interface SummarizeResult {
   summary: string;
   charsAnalyzed: number;
   truncated: boolean;
+  analysisMode: AnalysisMode;
+  pagesAnalyzed: number;
+  totalPages: number;
 }
 
 async function summarizeFromImages(
@@ -168,7 +173,14 @@ async function summarizeFromImages(
     throw new Error("A IA retornou resposta vazia para a análise visual.");
   }
 
-  return { summary, charsAnalyzed: 0, truncated };
+  return {
+    summary,
+    charsAnalyzed: 0,
+    truncated,
+    analysisMode: "vision",
+    pagesAnalyzed: pages.length,
+    totalPages,
+  };
 }
 
 export async function summarizeDocument(
@@ -218,7 +230,14 @@ export async function summarizeDocument(
     throw new Error("A IA retornou um resumo vazio. Tente novamente.");
   }
 
-  return { summary, charsAnalyzed: text.length, truncated };
+  return {
+    summary,
+    charsAnalyzed: text.length,
+    truncated,
+    analysisMode: "text",
+    pagesAnalyzed: 0,
+    totalPages: 0,
+  };
 }
 
 export function isSummarizableMimeType(

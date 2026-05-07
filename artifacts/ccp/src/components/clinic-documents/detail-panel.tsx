@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Download, Trash2, Sparkles, FileQuestion, Loader2 } from "lucide-react";
+import { Eye, Download, Trash2, Sparkles, FileQuestion, Loader2, ScanLine } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   type ClinicDocument,
@@ -224,6 +224,21 @@ export function DetailPanel({
           <div className="border rounded-md p-4 bg-accent/20">
             {doc.summary ? (
               <>
+                {doc.summaryAnalysisMode === "vision" && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    <Badge
+                      variant="outline"
+                      className="text-xs"
+                      data-testid="badge-vision-analysis"
+                    >
+                      <ScanLine className="h-3 w-3 mr-1" />
+                      Análise por imagem
+                      {doc.summaryPagesAnalyzed && doc.summaryTotalPages
+                        ? ` (${doc.summaryPagesAnalyzed}/${doc.summaryTotalPages} pp.)`
+                        : ""}
+                    </Badge>
+                  </div>
+                )}
                 <p className="text-sm whitespace-pre-wrap" data-testid="text-doc-summary">
                   {doc.summary}
                 </p>

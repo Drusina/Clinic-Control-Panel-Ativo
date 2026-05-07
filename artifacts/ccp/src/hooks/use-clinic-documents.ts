@@ -49,6 +49,8 @@ export interface ClinicDocumentCategory {
   documentCount: number;
 }
 
+export type SummaryAnalysisMode = "text" | "vision";
+
 export interface ClinicDocument {
   id: string;
   clinicId: string;
@@ -62,6 +64,9 @@ export interface ClinicDocument {
   uploadedBy: string | null;
   summary: string | null;
   summarizedAt: string | null;
+  summaryAnalysisMode: SummaryAnalysisMode | null;
+  summaryPagesAnalyzed: number | null;
+  summaryTotalPages: number | null;
   createdAt: string;
 }
 

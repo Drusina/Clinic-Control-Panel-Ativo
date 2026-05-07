@@ -12,6 +12,7 @@ import {
   Folder,
   Trash2,
   Sparkles,
+  ScanLine,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ClinicDocument, ClinicDocumentCategory } from "@/hooks/use-clinic-documents";
@@ -201,7 +202,13 @@ export function SidebarTree({
                       <span className="truncate flex-1" title={d.title}>
                         {d.title}
                       </span>
-                      {d.summary && (
+                      {d.summary && d.summaryAnalysisMode === "vision" && (
+                        <ScanLine
+                          className="h-3 w-3 text-primary shrink-0"
+                          aria-label="Resumo IA gerado por análise de imagem"
+                        />
+                      )}
+                      {d.summary && d.summaryAnalysisMode !== "vision" && (
                         <Sparkles
                           className="h-3 w-3 text-primary shrink-0"
                           aria-label="Resumo IA disponível"

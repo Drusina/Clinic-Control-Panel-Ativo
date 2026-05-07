@@ -21,6 +21,9 @@ export const clinicDocumentsTable = pgTable(
     uploadedBy: text("uploaded_by"),
     summary: text("summary"),
     summarizedAt: timestamp("summarized_at", { withTimezone: true }),
+    summaryAnalysisMode: text("summary_analysis_mode"),
+    summaryPagesAnalyzed: integer("summary_pages_analyzed"),
+    summaryTotalPages: integer("summary_total_pages"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

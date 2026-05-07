@@ -28,6 +28,8 @@ const upload = multer({
 
 const router: IRouter = Router();
 
+type SummaryAnalysisMode = "text" | "vision";
+
 interface DocMapped {
   id: string;
   clinicId: string;
@@ -41,10 +43,17 @@ interface DocMapped {
   uploadedBy: string | null;
   summary: string | null;
   summarizedAt: string | null;
+  summaryAnalysisMode: SummaryAnalysisMode | null;
+  summaryPagesAnalyzed: number | null;
+  summaryTotalPages: number | null;
   createdAt: string;
 }
 
 function mapDoc(d: typeof clinicDocumentsTable.$inferSelect): DocMapped {
+  const mode =
+    d.summaryAnalysisMode === "vision" || d.summaryAnalysisMode === "text"
+      ? d.summaryAnalysisMode
+      : null;
   return {
     id: d.id,
     clinicId: d.clinicId,
@@ -58,6 +67,9 @@ function mapDoc(d: typeof clinicDocumentsTable.$inferSelect): DocMapped {
     uploadedBy: d.uploadedBy ?? null,
     summary: d.summary ?? null,
     summarizedAt: d.summarizedAt ? d.summarizedAt.toISOString() : null,
+    summaryAnalysisMode: mode,
+    summaryPagesAnalyzed: d.summaryPagesAnalyzed ?? null,
+    summaryTotalPages: d.summaryTotalPages ?? null,
     createdAt: d.createdAt.toISOString(),
   };
 }
@@ -462,7 +474,15 @@ router.post(
     const summarizedAt = new Date();
     await db
       .update(clinicDocumentsTable)
-      .set({ summary: result.summary, summarizedAt })
+      .set({
+        summary: result.summary,
+        summarizedAt,
+        summaryAnalysisMode: result.analysisMode,
+        summaryPagesAnalyzed:
+          result.pagesAnalyzed > 0 ? result.pagesAnalyzed : null,
+        summaryTotalPages:
+          result.totalPages > 0 ? result.totalPages : null,
+      })
       .where(
         and(
           eq(clinicDocumentsTable.id, id),
@@ -473,6 +493,10 @@ router.post(
     res.json({
       summary: result.summary,
       summarizedAt: summarizedAt.toISOString(),
+      summaryAnalysisMode: result.analysisMode,
+      summaryPagesAnalyzed:
+        result.pagesAnalyzed > 0 ? result.pagesAnalyzed : null,
+      summaryTotalPages: result.totalPages > 0 ? result.totalPages : null,
     });
   },
 );
