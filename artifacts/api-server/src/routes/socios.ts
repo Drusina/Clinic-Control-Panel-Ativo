@@ -11,6 +11,7 @@ function mapSocio(s: typeof sociosTable.$inferSelect) {
     nome: s.nome,
     cpf: s.cpf ?? null,
     percentual: s.percentual != null ? Number(s.percentual) : null,
+    valorQuotas: s.valorQuotas != null ? Number(s.valorQuotas) : null,
     cargo: s.cargo ?? null,
     decisor: s.decisor ?? false,
     email: s.email ?? null,
@@ -52,6 +53,7 @@ router.post("/clinics/:clinicId/socios", async (req, res): Promise<void> => {
       nome: d.nome,
       cpf: d.cpf ?? null,
       percentual: d.percentual != null ? String(d.percentual) : null,
+      valorQuotas: d.valorQuotas != null ? String(d.valorQuotas) : null,
       cargo: d.cargo ?? null,
       decisor: d.decisor ?? false,
       email: d.email ?? null,
@@ -75,6 +77,7 @@ router.patch("/clinics/:clinicId/socios/:socioId", async (req, res): Promise<voi
   if (d.nome != null) updates.nome = d.nome;
   if (d.cpf !== undefined) updates.cpf = d.cpf;
   if (d.percentual !== undefined) updates.percentual = d.percentual != null ? String(d.percentual) : null;
+  if (d.valorQuotas !== undefined) updates.valorQuotas = d.valorQuotas != null ? String(d.valorQuotas) : null;
   if (d.cargo !== undefined) updates.cargo = d.cargo;
   if (d.decisor !== undefined) updates.decisor = d.decisor;
   if (d.email !== undefined) updates.email = d.email;

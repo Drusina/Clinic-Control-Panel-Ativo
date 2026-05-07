@@ -367,6 +367,68 @@ export interface UpdateSocioBody {
   dataEntrada?: string | null;
 }
 
+export interface SocietaryDocDocument {
+  id: string;
+  title: string;
+  fileName: string;
+  /** @nullable */
+  fileType?: string | null;
+  /** @nullable */
+  fileSize?: number | null;
+  storagePath: string;
+  createdAt: string;
+}
+
+export interface SocietaryExtractedSocio {
+  nome: string;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  percentual?: number | null;
+  /** @nullable */
+  valor_quotas?: number | null;
+  /** @nullable */
+  qualificacao?: string | null;
+}
+
+export interface SocietaryExtractionData {
+  /** @nullable */
+  tipo_detectado?: string | null;
+  /** @nullable */
+  resumo?: string | null;
+  /** @nullable */
+  capital_social?: number | null;
+  socios?: SocietaryExtractedSocio[];
+}
+
+export interface SocietaryDoc {
+  id: string;
+  clinicId: string;
+  documentId: string;
+  /** contrato_social | alteracao | acordo_socios | outro */
+  tipo: string;
+  /** ready | error */
+  status: string;
+  /** @nullable */
+  errorMessage?: string | null;
+  extraction?: SocietaryExtractionData | null;
+  /** @nullable */
+  appliedAt?: string | null;
+  createdAt: string;
+  document: SocietaryDocDocument;
+}
+
+export interface ApplySocietaryBody {
+  applyCapitalSocial?: boolean;
+  socioIndices?: number[];
+}
+
+export interface ApplySocietaryResponse {
+  capitalUpdated: boolean;
+  sociosCreated: number;
+  sociosUpdated: number;
+}
+
 export interface InviteUserBody {
   email: string;
   role: string;
@@ -817,6 +879,14 @@ export type ListClinicsParams = {
    * @nullable
    */
   pageSize?: number | null;
+};
+
+export type DeleteSocietaryDoc200 = {
+  success: boolean;
+};
+
+export type GetSocietaryDocSignedUrl200 = {
+  url: string;
 };
 
 export type ListActionsParams = {

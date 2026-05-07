@@ -516,6 +516,102 @@ export const DeleteSocioParams = zod.object({
 });
 
 /**
+ * @summary Lista análises societárias (Contrato Social / Alterações / Acordo de Sócios)
+ */
+export const ListSocietaryDocsParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ListSocietaryDocsResponseItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  documentId: zod.string(),
+  tipo: zod
+    .string()
+    .describe("contrato_social | alteracao | acordo_socios | outro"),
+  status: zod.string().describe("ready | error"),
+  errorMessage: zod.string().nullish(),
+  extraction: zod
+    .union([
+      zod.object({
+        tipo_detectado: zod.string().nullish(),
+        resumo: zod.string().nullish(),
+        capital_social: zod.number().nullish(),
+        socios: zod
+          .array(
+            zod.object({
+              nome: zod.string(),
+              cpf: zod.string().nullish(),
+              percentual: zod.number().nullish(),
+              valor_quotas: zod.number().nullish(),
+              qualificacao: zod.string().nullish(),
+            }),
+          )
+          .optional(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  appliedAt: zod.string().nullish(),
+  createdAt: zod.string(),
+  document: zod.object({
+    id: zod.string(),
+    title: zod.string(),
+    fileName: zod.string(),
+    fileType: zod.string().nullish(),
+    fileSize: zod.number().nullish(),
+    storagePath: zod.string(),
+    createdAt: zod.string(),
+  }),
+});
+export const ListSocietaryDocsResponse = zod.array(
+  ListSocietaryDocsResponseItem,
+);
+
+/**
+ * @summary Remove a análise societária (o documento permanece na biblioteca)
+ */
+export const DeleteSocietaryDocParams = zod.object({
+  clinicId: zod.coerce.string(),
+  id: zod.coerce.string(),
+});
+
+export const DeleteSocietaryDocResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary URL assinada para abrir o arquivo
+ */
+export const GetSocietaryDocSignedUrlParams = zod.object({
+  clinicId: zod.coerce.string(),
+  id: zod.coerce.string(),
+});
+
+export const GetSocietaryDocSignedUrlResponse = zod.object({
+  url: zod.string(),
+});
+
+/**
+ * @summary Aplica sugestões da IA na clínica e nos sócios (não sobrescreve campos preenchidos)
+ */
+export const ApplySocietaryExtractionParams = zod.object({
+  clinicId: zod.coerce.string(),
+  id: zod.coerce.string(),
+});
+
+export const ApplySocietaryExtractionBody = zod.object({
+  applyCapitalSocial: zod.boolean().optional(),
+  socioIndices: zod.array(zod.number()).optional(),
+});
+
+export const ApplySocietaryExtractionResponse = zod.object({
+  capitalUpdated: zod.boolean(),
+  sociosCreated: zod.number(),
+  sociosUpdated: zod.number(),
+});
+
+/**
  * @summary Invite a user to a clinic via email
  */
 export const InviteClinicUserParams = zod.object({

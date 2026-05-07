@@ -19,6 +19,8 @@ import type {
 import type {
   Action,
   Activity,
+  ApplySocietaryBody,
+  ApplySocietaryResponse,
   BatchSaveRespostasBody,
   Clinic,
   ClinicListResponse,
@@ -30,12 +32,14 @@ import type {
   CreateSocioBody,
   CreateTeamMemberBody,
   DashboardSummary,
+  DeleteSocietaryDoc200,
   Diagnostic,
   DiagnosticPillar,
   DiagnosticQuestion,
   DiagnosticResposta,
   DiagnosticsOverviewItem,
   Fatura,
+  GetSocietaryDocSignedUrl200,
   HealthStatus,
   InviteUserBody,
   InviteUserResponse,
@@ -45,6 +49,7 @@ import type {
   Notification,
   PipelineItem,
   Risk,
+  SocietaryDoc,
   Socio,
   StatusHistory,
   TeamMember,
@@ -1403,6 +1408,382 @@ export const useDeleteSocio = <
   TContext
 > => {
   return useMutation(getDeleteSocioMutationOptions(options));
+};
+
+/**
+ * @summary Lista análises societárias (Contrato Social / Alterações / Acordo de Sócios)
+ */
+export const getListSocietaryDocsUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/societary-docs`;
+};
+
+export const listSocietaryDocs = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<SocietaryDoc[]> => {
+  return customFetch<SocietaryDoc[]>(getListSocietaryDocsUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSocietaryDocsQueryKey = (clinicId: string) => {
+  return [`/api/clinics/${clinicId}/societary-docs`] as const;
+};
+
+export const getListSocietaryDocsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSocietaryDocs>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSocietaryDocs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSocietaryDocsQueryKey(clinicId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSocietaryDocs>>
+  > = ({ signal }) =>
+    listSocietaryDocs(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSocietaryDocs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSocietaryDocsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSocietaryDocs>>
+>;
+export type ListSocietaryDocsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Lista análises societárias (Contrato Social / Alterações / Acordo de Sócios)
+ */
+
+export function useListSocietaryDocs<
+  TData = Awaited<ReturnType<typeof listSocietaryDocs>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSocietaryDocs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSocietaryDocsQueryOptions(clinicId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Remove a análise societária (o documento permanece na biblioteca)
+ */
+export const getDeleteSocietaryDocUrl = (clinicId: string, id: string) => {
+  return `/api/clinics/${clinicId}/societary-docs/${id}`;
+};
+
+export const deleteSocietaryDoc = async (
+  clinicId: string,
+  id: string,
+  options?: RequestInit,
+): Promise<DeleteSocietaryDoc200> => {
+  return customFetch<DeleteSocietaryDoc200>(
+    getDeleteSocietaryDocUrl(clinicId, id),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDeleteSocietaryDocMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSocietaryDoc>>,
+    TError,
+    { clinicId: string; id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteSocietaryDoc>>,
+  TError,
+  { clinicId: string; id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteSocietaryDoc"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteSocietaryDoc>>,
+    { clinicId: string; id: string }
+  > = (props) => {
+    const { clinicId, id } = props ?? {};
+
+    return deleteSocietaryDoc(clinicId, id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteSocietaryDocMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteSocietaryDoc>>
+>;
+
+export type DeleteSocietaryDocMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove a análise societária (o documento permanece na biblioteca)
+ */
+export const useDeleteSocietaryDoc = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSocietaryDoc>>,
+    TError,
+    { clinicId: string; id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteSocietaryDoc>>,
+  TError,
+  { clinicId: string; id: string },
+  TContext
+> => {
+  return useMutation(getDeleteSocietaryDocMutationOptions(options));
+};
+
+/**
+ * @summary URL assinada para abrir o arquivo
+ */
+export const getGetSocietaryDocSignedUrlUrl = (
+  clinicId: string,
+  id: string,
+) => {
+  return `/api/clinics/${clinicId}/societary-docs/${id}/signed-url`;
+};
+
+export const getSocietaryDocSignedUrl = async (
+  clinicId: string,
+  id: string,
+  options?: RequestInit,
+): Promise<GetSocietaryDocSignedUrl200> => {
+  return customFetch<GetSocietaryDocSignedUrl200>(
+    getGetSocietaryDocSignedUrlUrl(clinicId, id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetSocietaryDocSignedUrlQueryKey = (
+  clinicId: string,
+  id: string,
+) => {
+  return [`/api/clinics/${clinicId}/societary-docs/${id}/signed-url`] as const;
+};
+
+export const getGetSocietaryDocSignedUrlQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSocietaryDocSignedUrl>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSocietaryDocSignedUrl>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetSocietaryDocSignedUrlQueryKey(clinicId, id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSocietaryDocSignedUrl>>
+  > = ({ signal }) =>
+    getSocietaryDocSignedUrl(clinicId, id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(clinicId && id),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSocietaryDocSignedUrl>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSocietaryDocSignedUrlQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSocietaryDocSignedUrl>>
+>;
+export type GetSocietaryDocSignedUrlQueryError = ErrorType<unknown>;
+
+/**
+ * @summary URL assinada para abrir o arquivo
+ */
+
+export function useGetSocietaryDocSignedUrl<
+  TData = Awaited<ReturnType<typeof getSocietaryDocSignedUrl>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSocietaryDocSignedUrl>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSocietaryDocSignedUrlQueryOptions(
+    clinicId,
+    id,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Aplica sugestões da IA na clínica e nos sócios (não sobrescreve campos preenchidos)
+ */
+export const getApplySocietaryExtractionUrl = (
+  clinicId: string,
+  id: string,
+) => {
+  return `/api/clinics/${clinicId}/societary-docs/${id}/apply`;
+};
+
+export const applySocietaryExtraction = async (
+  clinicId: string,
+  id: string,
+  applySocietaryBody: ApplySocietaryBody,
+  options?: RequestInit,
+): Promise<ApplySocietaryResponse> => {
+  return customFetch<ApplySocietaryResponse>(
+    getApplySocietaryExtractionUrl(clinicId, id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(applySocietaryBody),
+    },
+  );
+};
+
+export const getApplySocietaryExtractionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applySocietaryExtraction>>,
+    TError,
+    { clinicId: string; id: string; data: BodyType<ApplySocietaryBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof applySocietaryExtraction>>,
+  TError,
+  { clinicId: string; id: string; data: BodyType<ApplySocietaryBody> },
+  TContext
+> => {
+  const mutationKey = ["applySocietaryExtraction"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof applySocietaryExtraction>>,
+    { clinicId: string; id: string; data: BodyType<ApplySocietaryBody> }
+  > = (props) => {
+    const { clinicId, id, data } = props ?? {};
+
+    return applySocietaryExtraction(clinicId, id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApplySocietaryExtractionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof applySocietaryExtraction>>
+>;
+export type ApplySocietaryExtractionMutationBody = BodyType<ApplySocietaryBody>;
+export type ApplySocietaryExtractionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Aplica sugestões da IA na clínica e nos sócios (não sobrescreve campos preenchidos)
+ */
+export const useApplySocietaryExtraction = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applySocietaryExtraction>>,
+    TError,
+    { clinicId: string; id: string; data: BodyType<ApplySocietaryBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof applySocietaryExtraction>>,
+  TError,
+  { clinicId: string; id: string; data: BodyType<ApplySocietaryBody> },
+  TContext
+> => {
+  return useMutation(getApplySocietaryExtractionMutationOptions(options));
 };
 
 /**

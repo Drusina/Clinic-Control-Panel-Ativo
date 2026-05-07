@@ -353,6 +353,116 @@ paths:
         "204":
           description: Deleted
 
+  # ─── SOCIETARY DOCS (AI extraction) ─────────────────────────────────────────
+  # Note: o endpoint de upload (POST /clinics/{clinicId}/societary-docs) é
+  # multipart/form-data e por isso não é descrito no OpenAPI — o frontend usa
+  # `useUploadSocietaryDoc()` (artifacts/ccp/src/hooks/use-societary-docs.ts).
+  /clinics/{clinicId}/societary-docs:
+    get:
+      operationId: listSocietaryDocs
+      tags: [societary-docs]
+      summary: Lista análises societárias (Contrato Social / Alterações / Acordo de Sócios)
+      parameters:
+        - in: path
+          name: clinicId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SocietaryDoc"
+  /clinics/{clinicId}/societary-docs/{id}:
+    delete:
+      operationId: deleteSocietaryDoc
+      tags: [societary-docs]
+      summary: Remove a análise societária (o documento permanece na biblioteca)
+      parameters:
+        - in: path
+          name: clinicId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required:
+                  - success
+  /clinics/{clinicId}/societary-docs/{id}/signed-url:
+    get:
+      operationId: getSocietaryDocSignedUrl
+      tags: [societary-docs]
+      summary: URL assinada para abrir o arquivo
+      parameters:
+        - in: path
+          name: clinicId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                required:
+                  - url
+  /clinics/{clinicId}/societary-docs/{id}/apply:
+    post:
+      operationId: applySocietaryExtraction
+      tags: [societary-docs]
+      summary: Aplica sugestões da IA na clínica e nos sócios (não sobrescreve campos preenchidos)
+      parameters:
+        - in: path
+          name: clinicId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplySocietaryBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplySocietaryResponse"
+
   # ─── USER INVITE ─────────────────────────────────────────────────────────────
   /clinics/{id}/invite-user:
     post:
@@ -1428,6 +1538,121 @@ components:
           type: ["string", "null"]
         dataEntrada:
           type: ["string", "null"]
+
+    # ─── SOCIETARY DOCS ──────────────────────────────────────────────────────
+    SocietaryDocDocument:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        fileName:
+          type: string
+        fileType:
+          type: ["string", "null"]
+        fileSize:
+          type: ["integer", "null"]
+        storagePath:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - title
+        - fileName
+        - storagePath
+        - createdAt
+
+    SocietaryExtractedSocio:
+      type: object
+      properties:
+        nome:
+          type: string
+        cpf:
+          type: ["string", "null"]
+        percentual:
+          type: ["number", "null"]
+        valor_quotas:
+          type: ["number", "null"]
+        qualificacao:
+          type: ["string", "null"]
+      required:
+        - nome
+
+    SocietaryExtractionData:
+      type: object
+      properties:
+        tipo_detectado:
+          type: ["string", "null"]
+        resumo:
+          type: ["string", "null"]
+        capital_social:
+          type: ["number", "null"]
+        socios:
+          type: array
+          items:
+            $ref: "#/components/schemas/SocietaryExtractedSocio"
+
+    SocietaryDoc:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        documentId:
+          type: string
+        tipo:
+          type: string
+          description: contrato_social | alteracao | acordo_socios | outro
+        status:
+          type: string
+          description: ready | error
+        errorMessage:
+          type: ["string", "null"]
+        extraction:
+          oneOf:
+            - $ref: "#/components/schemas/SocietaryExtractionData"
+            - type: "null"
+        appliedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        document:
+          $ref: "#/components/schemas/SocietaryDocDocument"
+      required:
+        - id
+        - clinicId
+        - documentId
+        - tipo
+        - status
+        - createdAt
+        - document
+
+    ApplySocietaryBody:
+      type: object
+      properties:
+        applyCapitalSocial:
+          type: boolean
+        socioIndices:
+          type: array
+          items:
+            type: integer
+
+    ApplySocietaryResponse:
+      type: object
+      properties:
+        capitalUpdated:
+          type: boolean
+        sociosCreated:
+          type: integer
+        sociosUpdated:
+          type: integer
+      required:
+        - capitalUpdated
+        - sociosCreated
+        - sociosUpdated
 
     # ─── USER INVITE ─────────────────────────────────────────────────────────
     InviteUserBody:
