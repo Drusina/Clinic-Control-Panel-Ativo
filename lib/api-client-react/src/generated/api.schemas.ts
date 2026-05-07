@@ -293,6 +293,22 @@ export interface Socio {
   clinicId: string;
   nome: string;
   /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  percentual?: number | null;
+  /** @nullable */
+  valorQuotas?: number | null;
+  /** @nullable */
+  cargo?: string | null;
+  /** @nullable */
+  decisor?: boolean | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
+  /** @nullable */
+  origem?: string | null;
+  /** @nullable */
   qualificacao?: string | null;
   /** @nullable */
   qualId?: string | null;
@@ -305,6 +321,20 @@ export interface Socio {
 export interface CreateSocioBody {
   nome: string;
   /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  percentual?: number | null;
+  /** @nullable */
+  valorQuotas?: number | null;
+  /** @nullable */
+  cargo?: string | null;
+  /** @nullable */
+  decisor?: boolean | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
+  /** @nullable */
   qualificacao?: string | null;
   /** @nullable */
   qualId?: string | null;
@@ -315,6 +345,20 @@ export interface CreateSocioBody {
 export interface UpdateSocioBody {
   /** @nullable */
   nome?: string | null;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  percentual?: number | null;
+  /** @nullable */
+  valorQuotas?: number | null;
+  /** @nullable */
+  cargo?: string | null;
+  /** @nullable */
+  decisor?: boolean | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
   /** @nullable */
   qualificacao?: string | null;
   /** @nullable */
@@ -331,7 +375,6 @@ export interface InviteUserBody {
 export interface InviteUserResponse {
   success: boolean;
   message: string;
-  inviteLink?: string;
 }
 
 export interface Activity {

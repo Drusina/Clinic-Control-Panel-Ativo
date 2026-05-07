@@ -32,3 +32,4 @@ export * from "./document_access_log";
 export * from "./cnpj_cache";
 export * from "./document_categories";
 export * from "./clinic_documents";
+export * from "./societary_extractions";

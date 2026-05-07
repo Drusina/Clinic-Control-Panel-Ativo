@@ -41,6 +41,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import SocietaryDocsCard from "./societary-docs-card";
 
 const clinicFormSchema = z.object({
   nome: z.string().min(1, "Nome obrigatório"),
@@ -65,9 +66,30 @@ const clinicFormSchema = z.object({
 
 const socioFormSchema = z.object({
   nome: z.string().min(1, "Nome do sócio obrigatório"),
+  cpf: z.string().optional(),
+  percentual: z.string().optional(),
+  valorQuotas: z.string().optional(),
+  cargo: z.string().optional(),
   qualificacao: z.string().optional(),
   dataEntrada: z.string().optional(),
 });
+
+function brl(v: number | string | null | undefined): string {
+  if (v == null || v === "") return "—";
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(n);
+}
+
+function maskCpf(cpf: string | null | undefined): string {
+  if (!cpf) return "";
+  const d = cpf.replace(/\D+/g, "");
+  if (d.length !== 11) return cpf;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.***-${d.slice(9)}`;
+}
 
 export default function CadastroTab({ clinic }: { clinic: Clinic }) {
   const { toast } = useToast();
@@ -111,7 +133,15 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
 
   const socioForm = useForm<z.infer<typeof socioFormSchema>>({
     resolver: zodResolver(socioFormSchema),
-    defaultValues: { nome: "", qualificacao: "", dataEntrada: "" },
+    defaultValues: {
+      nome: "",
+      cpf: "",
+      percentual: "",
+      valorQuotas: "",
+      cargo: "",
+      qualificacao: "",
+      dataEntrada: "",
+    },
   });
 
   const onSaveClinic = (values: z.infer<typeof clinicFormSchema>) => {
@@ -132,20 +162,46 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
       setEditingSocio(socio);
       socioForm.reset({
         nome: socio.nome,
+        cpf: socio.cpf ?? "",
+        percentual: socio.percentual != null ? String(socio.percentual) : "",
+        valorQuotas: socio.valorQuotas != null ? String(socio.valorQuotas) : "",
+        cargo: socio.cargo ?? "",
         qualificacao: socio.qualificacao ?? "",
         dataEntrada: socio.dataEntrada?.split("T")[0] ?? "",
       });
     } else {
       setEditingSocio(null);
-      socioForm.reset({ nome: "", qualificacao: "", dataEntrada: "" });
+      socioForm.reset({
+        nome: "",
+        cpf: "",
+        percentual: "",
+        valorQuotas: "",
+        cargo: "",
+        qualificacao: "",
+        dataEntrada: "",
+      });
     }
     setIsSocioDialogOpen(true);
   };
 
   const onSocioSubmit = (values: z.infer<typeof socioFormSchema>) => {
+    const numericOrNull = (s: string | undefined): number | null => {
+      if (!s || !s.trim()) return null;
+      const n = Number(s.replace(",", "."));
+      return Number.isFinite(n) ? n : null;
+    };
+    const payload = {
+      nome: values.nome,
+      cpf: values.cpf?.trim() || null,
+      percentual: numericOrNull(values.percentual),
+      valorQuotas: numericOrNull(values.valorQuotas),
+      cargo: values.cargo?.trim() || null,
+      qualificacao: values.qualificacao?.trim() || null,
+      dataEntrada: values.dataEntrada?.trim() || null,
+    };
     if (editingSocio) {
       updateSocio.mutate(
-        { clinicId: clinic.id, socioId: editingSocio.id, data: values as UpdateSocioBody },
+        { clinicId: clinic.id, socioId: editingSocio.id, data: payload as UpdateSocioBody },
         {
           onSuccess: () => {
             toast({ title: "Sócio atualizado" });
@@ -157,7 +213,7 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
       );
     } else {
       createSocio.mutate(
-        { clinicId: clinic.id, data: { nome: values.nome, qualificacao: values.qualificacao ?? null, dataEntrada: values.dataEntrada || null } },
+        { clinicId: clinic.id, data: payload },
         {
           onSuccess: () => {
             toast({ title: "Sócio adicionado" });
@@ -418,6 +474,8 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
         </form>
       </Form>
 
+      <SocietaryDocsCard clinicId={clinic.id} />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -434,22 +492,36 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
           ) : socios && socios.length > 0 ? (
             <div className="space-y-2">
               {socios.map((socio: Socio) => (
-                <div key={socio.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
-                  <div className="flex items-center gap-3">
-                    <UserCircle className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium text-sm">{socio.nome}</p>
-                      {socio.qualificacao && (
-                        <p className="text-xs text-muted-foreground">{socio.qualificacao}</p>
-                      )}
+                <div key={socio.id} className="flex items-start justify-between gap-3 p-3 rounded-lg border bg-card">
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <UserCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-sm">{socio.nome}</p>
+                        {socio.qualificacao && (
+                          <Badge variant="outline" className="text-xs">{socio.qualificacao}</Badge>
+                        )}
+                        {socio.cargo && (
+                          <Badge variant="secondary" className="text-xs">{socio.cargo}</Badge>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                        {socio.cpf && (
+                          <div><span className="font-medium text-foreground">CPF:</span> {maskCpf(socio.cpf)}</div>
+                        )}
+                        {socio.percentual != null && (
+                          <div><span className="font-medium text-foreground">Quotas:</span> {socio.percentual}%</div>
+                        )}
+                        {socio.valorQuotas != null && (
+                          <div><span className="font-medium text-foreground">Valor:</span> {brl(socio.valorQuotas)}</div>
+                        )}
+                        {socio.dataEntrada && (
+                          <div><span className="font-medium text-foreground">Desde:</span> {socio.dataEntrada}</div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {socio.dataEntrada && (
-                      <Badge variant="outline" className="text-xs">
-                        Desde {socio.dataEntrada}
-                      </Badge>
-                    )}
+                  <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -496,6 +568,52 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                   </FormItem>
                 )}
               />
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={socioForm.control}
+                  name="cpf"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>CPF</FormLabel>
+                      <FormControl><Input placeholder="000.000.000-00" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={socioForm.control}
+                  name="percentual"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>% de Quotas</FormLabel>
+                      <FormControl><Input type="number" step="0.01" placeholder="50.00" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={socioForm.control}
+                  name="valorQuotas"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor das Quotas (R$)</FormLabel>
+                      <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={socioForm.control}
+                  name="cargo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cargo</FormLabel>
+                      <FormControl><Input placeholder="Ex: Diretor" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={socioForm.control}
                 name="qualificacao"

@@ -11,6 +11,7 @@ export const sociosTable = pgTable("socios", {
   nome: text("nome").notNull(),
   cpf: text("cpf"),
   percentual: numeric("percentual", { precision: 5, scale: 2 }),
+  valorQuotas: numeric("valor_quotas", { precision: 14, scale: 2 }),
   cargo: text("cargo"),
   decisor: boolean("decisor").default(false),
   email: text("email"),

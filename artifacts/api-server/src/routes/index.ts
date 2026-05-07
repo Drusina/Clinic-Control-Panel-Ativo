@@ -45,6 +45,7 @@ import documentAccessLogRouter from "./document-access-log";
 import cnpjRouter from "./cnpj";
 import documentCategoriesRouter from "./document-categories";
 import clinicDocumentsRouter from "./clinic-documents";
+import societaryDocsRouter from "./societary-docs";
 
 const router: IRouter = Router();
 
@@ -83,6 +84,7 @@ router.use(lgpdSigningPublicRouter);
 //     attachment endpoints in clinics.ts.
 router.use(requireClinicAccess, documentCategoriesRouter);
 router.use(requireClinicAccess, clinicDocumentsRouter);
+router.use(requireClinicAccess, societaryDocsRouter);
 router.use(requireClinicAccess, clinicsRouter);
 router.use(requireClinicAccess, statusHistoryRouter);
 router.use(requireClinicAccess, sociosRouter);
