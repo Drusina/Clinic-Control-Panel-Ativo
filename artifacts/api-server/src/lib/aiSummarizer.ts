@@ -1,5 +1,9 @@
 import OpenAI from "openai";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
+import {
+  renderPdfPagesToImages,
+  DEFAULT_MAX_VISION_PAGES,
+} from "./pdfRender.js";
 
 const MAX_INPUT_CHARS = 8_000;
 // Cost cap mandated by the task spec: ~300 words of output.
@@ -110,11 +114,78 @@ export interface SummarizeResult {
   truncated: boolean;
 }
 
+async function summarizeFromImages(
+  fileBuffer: Buffer,
+): Promise<SummarizeResult> {
+  const { pages, totalPages, truncated } = await renderPdfPagesToImages(
+    fileBuffer,
+    { maxPages: DEFAULT_MAX_VISION_PAGES },
+  );
+
+  const noteIfTruncated = truncated
+    ? `ATENÇÃO: este PDF tem ${totalPages} páginas; só as primeiras ${pages.length} foram enviadas para análise.\n\n`
+    : "";
+
+  const imageContent = pages.map((p) => ({
+    type: "image_url" as const,
+    image_url: {
+      url: `data:image/png;base64,${p.pngBuffer.toString("base64")}`,
+      detail: "high" as const,
+    },
+  }));
+
+  const client = getClient();
+  let response;
+  try {
+    response = await client.chat.completions.create({
+      model: MODEL,
+      max_completion_tokens: MAX_OUTPUT_TOKENS,
+      reasoning_effort: REASONING_EFFORT,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                noteIfTruncated +
+                "As imagens a seguir são páginas de um PDF escaneado (sem camada de texto). Leia o conteúdo das imagens — incluindo carimbos, assinaturas e textos manuscritos quando legíveis — e produza o resumo executivo solicitado.",
+            },
+            ...imageContent,
+          ],
+        },
+      ],
+    });
+  } catch (err) {
+    throw new Error(
+      `Falha ao analisar imagens do PDF com a IA: ${(err as Error).message}`,
+    );
+  }
+
+  const summary = response.choices[0]?.message?.content?.trim() ?? "";
+  if (!summary) {
+    throw new Error("A IA retornou resposta vazia para a análise visual.");
+  }
+
+  return { summary, charsAnalyzed: 0, truncated };
+}
+
 export async function summarizeDocument(
   fileBuffer: Buffer,
   mimeType: string | null | undefined,
 ): Promise<SummarizeResult> {
-  const fullText = await extractText(fileBuffer, mimeType);
+  let fullText: string;
+  try {
+    fullText = await extractText(fileBuffer, mimeType);
+  } catch (err) {
+    // Fallback to vision only for scanned PDFs (no text layer).
+    if (err instanceof EmptyDocumentError && mimeType === "application/pdf") {
+      return summarizeFromImages(fileBuffer);
+    }
+    throw err;
+  }
+
   const truncated = fullText.length > MAX_INPUT_CHARS;
   const text = truncated ? fullText.slice(0, MAX_INPUT_CHARS) : fullText;
 
