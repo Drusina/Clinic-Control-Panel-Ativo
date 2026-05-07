@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
 import Clinics from "@/pages/clinics/index";
 import NewClinic from "@/pages/clinics/new";
+import EditClinic from "@/pages/clinics/edit";
 import ClinicDetail from "@/pages/clinics/detail";
 import Notifications from "@/pages/notifications/index";
 import AdminLogin from "@/pages/admin-login";
@@ -121,6 +122,15 @@ function Router() {
             <SuperAdminGuard>
               <NewClinic />
             </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+      <Route path="/admin/clinicas/:id/editar">
+        {(params) => (
+          <AppLayout>
+            <ClinicAccessGuard clinicId={params.id}>
+              <EditClinic />
+            </ClinicAccessGuard>
           </AppLayout>
         )}
       </Route>
