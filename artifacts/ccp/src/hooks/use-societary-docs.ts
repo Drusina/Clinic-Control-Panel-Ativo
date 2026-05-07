@@ -64,6 +64,9 @@ export interface SocietaryDoc {
   errorMessage: string | null;
   extraction: SocietaryExtractionData | null;
   analysisMode: AnalysisMode | null;
+  truncated: boolean;
+  pagesAnalyzed: number | null;
+  totalPages: number | null;
   appliedAt: string | null;
   createdAt: string;
   document: {

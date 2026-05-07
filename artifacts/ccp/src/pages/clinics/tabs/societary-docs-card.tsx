@@ -254,6 +254,9 @@ function SocietaryDocItem({
   const reanalyzeMut = useReanalyzeSocietaryDoc(clinicId);
   const ext = doc.extraction;
   const sociosList = ext?.socios ?? [];
+  const showReanalyze =
+    doc.status === "error" ||
+    (doc.status === "ready" && sociosList.length === 0);
 
   const onReanalyze = () => {
     reanalyzeMut.mutate(doc.id, {
@@ -339,6 +342,14 @@ function SocietaryDocItem({
                   PDF escaneado (visão)
                 </Badge>
               )}
+              {doc.truncated && (
+                <Badge variant="outline" className="text-xs">
+                  Análise parcial
+                  {doc.pagesAnalyzed && doc.totalPages
+                    ? ` (${doc.pagesAnalyzed}/${doc.totalPages} pp.)`
+                    : ""}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               {fmtDate(doc.createdAt)} •{" "}
@@ -371,34 +382,45 @@ function SocietaryDocItem({
         </div>
       </div>
 
-      {doc.status === "error" ? (
-        <div className="space-y-2">
-          <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/5 border border-destructive/30 rounded-md p-2">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <p>
-              Não foi possível analisar este documento.{" "}
-              {doc.errorMessage ??
-                "Tente re-analisar ou preencha os campos manualmente."}
-            </p>
-          </div>
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onReanalyze}
-              disabled={reanalyzeMut.isPending}
-              data-testid={`btn-reanalyze-${doc.id}`}
-            >
-              {reanalyzeMut.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
-              Re-analisar
-            </Button>
-          </div>
+      {doc.status === "error" && (
+        <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/5 border border-destructive/30 rounded-md p-2">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <p>
+            Não foi possível analisar este documento.{" "}
+            {doc.errorMessage ??
+              "Tente re-analisar ou preencha os campos manualmente."}
+          </p>
         </div>
-      ) : (
+      )}
+      {doc.status === "ready" && sociosList.length === 0 && (
+        <div className="flex items-start gap-2 text-sm text-muted-foreground bg-muted/40 border rounded-md p-2">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <p>
+            Análise concluída sem sócios identificados. Use “Re-analisar” se o
+            documento contém sócios — uma nova passagem (incluindo análise visual
+            para PDFs escaneados) pode resolver.
+          </p>
+        </div>
+      )}
+      {showReanalyze && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onReanalyze}
+            disabled={reanalyzeMut.isPending}
+            data-testid={`btn-reanalyze-${doc.id}`}
+          >
+            {reanalyzeMut.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Re-analisar
+          </Button>
+        </div>
+      )}
+      {doc.status === "ready" && (
         <>
           {ext?.resumo && (
             <div className="text-sm text-muted-foreground">

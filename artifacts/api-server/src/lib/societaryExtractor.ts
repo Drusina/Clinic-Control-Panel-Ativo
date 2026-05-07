@@ -77,6 +77,7 @@ export interface ExtractSocietaryResult {
   truncated: boolean;
   analysisMode: AnalysisMode;
   pagesAnalyzed: number;
+  totalPages: number;
 }
 
 let cachedClient: OpenAI | null = null;
@@ -185,6 +186,7 @@ async function extractFromImages(
   extraction: SocietaryExtraction;
   truncated: boolean;
   pagesAnalyzed: number;
+  totalPages: number;
 }> {
   const { pages, totalPages, truncated } = await renderPdfPagesToImages(
     fileBuffer,
@@ -240,6 +242,7 @@ async function extractFromImages(
     extraction: parseAiJson(raw),
     truncated,
     pagesAnalyzed: pages.length,
+    totalPages,
   };
 }
 
@@ -263,6 +266,7 @@ export async function extractSocietary(
       truncated: textResult.truncated,
       analysisMode: "text",
       pagesAnalyzed: 0,
+      totalPages: 0,
     };
   }
 
@@ -274,6 +278,7 @@ export async function extractSocietary(
       truncated: vision.truncated,
       analysisMode: "vision",
       pagesAnalyzed: vision.pagesAnalyzed,
+      totalPages: vision.totalPages,
     };
   }
 

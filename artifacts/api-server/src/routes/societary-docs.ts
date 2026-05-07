@@ -97,6 +97,9 @@ interface MappedExtraction {
   errorMessage: string | null;
   extraction: SocietaryExtraction | null;
   analysisMode: AnalysisMode | null;
+  truncated: boolean;
+  pagesAnalyzed: number | null;
+  totalPages: number | null;
   appliedAt: string | null;
   createdAt: string;
   document: {
@@ -118,6 +121,21 @@ function readAnalysisMode(ext: unknown): AnalysisMode | null {
   return null;
 }
 
+function readMetaBool(ext: unknown, key: string): boolean {
+  if (ext && typeof ext === "object" && key in ext) {
+    return (ext as Record<string, unknown>)[key] === true;
+  }
+  return false;
+}
+
+function readMetaNumber(ext: unknown, key: string): number | null {
+  if (ext && typeof ext === "object" && key in ext) {
+    const v = (ext as Record<string, unknown>)[key];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
 function mapRow(
   e: typeof societaryExtractionsTable.$inferSelect,
   d: typeof clinicDocumentsTable.$inferSelect,
@@ -131,6 +149,9 @@ function mapRow(
     errorMessage: e.errorMessage ?? null,
     extraction: (e.extraction as SocietaryExtraction | null) ?? null,
     analysisMode: readAnalysisMode(e.extraction),
+    truncated: readMetaBool(e.extraction, "_truncated"),
+    pagesAnalyzed: readMetaNumber(e.extraction, "_pages_analyzed"),
+    totalPages: readMetaNumber(e.extraction, "_total_pages"),
     appliedAt: e.appliedAt ? e.appliedAt.toISOString() : null,
     createdAt: e.createdAt.toISOString(),
     document: {
@@ -274,12 +295,18 @@ router.post(
     // has a placeholder linked to the document).
     let extraction: SocietaryExtraction | null = null;
     let analysisMode: AnalysisMode | null = null;
+    let truncated = false;
+    let pagesAnalyzed = 0;
+    let totalPages = 0;
     let status = "ready";
     let errorMessage: string | null = null;
     try {
       const out = await extractSocietary(file.buffer, mimeType);
       extraction = out.extraction;
       analysisMode = out.analysisMode;
+      truncated = out.truncated;
+      pagesAnalyzed = out.pagesAnalyzed;
+      totalPages = out.totalPages;
     } catch (err) {
       status = "error";
       if (
@@ -343,6 +370,9 @@ router.post(
         ...((extraction ?? {}) as Record<string, unknown>),
       };
       if (analysisMode) persistedExtraction._analysis_mode = analysisMode;
+      if (truncated) persistedExtraction._truncated = true;
+      if (pagesAnalyzed > 0) persistedExtraction._pages_analyzed = pagesAnalyzed;
+      if (totalPages > 0) persistedExtraction._total_pages = totalPages;
 
       const [insertedExt] = await tx
         .insert(societaryExtractionsTable)
@@ -570,6 +600,9 @@ router.post(
     const mimeType = row.d.fileType ?? "application/pdf";
     let extraction: SocietaryExtraction | null = null;
     let analysisMode: AnalysisMode | null = null;
+    let truncated = false;
+    let pagesAnalyzed = 0;
+    let totalPages = 0;
     let status = "ready";
     let errorMessage: string | null = null;
 
@@ -577,6 +610,9 @@ router.post(
       const out = await extractSocietary(fileBuffer, mimeType);
       extraction = out.extraction;
       analysisMode = out.analysisMode;
+      truncated = out.truncated;
+      pagesAnalyzed = out.pagesAnalyzed;
+      totalPages = out.totalPages;
     } catch (err) {
       status = "error";
       if (
@@ -614,6 +650,9 @@ router.post(
         ...((extraction ?? {}) as Record<string, unknown>),
       };
       if (analysisMode) persistedExtraction._analysis_mode = analysisMode;
+      if (truncated) persistedExtraction._truncated = true;
+      if (pagesAnalyzed > 0) persistedExtraction._pages_analyzed = pagesAnalyzed;
+      if (totalPages > 0) persistedExtraction._total_pages = totalPages;
 
       const [updatedExt] = await tx
         .update(societaryExtractionsTable)
