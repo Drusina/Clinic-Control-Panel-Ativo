@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "t7yrnIbbqWEwFbFRX_HgG"
+uri = "file://attached_assets/screenshots/58a74213-a4a3-4668-be96-e14b3da9761f-00-23tjjks48u8j4_spock_replit_dev_mockup_preview_societary-docs-redesign_VariantB.png"
+type = "image"
+title = "Variante B — Pendentes + Histórico colapsado"
