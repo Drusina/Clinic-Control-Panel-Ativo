@@ -697,6 +697,55 @@ router.post(
   },
 );
 
+router.patch(
+  "/clinics/:clinicId/societary-docs/:id",
+  async (req, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId)
+      ? req.params.clinicId[0]
+      : req.params.clinicId;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const titleRaw = typeof body.title === "string" ? body.title : "";
+    const title = titleRaw.trim();
+    if (title.length === 0) {
+      res.status(400).json({ error: "O título não pode ficar vazio." });
+      return;
+    }
+    if (title.length > 500) {
+      res.status(400).json({ error: "O título excede o limite de 500 caracteres." });
+      return;
+    }
+
+    const [row] = await db
+      .select({ e: societaryExtractionsTable, d: clinicDocumentsTable })
+      .from(societaryExtractionsTable)
+      .innerJoin(
+        clinicDocumentsTable,
+        eq(clinicDocumentsTable.id, societaryExtractionsTable.documentId),
+      )
+      .where(
+        and(
+          eq(societaryExtractionsTable.id, id),
+          eq(societaryExtractionsTable.clinicId, clinicId),
+        ),
+      );
+
+    if (!row) {
+      res.status(404).json({ error: "Extração não encontrada" });
+      return;
+    }
+
+    const [updatedDoc] = await db
+      .update(clinicDocumentsTable)
+      .set({ title })
+      .where(eq(clinicDocumentsTable.id, row.d.id))
+      .returning();
+
+    res.json(mapRow(row.e, updatedDoc));
+  },
+);
+
 router.delete(
   "/clinics/:clinicId/societary-docs/:id",
   async (req, res): Promise<void> => {

@@ -172,6 +172,24 @@ export function useReanalyzeSocietaryDoc(clinicId: string) {
   });
 }
 
+export function useRenameSocietaryDoc(clinicId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      apiFetch<SocietaryDoc>(
+        `/api/clinics/${clinicId}/societary-docs/${id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ title }),
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["societary-docs", clinicId] });
+      qc.invalidateQueries({ queryKey: ["clinic-documents", clinicId] });
+    },
+  });
+}
+
 export function useDeleteSocietaryDoc(clinicId: string) {
   const qc = useQueryClient();
   return useMutation({

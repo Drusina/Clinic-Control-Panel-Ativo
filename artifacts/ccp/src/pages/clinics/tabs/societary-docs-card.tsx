@@ -33,6 +33,9 @@ import {
   AlertCircle,
   RefreshCw,
   Eye,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import {
   useSocietaryDocs,
@@ -40,6 +43,7 @@ import {
   useApplySocietaryExtraction,
   useDeleteSocietaryDoc,
   useReanalyzeSocietaryDoc,
+  useRenameSocietaryDoc,
   getSocietarySignedUrl,
   societaryTipoLabel,
   SOCIETARY_TIPOS,
@@ -252,6 +256,45 @@ function SocietaryDocItem({
   const { toast } = useToast();
   const applyMut = useApplySocietaryExtraction(clinicId);
   const reanalyzeMut = useReanalyzeSocietaryDoc(clinicId);
+  const renameMut = useRenameSocietaryDoc(clinicId);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(doc.document.title);
+
+  const startEdit = () => {
+    setTitleDraft(doc.document.title);
+    setEditingTitle(true);
+  };
+  const cancelEdit = () => {
+    setEditingTitle(false);
+    setTitleDraft(doc.document.title);
+  };
+  const saveEdit = () => {
+    const trimmed = titleDraft.trim();
+    if (trimmed.length === 0) {
+      toast({ variant: "destructive", title: "O título não pode ficar vazio." });
+      return;
+    }
+    if (trimmed === doc.document.title) {
+      setEditingTitle(false);
+      return;
+    }
+    renameMut.mutate(
+      { id: doc.id, title: trimmed },
+      {
+        onSuccess: () => {
+          toast({ title: "Título atualizado" });
+          setEditingTitle(false);
+        },
+        onError: (err) =>
+          toast({
+            variant: "destructive",
+            title: "Falha ao renomear",
+            description: (err as Error).message,
+          }),
+      },
+    );
+  };
+
   const ext = doc.extraction;
   const sociosList = ext?.socios ?? [];
   const showReanalyze =
@@ -324,9 +367,72 @@ function SocietaryDocItem({
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2 min-w-0">
           <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-medium text-sm truncate">{doc.document.title}</p>
+              {editingTitle ? (
+                <div className="flex items-center gap-1 flex-1 min-w-0">
+                  <Input
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        saveEdit();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        cancelEdit();
+                      }
+                    }}
+                    autoFocus
+                    disabled={renameMut.isPending}
+                    maxLength={500}
+                    className="h-8 text-sm"
+                    data-testid={`input-rename-${doc.id}`}
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0"
+                    onClick={saveEdit}
+                    disabled={renameMut.isPending}
+                    title="Salvar"
+                    data-testid={`btn-save-rename-${doc.id}`}
+                  >
+                    {renameMut.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0"
+                    onClick={cancelEdit}
+                    disabled={renameMut.isPending}
+                    title="Cancelar"
+                    data-testid={`btn-cancel-rename-${doc.id}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <p className="font-medium text-sm truncate">
+                    {doc.document.title}
+                  </p>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 shrink-0"
+                    onClick={startEdit}
+                    title="Editar título"
+                    data-testid={`btn-edit-title-${doc.id}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              )}
               <Badge variant="outline" className="text-xs">
                 {societaryTipoLabel(doc.tipo)}
               </Badge>
