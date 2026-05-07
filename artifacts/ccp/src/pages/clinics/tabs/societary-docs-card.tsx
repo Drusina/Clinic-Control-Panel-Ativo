@@ -19,6 +19,11 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { getGetClinicQueryKey } from "@workspace/api-client-react";
 import { getListSociosQueryKey } from "@workspace/api-client-react";
@@ -36,6 +41,10 @@ import {
   Pencil,
   Check,
   X,
+  History,
+  ChevronDown,
+  ChevronRight,
+  Users,
 } from "lucide-react";
 import {
   useSocietaryDocs,
@@ -81,11 +90,28 @@ function fmtDate(iso: string): string {
   }
 }
 
+function fmtShortDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function isPending(doc: SocietaryDoc): boolean {
+  return doc.status === "error" || (doc.status === "ready" && !doc.appliedAt);
+}
+
 export default function SocietaryDocsCard({ clinicId }: { clinicId: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [tipo, setTipo] = useState<string>("contrato_social");
   const [file, setFile] = useState<File | null>(null);
+  const [historicoOpen, setHistoricoOpen] = useState(false);
 
   const { data: docs, isLoading } = useSocietaryDocs(clinicId);
   const uploadMut = useUploadSocietaryDoc(clinicId);
@@ -147,6 +173,10 @@ export default function SocietaryDocsCard({ clinicId }: { clinicId: string }) {
     qc.invalidateQueries({ queryKey: getGetClinicQueryKey(clinicId) });
   };
 
+  const list = docs ?? [];
+  const pendentes = list.filter(isPending);
+  const historico = list.filter((d) => !isPending(d));
+
   return (
     <Card>
       <CardHeader>
@@ -156,11 +186,13 @@ export default function SocietaryDocsCard({ clinicId }: { clinicId: string }) {
         </CardTitle>
         <CardDescription>
           Envie o Contrato Social, Alterações Contratuais ou Acordo de Sócios
-          (PDF até 10 MB). PDFs com texto e PDFs <span className="font-medium">escaneados</span>{" "}
-          são suportados — quando o PDF é só imagem, as páginas são enviadas para
-          a IA via análise visual. A extração identifica capital social, sócios,
+          (PDF até 10 MB). PDFs com texto e PDFs{" "}
+          <span className="font-medium">escaneados</span> são suportados —
+          quando o PDF é só imagem, as páginas são enviadas para a IA via
+          análise visual. A extração identifica capital social, sócios,
           percentual e valor das quotas, e o documento é arquivado com um título
-          profissional na <span className="font-medium">Biblioteca de Documentos</span>{" "}
+          profissional na{" "}
+          <span className="font-medium">Biblioteca de Documentos</span>{" "}
           (categoria "Contratos e Aditivos").
         </CardDescription>
       </CardHeader>
@@ -211,29 +243,110 @@ export default function SocietaryDocsCard({ clinicId }: { clinicId: string }) {
           </Button>
         </div>
 
-        {/* List */}
         {isLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
             Carregando…
           </div>
-        ) : !docs || docs.length === 0 ? (
+        ) : list.length === 0 ? (
           <p className="text-sm text-muted-foreground border border-dashed rounded-md py-6 text-center">
             Nenhum documento societário enviado ainda.
           </p>
         ) : (
-          <div className="space-y-3">
-            {docs.map((doc) => (
-              <SocietaryDocItem
-                key={doc.id}
-                clinicId={clinicId}
-                doc={doc}
-                onOpen={() => openDoc(doc.id)}
-                onDelete={() => onDelete(doc.id)}
-                onApplied={onApplied}
-              />
-            ))}
-          </div>
+          <>
+            {/* Pendentes em destaque */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-amber-500" />
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    Pendentes de revisão
+                  </h3>
+                  <Badge variant="secondary" className="text-xs">
+                    {pendentes.length}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground hidden sm:block">
+                  Documentos que precisam da sua atenção
+                </p>
+              </div>
+
+              {pendentes.length === 0 ? (
+                <p className="text-sm text-muted-foreground border border-dashed rounded-md py-6 text-center">
+                  Nenhum documento pendente. 🎉
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {pendentes.map((doc) => (
+                    <SocietaryDocItem
+                      key={doc.id}
+                      clinicId={clinicId}
+                      doc={doc}
+                      onOpen={() => openDoc(doc.id)}
+                      onDelete={() => onDelete(doc.id)}
+                      onApplied={onApplied}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Histórico colapsado */}
+            {historico.length > 0 && (
+              <Collapsible
+                open={historicoOpen}
+                onOpenChange={setHistoricoOpen}
+              >
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2.5 text-sm hover:bg-muted/60 transition-colors"
+                    data-testid="btn-toggle-historico-societario"
+                  >
+                    <div className="flex items-center gap-2">
+                      {historicoOpen ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <History className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">
+                        Histórico de documentos importados
+                      </span>
+                      <Badge variant="outline" className="text-xs">
+                        {historico.length}
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {historicoOpen ? "Ocultar" : "Ver"}
+                    </span>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <div className="rounded-md border overflow-hidden">
+                    <div className="divide-y">
+                      {historico.map((doc) => (
+                        <HistoryRow
+                          key={doc.id}
+                          clinicId={clinicId}
+                          doc={doc}
+                          onOpen={() => openDoc(doc.id)}
+                          onDelete={() => onDelete(doc.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2 px-1">
+                    Os arquivos continuam disponíveis na{" "}
+                    <span className="font-medium">
+                      Biblioteca de Documentos
+                    </span>{" "}
+                    mesmo após a remoção da análise.
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
@@ -363,7 +476,7 @@ function SocietaryDocItem({
   };
 
   return (
-    <div className="rounded-md border p-3 space-y-3 bg-card">
+    <div className="rounded-md border-2 border-amber-200 dark:border-amber-900/40 p-3 space-y-3 bg-amber-50/30 dark:bg-amber-950/10">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2 min-w-0">
           <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
@@ -503,8 +616,8 @@ function SocietaryDocItem({
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <p>
             Análise concluída sem sócios identificados. Use “Re-analisar” se o
-            documento contém sócios — uma nova passagem (incluindo análise visual
-            para PDFs escaneados) pode resolver.
+            documento contém sócios — uma nova passagem (incluindo análise
+            visual para PDFs escaneados) pode resolver.
           </p>
         </div>
       )}
@@ -553,7 +666,7 @@ function SocietaryDocItem({
                 {sociosList.map((s, i) => (
                   <label
                     key={i}
-                    className="flex items-start gap-2 text-sm rounded-md border p-2 hover:bg-accent/30 cursor-pointer"
+                    className="flex items-start gap-2 text-sm rounded-md border p-2 hover:bg-accent/30 cursor-pointer bg-card"
                   >
                     <Checkbox
                       checked={picked.has(i)}
@@ -607,6 +720,227 @@ function SocietaryDocItem({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function HistoryRow({
+  clinicId,
+  doc,
+  onOpen,
+  onDelete,
+}: {
+  clinicId: string;
+  doc: SocietaryDoc;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
+  const { toast } = useToast();
+  const reanalyzeMut = useReanalyzeSocietaryDoc(clinicId);
+  const renameMut = useRenameSocietaryDoc(clinicId);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(doc.document.title);
+
+  const startEdit = () => {
+    setTitleDraft(doc.document.title);
+    setEditingTitle(true);
+  };
+  const cancelEdit = () => {
+    setEditingTitle(false);
+    setTitleDraft(doc.document.title);
+  };
+  const saveEdit = () => {
+    const trimmed = titleDraft.trim();
+    if (trimmed.length === 0) {
+      toast({ variant: "destructive", title: "O título não pode ficar vazio." });
+      return;
+    }
+    if (trimmed === doc.document.title) {
+      setEditingTitle(false);
+      return;
+    }
+    renameMut.mutate(
+      { id: doc.id, title: trimmed },
+      {
+        onSuccess: () => {
+          toast({ title: "Título atualizado" });
+          setEditingTitle(false);
+        },
+        onError: (err) =>
+          toast({
+            variant: "destructive",
+            title: "Falha ao renomear",
+            description: (err as Error).message,
+          }),
+      },
+    );
+  };
+
+  const onReanalyze = () => {
+    reanalyzeMut.mutate(doc.id, {
+      onSuccess: (r) =>
+        toast({
+          title: "Documento re-analisado",
+          description:
+            r.status === "ready"
+              ? "A IA conseguiu extrair as informações desta vez."
+              : (r.errorMessage ?? "A análise ainda não foi possível."),
+          variant: r.status === "ready" ? "default" : "destructive",
+        }),
+      onError: (err) =>
+        toast({
+          variant: "destructive",
+          title: "Falha ao re-analisar",
+          description: (err as Error).message,
+        }),
+    });
+  };
+
+  const sociosCount = doc.extraction?.socios?.length ?? 0;
+  const dateIso = doc.appliedAt ?? doc.createdAt;
+
+  return (
+    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-2.5 text-sm hover:bg-muted/40 transition-colors">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums w-20">
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-500 shrink-0" />
+        {fmtShortDate(dateIso)}
+      </div>
+
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          {editingTitle ? (
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              <Input
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveEdit();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelEdit();
+                  }
+                }}
+                autoFocus
+                disabled={renameMut.isPending}
+                maxLength={500}
+                className="h-7 text-sm"
+                data-testid={`input-rename-history-${doc.id}`}
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 shrink-0"
+                onClick={saveEdit}
+                disabled={renameMut.isPending}
+                title="Salvar"
+              >
+                {renameMut.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 shrink-0"
+                onClick={cancelEdit}
+                disabled={renameMut.isPending}
+                title="Cancelar"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <p className="font-medium truncate">{doc.document.title}</p>
+          )}
+          <Badge variant="outline" className="text-[10px] py-0 h-4">
+            {societaryTipoLabel(doc.tipo)}
+          </Badge>
+          {doc.analysisMode === "vision" && (
+            <Badge
+              variant="outline"
+              className="text-[10px] py-0 h-4"
+              title="PDF escaneado (análise visual)"
+            >
+              <Eye className="h-2.5 w-2.5 mr-0.5" />
+              visão
+            </Badge>
+          )}
+          {doc.truncated && (
+            <Badge
+              variant="outline"
+              className="text-[10px] py-0 h-4"
+              title={
+                doc.pagesAnalyzed && doc.totalPages
+                  ? `Análise parcial: ${doc.pagesAnalyzed}/${doc.totalPages} páginas`
+                  : "Análise parcial"
+              }
+            >
+              parcial
+            </Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground truncate">
+          {sociosCount > 0 ? (
+            <>
+              <Users className="inline h-3 w-3 mr-1 -mt-0.5" />
+              {sociosCount} sócio{sociosCount > 1 ? "s" : ""} extraído
+              {sociosCount > 1 ? "s" : ""}
+              {" · "}
+            </>
+          ) : null}
+          <span className="font-mono">{doc.document.fileName}</span>
+        </p>
+      </div>
+
+      <div className="flex items-center gap-0.5 shrink-0">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={onOpen}
+          title="Abrir"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={onReanalyze}
+          disabled={reanalyzeMut.isPending}
+          title="Re-analisar"
+          data-testid={`btn-reanalyze-history-${doc.id}`}
+        >
+          {reanalyzeMut.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          onClick={startEdit}
+          title="Editar título"
+          data-testid={`btn-edit-title-history-${doc.id}`}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 text-destructive hover:text-destructive"
+          onClick={onDelete}
+          title="Remover análise"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }
