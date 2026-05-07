@@ -46,10 +46,14 @@ export interface ExtractedSocio {
 
 export interface SocietaryExtractionData {
   tipo_detectado?: string;
+  razao_social?: string | null;
+  data_referencia?: string | null;
   resumo?: string;
   capital_social?: number | null;
   socios?: ExtractedSocio[];
 }
+
+export type AnalysisMode = "text" | "vision";
 
 export interface SocietaryDoc {
   id: string;
@@ -59,6 +63,7 @@ export interface SocietaryDoc {
   status: "ready" | "error";
   errorMessage: string | null;
   extraction: SocietaryExtractionData | null;
+  analysisMode: AnalysisMode | null;
   appliedAt: string | null;
   createdAt: string;
   document: {
@@ -145,6 +150,21 @@ export function useApplySocietaryExtraction(clinicId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["societary-docs", clinicId] });
+    },
+  });
+}
+
+export function useReanalyzeSocietaryDoc(clinicId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<SocietaryDoc>(
+        `/api/clinics/${clinicId}/societary-docs/${id}/reanalyze`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["societary-docs", clinicId] });
+      qc.invalidateQueries({ queryKey: ["clinic-documents", clinicId] });
     },
   });
 }

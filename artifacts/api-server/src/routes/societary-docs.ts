@@ -15,12 +15,14 @@ import {
   extractSocietary,
   isExtractableMimeType,
   type SocietaryExtraction,
+  type AnalysisMode,
 } from "../lib/societaryExtractor.js";
 import {
   EmptyDocumentError,
   PdfExtractionError,
   UnsupportedFileTypeError,
 } from "../lib/aiSummarizer.js";
+import { buildProfessionalTitle } from "../lib/professionalTitle.js";
 
 const objectStorageService = new ObjectStorageService();
 const SIGNED_URL_TTL_SECONDS = 3600;
@@ -94,6 +96,7 @@ interface MappedExtraction {
   status: string;
   errorMessage: string | null;
   extraction: SocietaryExtraction | null;
+  analysisMode: AnalysisMode | null;
   appliedAt: string | null;
   createdAt: string;
   document: {
@@ -105,6 +108,14 @@ interface MappedExtraction {
     storagePath: string;
     createdAt: string;
   };
+}
+
+function readAnalysisMode(ext: unknown): AnalysisMode | null {
+  if (ext && typeof ext === "object" && "_analysis_mode" in ext) {
+    const v = (ext as Record<string, unknown>)._analysis_mode;
+    if (v === "text" || v === "vision") return v;
+  }
+  return null;
 }
 
 function mapRow(
@@ -119,6 +130,7 @@ function mapRow(
     status: e.status,
     errorMessage: e.errorMessage ?? null,
     extraction: (e.extraction as SocietaryExtraction | null) ?? null,
+    analysisMode: readAnalysisMode(e.extraction),
     appliedAt: e.appliedAt ? e.appliedAt.toISOString() : null,
     createdAt: e.createdAt.toISOString(),
     document: {
@@ -256,17 +268,18 @@ router.post(
     }
 
     const categoryId = await ensureSocietaryCategory(clinicId);
-    const cleanTitle = titleRaw.trim().length > 0 ? titleRaw.trim() : fileName;
 
     // Run AI extraction first (best-effort: we still persist the doc + an
     // extraction row in error state if the AI call fails, so the UI always
     // has a placeholder linked to the document).
     let extraction: SocietaryExtraction | null = null;
+    let analysisMode: AnalysisMode | null = null;
     let status = "ready";
     let errorMessage: string | null = null;
     try {
       const out = await extractSocietary(file.buffer, mimeType);
       extraction = out.extraction;
+      analysisMode = out.analysisMode;
     } catch (err) {
       status = "error";
       if (
@@ -283,6 +296,19 @@ router.post(
 
     const finalTipo =
       tipo !== "outro" ? tipo : (extraction?.tipo_detectado ?? "outro");
+
+    // If the operator did not supply an explicit title, use the professional
+    // title generated from AI extraction (when ready). Falls back to the
+    // raw filename when extraction failed or returned nothing useful.
+    const userProvidedTitle = titleRaw.trim().length > 0;
+    const computedTitle = userProvidedTitle
+      ? titleRaw.trim()
+      : buildProfessionalTitle({
+          tipo: finalTipo,
+          razaoSocial: extraction?.razao_social ?? null,
+          dataReferencia: extraction?.data_referencia ?? null,
+          fallbackFileName: fileName,
+        });
 
     // Persist clinic_documents + societary_extractions atomically so the UI
     // never sees a doc without its analysis row (or vice versa).
@@ -303,7 +329,7 @@ router.post(
           clinicId,
           categoryId,
           sequenceNumber: nextSeq,
-          title: cleanTitle,
+          title: computedTitle,
           fileName,
           storagePath,
           fileSize: size,
@@ -313,13 +339,18 @@ router.post(
         })
         .returning();
 
+      const persistedExtraction: Record<string, unknown> = {
+        ...((extraction ?? {}) as Record<string, unknown>),
+      };
+      if (analysisMode) persistedExtraction._analysis_mode = analysisMode;
+
       const [insertedExt] = await tx
         .insert(societaryExtractionsTable)
         .values({
           clinicId,
           documentId: insertedDoc.id,
           tipo: finalTipo,
-          extraction: (extraction ?? {}) as object,
+          extraction: persistedExtraction,
           status,
           errorMessage,
         })
@@ -479,6 +510,151 @@ router.post(
       sociosCreated: result.created.length,
       sociosUpdated: result.updated.length,
     });
+  },
+);
+
+router.post(
+  "/clinics/:clinicId/societary-docs/:id/reanalyze",
+  async (req, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId)
+      ? req.params.clinicId[0]
+      : req.params.clinicId;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const [row] = await db
+      .select({ e: societaryExtractionsTable, d: clinicDocumentsTable })
+      .from(societaryExtractionsTable)
+      .innerJoin(
+        clinicDocumentsTable,
+        eq(clinicDocumentsTable.id, societaryExtractionsTable.documentId),
+      )
+      .where(
+        and(
+          eq(societaryExtractionsTable.id, id),
+          eq(societaryExtractionsTable.clinicId, clinicId),
+        ),
+      );
+
+    if (!row) {
+      res.status(404).json({ error: "Extração não encontrada" });
+      return;
+    }
+
+    if (!row.d.storagePath.startsWith("/objects/")) {
+      res.status(410).json({
+        error: "Arquivo armazenado em local legado — não é possível re-analisar.",
+      });
+      return;
+    }
+
+    let fileBuffer: Buffer;
+    try {
+      const file = await objectStorageService.getObjectEntityFile(
+        row.d.storagePath,
+      );
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const stream = file.createReadStream();
+        stream.on("data", (c: Buffer) => chunks.push(c));
+        stream.on("end", () => resolve());
+        stream.on("error", (e: Error) => reject(e));
+      });
+      fileBuffer = Buffer.concat(chunks);
+    } catch (err) {
+      res.status(500).json({
+        error: `Falha ao baixar o arquivo do storage: ${(err as Error).message}`,
+      });
+      return;
+    }
+
+    const mimeType = row.d.fileType ?? "application/pdf";
+    let extraction: SocietaryExtraction | null = null;
+    let analysisMode: AnalysisMode | null = null;
+    let status = "ready";
+    let errorMessage: string | null = null;
+
+    try {
+      const out = await extractSocietary(fileBuffer, mimeType);
+      extraction = out.extraction;
+      analysisMode = out.analysisMode;
+    } catch (err) {
+      status = "error";
+      if (
+        err instanceof UnsupportedFileTypeError ||
+        err instanceof EmptyDocumentError ||
+        err instanceof PdfExtractionError
+      ) {
+        errorMessage = err.message;
+      } else {
+        errorMessage =
+          (err as Error).message ?? "Falha ao analisar o documento com IA.";
+      }
+    }
+
+    const finalTipo =
+      row.e.tipo && row.e.tipo !== "outro"
+        ? row.e.tipo
+        : (extraction?.tipo_detectado ?? row.e.tipo ?? "outro");
+
+    // Update title only if the previous title looked like a raw filename
+    // (still equal to fileName) — never overwrite an operator-edited title.
+    const titleLooksLikeFilename = row.d.title === row.d.fileName;
+    let newTitle: string | null = null;
+    if (status === "ready" && titleLooksLikeFilename) {
+      newTitle = buildProfessionalTitle({
+        tipo: finalTipo,
+        razaoSocial: extraction?.razao_social ?? null,
+        dataReferencia: extraction?.data_referencia ?? null,
+        fallbackFileName: row.d.fileName,
+      });
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const persistedExtraction: Record<string, unknown> = {
+        ...((extraction ?? {}) as Record<string, unknown>),
+      };
+      if (analysisMode) persistedExtraction._analysis_mode = analysisMode;
+
+      const [updatedExt] = await tx
+        .update(societaryExtractionsTable)
+        .set({
+          tipo: finalTipo,
+          extraction: persistedExtraction,
+          status,
+          errorMessage,
+          appliedAt: null,
+        })
+        .where(eq(societaryExtractionsTable.id, id))
+        .returning();
+
+      let updatedDoc = row.d;
+      if (newTitle) {
+        const [doc] = await tx
+          .update(clinicDocumentsTable)
+          .set({
+            title: newTitle,
+            summary: extraction?.resumo ?? row.d.summary,
+            summarizedAt: extraction?.resumo ? new Date() : row.d.summarizedAt,
+          })
+          .where(eq(clinicDocumentsTable.id, row.d.id))
+          .returning();
+        updatedDoc = doc;
+      } else if (status === "ready" && extraction?.resumo) {
+        const [doc] = await tx
+          .update(clinicDocumentsTable)
+          .set({
+            summary: extraction.resumo,
+            summarizedAt: new Date(),
+          })
+          .where(eq(clinicDocumentsTable.id, row.d.id))
+          .returning();
+        updatedDoc = doc;
+      }
+
+      return { ext: updatedExt, doc: updatedDoc };
+    });
+
+    res.json(mapRow(result.ext, result.doc));
   },
 );
 

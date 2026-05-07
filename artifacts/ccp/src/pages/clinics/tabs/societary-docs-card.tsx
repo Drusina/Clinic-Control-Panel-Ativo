@@ -31,12 +31,15 @@ import {
   Upload,
   CheckCircle2,
   AlertCircle,
+  RefreshCw,
+  Eye,
 } from "lucide-react";
 import {
   useSocietaryDocs,
   useUploadSocietaryDoc,
   useApplySocietaryExtraction,
   useDeleteSocietaryDoc,
+  useReanalyzeSocietaryDoc,
   getSocietarySignedUrl,
   societaryTipoLabel,
   SOCIETARY_TIPOS,
@@ -149,10 +152,12 @@ export default function SocietaryDocsCard({ clinicId }: { clinicId: string }) {
         </CardTitle>
         <CardDescription>
           Envie o Contrato Social, Alterações Contratuais ou Acordo de Sócios
-          (PDF até 10 MB). A IA extrai capital social, sócios, percentual e
-          valor das quotas para você revisar antes de aplicar. Os arquivos
-          também aparecem na <span className="font-medium">Biblioteca de
-          Documentos</span> (categoria "Contratos e Aditivos").
+          (PDF até 10 MB). PDFs com texto e PDFs <span className="font-medium">escaneados</span>{" "}
+          são suportados — quando o PDF é só imagem, as páginas são enviadas para
+          a IA via análise visual. A extração identifica capital social, sócios,
+          percentual e valor das quotas, e o documento é arquivado com um título
+          profissional na <span className="font-medium">Biblioteca de Documentos</span>{" "}
+          (categoria "Contratos e Aditivos").
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -246,8 +251,29 @@ function SocietaryDocItem({
 }) {
   const { toast } = useToast();
   const applyMut = useApplySocietaryExtraction(clinicId);
+  const reanalyzeMut = useReanalyzeSocietaryDoc(clinicId);
   const ext = doc.extraction;
   const sociosList = ext?.socios ?? [];
+
+  const onReanalyze = () => {
+    reanalyzeMut.mutate(doc.id, {
+      onSuccess: (r) =>
+        toast({
+          title: "Documento re-analisado",
+          description:
+            r.status === "ready"
+              ? "A IA conseguiu extrair as informações desta vez."
+              : (r.errorMessage ?? "A análise ainda não foi possível."),
+          variant: r.status === "ready" ? "default" : "destructive",
+        }),
+      onError: (err) =>
+        toast({
+          variant: "destructive",
+          title: "Falha ao re-analisar",
+          description: (err as Error).message,
+        }),
+    });
+  };
 
   const [applyCapital, setApplyCapital] = useState<boolean>(
     ext?.capital_social != null,
@@ -307,12 +333,19 @@ function SocietaryDocItem({
                   Aplicado
                 </Badge>
               )}
+              {doc.analysisMode === "vision" && (
+                <Badge variant="outline" className="text-xs">
+                  <Eye className="h-3 w-3 mr-1" />
+                  PDF escaneado (visão)
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               {fmtDate(doc.createdAt)} •{" "}
               {doc.document.fileSize
                 ? `${(doc.document.fileSize / 1024).toFixed(0)} KB`
-                : "—"}
+                : "—"}{" "}
+              • <span className="font-mono">{doc.document.fileName}</span>
             </p>
           </div>
         </div>
@@ -339,12 +372,31 @@ function SocietaryDocItem({
       </div>
 
       {doc.status === "error" ? (
-        <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/5 border border-destructive/30 rounded-md p-2">
-          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-          <p>
-            Não foi possível analisar este documento.{" "}
-            {doc.errorMessage ?? "Tente reenviar ou preencha os campos manualmente."}
-          </p>
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/5 border border-destructive/30 rounded-md p-2">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <p>
+              Não foi possível analisar este documento.{" "}
+              {doc.errorMessage ??
+                "Tente re-analisar ou preencha os campos manualmente."}
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onReanalyze}
+              disabled={reanalyzeMut.isPending}
+              data-testid={`btn-reanalyze-${doc.id}`}
+            >
+              {reanalyzeMut.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Re-analisar
+            </Button>
+          </div>
         </div>
       ) : (
         <>
