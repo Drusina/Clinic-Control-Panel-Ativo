@@ -8,8 +8,19 @@ const TIPO_LABEL_MAP: Record<string, string> = {
 const MAX_RAZAO_LEN = 60;
 const MAX_TITLE_LEN = 140;
 
-function tipoLabel(tipo: string | null | undefined): string {
+function tipoLabel(
+  tipo: string | null | undefined,
+  numeroAlteracao?: number | null,
+): string {
   if (!tipo) return TIPO_LABEL_MAP.outro;
+  if (
+    tipo === "alteracao" &&
+    typeof numeroAlteracao === "number" &&
+    Number.isFinite(numeroAlteracao) &&
+    numeroAlteracao > 0
+  ) {
+    return `${numeroAlteracao}ª Alteração Contratual`;
+  }
   return TIPO_LABEL_MAP[tipo] ?? TIPO_LABEL_MAP.outro;
 }
 
@@ -89,6 +100,7 @@ function formatDataReferencia(input: string | null | undefined): string | null {
 
 export interface BuildTitleInput {
   tipo: string | null | undefined;
+  numeroAlteracao?: number | null;
   razaoSocial?: string | null;
   dataReferencia?: string | null;
   fallbackFileName?: string | null;
@@ -97,12 +109,12 @@ export interface BuildTitleInput {
 /**
  * Build a professional title for a societary document.
  * Examples:
- *  - "Alteração Contratual — Milenio Serviços — 01/2016"
+ *  - "5ª Alteração Contratual — Milenio Serviços — 14/06/2024"
  *  - "Contrato Social — Acme LTDA"
  *  - falls back to a cleaned filename when no AI data is available.
  */
 export function buildProfessionalTitle(input: BuildTitleInput): string {
-  const label = tipoLabel(input.tipo);
+  const label = tipoLabel(input.tipo, input.numeroAlteracao ?? null);
   const razao = cleanRazaoSocial(input.razaoSocial ?? null);
   const date = formatDataReferencia(input.dataReferencia ?? null);
 

@@ -332,6 +332,7 @@ router.post(
       ? titleRaw.trim()
       : buildProfessionalTitle({
           tipo: finalTipo,
+          numeroAlteracao: extraction?.numero_alteracao ?? null,
           razaoSocial: extraction?.razao_social ?? null,
           dataReferencia: extraction?.data_referencia ?? null,
           fallbackFileName: fileName,
@@ -373,6 +374,9 @@ router.post(
       if (truncated) persistedExtraction._truncated = true;
       if (pagesAnalyzed > 0) persistedExtraction._pages_analyzed = pagesAnalyzed;
       if (totalPages > 0) persistedExtraction._total_pages = totalPages;
+      // Marca se o título foi gerado automaticamente — usado pelo reanalyze
+      // pra decidir se pode regenerar sem perder edição manual.
+      if (!userProvidedTitle) persistedExtraction._title_auto = true;
 
       const [insertedExt] = await tx
         .insert(societaryExtractionsTable)
@@ -508,19 +512,22 @@ router.post(
             updatedAt: Date;
           } = { updatedAt: new Date() };
           if (!match.cpf && candCpf) patch.cpf = candCpf;
-          if (match.percentual == null && cand.percentual != null) {
+          // Numa alteração contratual / contrato consolidado, o quadro pós-evento
+          // é o snapshot autoritativo. Sobrescrevemos quando a IA tem valor;
+          // não apagamos o que existe quando a IA devolve null.
+          if (cand.percentual != null) {
             patch.percentual = String(cand.percentual);
           }
-          if (match.valorQuotas == null && cand.valor_quotas != null) {
+          if (cand.valor_quotas != null) {
             patch.valorQuotas = String(cand.valor_quotas);
           }
-          if (!match.qualificacao && cand.qualificacao) {
+          if (cand.qualificacao) {
             patch.qualificacao = cand.qualificacao;
           }
           if (!match.dataEntrada && dataRef) {
             patch.dataEntrada = dataRef;
           }
-          // Se voltou a aparecer numa alteração contratual, deixa de ser retirado
+          // Se voltou a aparecer no quadro, deixa de ser retirado
           if (match.dataSaida) {
             patch.dataSaida = null;
           }
@@ -549,15 +556,11 @@ router.post(
       }
 
       // Marca como retirados os sócios atuais que não aparecem em NENHUM
-      // item da extração (não só nos selecionados). Só roda quando o usuário
-      // pediu explicitamente (checkbox), o tipo é "alteracao", e há data
-      // de referência pra usar como data de saída.
-      if (
-        wantsExitOmitted &&
-        extRow.tipo === "alteracao" &&
-        dataRef &&
-        allExtractedSocios.length > 0
-      ) {
+      // item da extração (não só nos selecionados). Roda quando o usuário
+      // confirmou no checkbox e existem dataRef + sócios extraídos para
+      // servir de quadro autoritativo. Não exigimos tipo === "alteracao"
+      // porque a IA confunde alteração consolidada com contrato_social.
+      if (wantsExitOmitted && dataRef && allExtractedSocios.length > 0) {
         // Constrói o conjunto de "ainda presentes" usando TODOS os sócios da extração
         const presentCpfs = new Set<string>();
         const presentNames = new Set<string>();
@@ -688,13 +691,17 @@ router.post(
         ? row.e.tipo
         : (extraction?.tipo_detectado ?? row.e.tipo ?? "outro");
 
-    // Update title only if the previous title looked like a raw filename
-    // (still equal to fileName) — never overwrite an operator-edited title.
+    // Regen title when (a) previous title looks like the raw filename or
+    // (b) the previous extraction still has the `_title_auto` marker
+    // (= title was generated, never edited by operator). The PATCH rename
+    // endpoint clears `_title_auto`, so manual edits are always preserved.
     const titleLooksLikeFilename = row.d.title === row.d.fileName;
+    const previousTitleWasAuto = readMetaBool(row.e.extraction, "_title_auto");
     let newTitle: string | null = null;
-    if (status === "ready" && titleLooksLikeFilename) {
+    if (status === "ready" && (titleLooksLikeFilename || previousTitleWasAuto)) {
       newTitle = buildProfessionalTitle({
         tipo: finalTipo,
+        numeroAlteracao: extraction?.numero_alteracao ?? null,
         razaoSocial: extraction?.razao_social ?? null,
         dataReferencia: extraction?.data_referencia ?? null,
         fallbackFileName: row.d.fileName,
@@ -709,6 +716,14 @@ router.post(
       if (truncated) persistedExtraction._truncated = true;
       if (pagesAnalyzed > 0) persistedExtraction._pages_analyzed = pagesAnalyzed;
       if (totalPages > 0) persistedExtraction._total_pages = totalPages;
+      // Preserva o marcador de "título auto" entre reanalyses pra que o
+      // próximo reanalyze também possa atualizar o título quando a IA mudar
+      // de opinião (ex: passou a detectar tipo=alteracao).
+      if (newTitle) {
+        persistedExtraction._title_auto = true;
+      } else if (previousTitleWasAuto) {
+        persistedExtraction._title_auto = true;
+      }
 
       const [updatedExt] = await tx
         .update(societaryExtractionsTable)
@@ -792,13 +807,33 @@ router.patch(
       return;
     }
 
-    const [updatedDoc] = await db
-      .update(clinicDocumentsTable)
-      .set({ title })
-      .where(eq(clinicDocumentsTable.id, row.d.id))
-      .returning();
+    const result = await db.transaction(async (tx) => {
+      const [updatedDoc] = await tx
+        .update(clinicDocumentsTable)
+        .set({ title })
+        .where(eq(clinicDocumentsTable.id, row.d.id))
+        .returning();
 
-    res.json(mapRow(row.e, updatedDoc));
+      // Marca que o título passou a ser editado manualmente — o reanalyze
+      // não vai sobrescrever em análises futuras.
+      let updatedExt = row.e;
+      if (readMetaBool(row.e.extraction, "_title_auto")) {
+        const newExt: Record<string, unknown> = {
+          ...((row.e.extraction ?? {}) as Record<string, unknown>),
+        };
+        delete newExt._title_auto;
+        const [ext] = await tx
+          .update(societaryExtractionsTable)
+          .set({ extraction: newExt })
+          .where(eq(societaryExtractionsTable.id, id))
+          .returning();
+        updatedExt = ext;
+      }
+
+      return { doc: updatedDoc, ext: updatedExt };
+    });
+
+    res.json(mapRow(result.ext, result.doc));
   },
 );
 

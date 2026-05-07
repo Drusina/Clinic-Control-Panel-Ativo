@@ -455,7 +455,6 @@ function SocietaryDocItem({
     () => new Set(sociosList.map((_, i) => i)),
   );
   const canMarkExited =
-    doc.tipo === "alteracao" &&
     typeof ext?.data_referencia === "string" &&
     ext.data_referencia.trim().length > 0 &&
     sociosList.length > 0;
@@ -737,11 +736,11 @@ function SocietaryDocItem({
                 className="mt-0.5"
               />
               <span className="leading-snug">
-                Marcar sócios atuais <strong>omitidos</strong> nesta alteração
+                Marcar sócios atuais <strong>omitidos</strong> neste documento
                 como <strong>retirados em {fmtDateBR(ext!.data_referencia!)}</strong>.
                 <span className="block text-xs text-muted-foreground mt-0.5">
-                  Use só quando esta alteração contratual lista o quadro
-                  societário completo após a mudança.
+                  Use quando este documento (alteração ou contrato consolidado)
+                  representa o quadro societário completo após a mudança.
                 </span>
               </span>
             </label>

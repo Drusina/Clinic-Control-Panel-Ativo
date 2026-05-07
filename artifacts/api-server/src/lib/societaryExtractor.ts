@@ -22,18 +22,32 @@ acordo de sócios), extraia informações estruturadas em JSON. NUNCA invente da
 se um campo não estiver no documento, devolva null. Não use markdown, devolva apenas JSON.`;
 
 const USER_INSTRUCTIONS = `Identifique:
-1. tipo do documento (contrato_social | alteracao | acordo_socios | outro)
-2. razão social/nome empresarial da pessoa jurídica (preferindo a denominação completa)
-3. data de referência do documento — preferencialmente a data de assinatura ou registro \
+1. tipo do documento (contrato_social | alteracao | acordo_socios | outro). \
+Regras de classificação (ordem de precedência):
+   - "alteracao" → o documento contém termos como "ALTERAÇÃO CONTRATUAL", \
+"INSTRUMENTO PARTICULAR DE ALTERAÇÃO", "ADITIVO", "CONSOLIDAÇÃO DA ALTERAÇÃO", \
+ou faz referência a um Contrato Social anterior que está sendo modificado;
+   - "contrato_social" → APENAS o ato constitutivo original ("CONTRATO SOCIAL", \
+"CONSTITUIÇÃO DA SOCIEDADE") sem menção a alteração de contrato anterior;
+   - "acordo_socios" → "ACORDO DE SÓCIOS" / "SHAREHOLDERS AGREEMENT";
+   - "outro" → quando não se encaixa nas categorias acima.
+2. número da alteração (apenas quando tipo=alteracao): número ordinal mencionado \
+no documento — ex: "5ª", "QUINTA", "5ª alteração contratual", "consolidação da 5ª". \
+Devolva como inteiro (1, 2, 3...) ou null se não estiver explícito.
+3. razão social/nome empresarial da pessoa jurídica (preferindo a denominação completa)
+4. data de referência do documento — preferencialmente a data de assinatura ou registro \
 (formato ISO YYYY-MM-DD ou YYYY-MM se só houver mês/ano)
-4. resumo executivo de 2-4 frases em PT-BR
-5. capital social total em R$ (apenas número, sem moeda)
-6. lista de sócios atuais com: nome completo, CPF (se houver), percentual de quotas, \
-valor das quotas em R$ (apenas número), qualificação (ex: "Sócio Administrador").
+5. resumo executivo de 2-4 frases em PT-BR
+6. capital social total em R$ APÓS esta alteração/contrato (apenas número, sem moeda)
+7. lista de sócios atuais APÓS esta alteração/contrato (NÃO inclua sócios que se \
+retiraram nesta alteração — só os que permanecem no quadro): nome completo, CPF \
+(se houver), percentual de quotas, valor das quotas em R$ (apenas número), \
+qualificação (ex: "Sócio Administrador").
 
 Devolva APENAS este JSON:
 {
   "tipo_detectado": "contrato_social" | "alteracao" | "acordo_socios" | "outro",
+  "numero_alteracao": number | null,
   "razao_social": "string" | null,
   "data_referencia": "string" | null,
   "resumo": "string",
@@ -61,6 +75,7 @@ const ExtractionSchema = z.object({
   tipo_detectado: z
     .enum(["contrato_social", "alteracao", "acordo_socios", "outro"])
     .default("outro"),
+  numero_alteracao: z.number().int().positive().nullable().optional(),
   razao_social: z.string().nullable().optional(),
   data_referencia: z.string().nullable().optional(),
   resumo: z.string().default(""),
