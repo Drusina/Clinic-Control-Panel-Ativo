@@ -396,6 +396,7 @@ router.post(
 interface ApplyBody {
   applyCapitalSocial?: boolean;
   socioIndices?: number[]; // indices into extraction.socios
+  markOmittedAsExited?: boolean; // marca sócios existentes ausentes da extração como retirados na data_referencia
 }
 
 function normalizeName(s: string): string {
@@ -420,6 +421,7 @@ router.post(
     const wantedIdx = new Set(
       Array.isArray(body.socioIndices) ? body.socioIndices : [],
     );
+    const wantsExitOmitted = body.markOmittedAsExited === true;
 
     const [extRow] = await db
       .select()
@@ -443,6 +445,15 @@ router.post(
     }
 
     const extraction = extRow.extraction as SocietaryExtraction;
+
+    // data de referência do documento (data de assinatura/registro), usada para
+    // preencher data_entrada automaticamente nos sócios criados/atualizados e
+    // data_saida nos sócios omitidos quando o usuário pediu (alteração contratual).
+    const dataRef =
+      typeof extraction.data_referencia === "string" &&
+      extraction.data_referencia.trim().length > 0
+        ? extraction.data_referencia.trim()
+        : null;
 
     const result = await db.transaction(async (tx) => {
       let capitalUpdated = false;
@@ -476,10 +487,11 @@ router.post(
 
       const created: string[] = [];
       const updated: string[] = [];
+      const exited: string[] = [];
+      const matchedExistingIds = new Set<string>();
 
-      const candidates = (extraction.socios ?? []).filter((_s, i) =>
-        wantedIdx.has(i),
-      );
+      const allExtractedSocios = extraction.socios ?? [];
+      const candidates = allExtractedSocios.filter((_s, i) => wantedIdx.has(i));
 
       for (const cand of candidates) {
         const candCpf = digitsOnly(cand.cpf ?? null);
@@ -491,6 +503,7 @@ router.post(
         });
 
         if (match) {
+          matchedExistingIds.add(match.id);
           const patch: Partial<typeof sociosTable.$inferInsert> & {
             updatedAt: Date;
           } = { updatedAt: new Date() };
@@ -503,6 +516,13 @@ router.post(
           }
           if (!match.qualificacao && cand.qualificacao) {
             patch.qualificacao = cand.qualificacao;
+          }
+          if (!match.dataEntrada && dataRef) {
+            patch.dataEntrada = dataRef;
+          }
+          // Se voltou a aparecer numa alteração contratual, deixa de ser retirado
+          if (match.dataSaida) {
+            patch.dataSaida = null;
           }
           await tx
             .update(sociosTable)
@@ -520,10 +540,45 @@ router.post(
               valorQuotas:
                 cand.valor_quotas != null ? String(cand.valor_quotas) : null,
               qualificacao: cand.qualificacao ?? null,
+              dataEntrada: dataRef,
               origem: "ia_societario",
             })
             .returning({ id: sociosTable.id });
           created.push(row.id);
+        }
+      }
+
+      // Marca como retirados os sócios atuais que não aparecem em NENHUM
+      // item da extração (não só nos selecionados). Só roda quando o usuário
+      // pediu explicitamente (checkbox), o tipo é "alteracao", e há data
+      // de referência pra usar como data de saída.
+      if (
+        wantsExitOmitted &&
+        extRow.tipo === "alteracao" &&
+        dataRef &&
+        allExtractedSocios.length > 0
+      ) {
+        // Constrói o conjunto de "ainda presentes" usando TODOS os sócios da extração
+        const presentCpfs = new Set<string>();
+        const presentNames = new Set<string>();
+        for (const s of allExtractedSocios) {
+          const c = digitsOnly(s.cpf ?? null);
+          if (c) presentCpfs.add(c);
+          presentNames.add(normalizeName(s.nome));
+        }
+        for (const s of existing) {
+          if (s.dataSaida) continue; // já marcado como retirado
+          const sc = digitsOnly(s.cpf ?? null);
+          const sn = normalizeName(s.nome);
+          const stillPresent =
+            (sc && presentCpfs.has(sc)) || presentNames.has(sn);
+          if (!stillPresent) {
+            await tx
+              .update(sociosTable)
+              .set({ dataSaida: dataRef, updatedAt: new Date() })
+              .where(eq(sociosTable.id, s.id));
+            exited.push(s.id);
+          }
         }
       }
 
@@ -532,13 +587,14 @@ router.post(
         .set({ appliedAt: new Date() })
         .where(eq(societaryExtractionsTable.id, id));
 
-      return { capitalUpdated, created, updated };
+      return { capitalUpdated, created, updated, exited };
     });
 
     res.json({
       capitalUpdated: result.capitalUpdated,
       sociosCreated: result.created.length,
       sociosUpdated: result.updated.length,
+      sociosExited: result.exited.length,
     });
   },
 );

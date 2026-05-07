@@ -20,6 +20,7 @@ function mapSocio(s: typeof sociosTable.$inferSelect) {
     qualificacao: s.qualificacao ?? null,
     qualId: s.qualId ?? null,
     dataEntrada: s.dataEntrada ?? null,
+    dataSaida: s.dataSaida ?? null,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   };
@@ -62,6 +63,7 @@ router.post("/clinics/:clinicId/socios", async (req, res): Promise<void> => {
       qualificacao: d.qualificacao ?? null,
       qualId: d.qualId ?? null,
       dataEntrada: d.dataEntrada ?? null,
+      dataSaida: d.dataSaida ?? null,
     })
     .returning();
 
@@ -86,6 +88,7 @@ router.patch("/clinics/:clinicId/socios/:socioId", async (req, res): Promise<voi
   if (d.qualificacao !== undefined) updates.qualificacao = d.qualificacao;
   if (d.qualId !== undefined) updates.qualId = d.qualId;
   if (d.dataEntrada !== undefined) updates.dataEntrada = d.dataEntrada;
+  if (d.dataSaida !== undefined) updates.dataSaida = d.dataSaida;
 
   const [socio] = await db
     .update(sociosTable)

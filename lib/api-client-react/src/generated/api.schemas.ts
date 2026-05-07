@@ -314,6 +314,8 @@ export interface Socio {
   qualId?: string | null;
   /** @nullable */
   dataEntrada?: string | null;
+  /** @nullable */
+  dataSaida?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -340,6 +342,8 @@ export interface CreateSocioBody {
   qualId?: string | null;
   /** @nullable */
   dataEntrada?: string | null;
+  /** @nullable */
+  dataSaida?: string | null;
 }
 
 export interface UpdateSocioBody {
@@ -365,6 +369,8 @@ export interface UpdateSocioBody {
   qualId?: string | null;
   /** @nullable */
   dataEntrada?: string | null;
+  /** @nullable */
+  dataSaida?: string | null;
 }
 
 export interface SocietaryDocDocument {

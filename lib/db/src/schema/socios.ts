@@ -20,6 +20,7 @@ export const sociosTable = pgTable("socios", {
   qualificacao: text("qualificacao"),
   qualId: text("qual_id"),
   dataEntrada: text("data_entrada"),
+  dataSaida: text("data_saida"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

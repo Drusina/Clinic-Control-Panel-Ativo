@@ -137,20 +137,36 @@ export interface ApplySocietaryInput {
   id: string;
   applyCapitalSocial: boolean;
   socioIndices: number[];
+  markOmittedAsExited?: boolean;
+}
+
+export interface ApplySocietaryResult {
+  capitalUpdated: boolean;
+  sociosCreated: number;
+  sociosUpdated: number;
+  sociosExited: number;
 }
 
 export function useApplySocietaryExtraction(clinicId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, applyCapitalSocial, socioIndices }: ApplySocietaryInput) =>
-      apiFetch<{
-        capitalUpdated: boolean;
-        sociosCreated: number;
-        sociosUpdated: number;
-      }>(`/api/clinics/${clinicId}/societary-docs/${id}/apply`, {
-        method: "POST",
-        body: JSON.stringify({ applyCapitalSocial, socioIndices }),
-      }),
+    mutationFn: ({
+      id,
+      applyCapitalSocial,
+      socioIndices,
+      markOmittedAsExited,
+    }: ApplySocietaryInput) =>
+      apiFetch<ApplySocietaryResult>(
+        `/api/clinics/${clinicId}/societary-docs/${id}/apply`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            applyCapitalSocial,
+            socioIndices,
+            markOmittedAsExited: markOmittedAsExited === true,
+          }),
+        },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["societary-docs", clinicId] });
     },

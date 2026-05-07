@@ -440,6 +440,7 @@ export const ListSociosResponseItem = zod.object({
   qualificacao: zod.string().nullish(),
   qualId: zod.string().nullish(),
   dataEntrada: zod.string().nullish(),
+  dataSaida: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -464,6 +465,7 @@ export const CreateSocioBody = zod.object({
   qualificacao: zod.string().nullish(),
   qualId: zod.string().nullish(),
   dataEntrada: zod.string().nullish(),
+  dataSaida: zod.string().nullish(),
 });
 
 /**
@@ -486,6 +488,7 @@ export const UpdateSocioBody = zod.object({
   qualificacao: zod.string().nullish(),
   qualId: zod.string().nullish(),
   dataEntrada: zod.string().nullish(),
+  dataSaida: zod.string().nullish(),
 });
 
 export const UpdateSocioResponse = zod.object({
@@ -503,6 +506,7 @@ export const UpdateSocioResponse = zod.object({
   qualificacao: zod.string().nullish(),
   qualId: zod.string().nullish(),
   dataEntrada: zod.string().nullish(),
+  dataSaida: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

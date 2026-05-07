@@ -90,6 +90,20 @@ function fmtDate(iso: string): string {
   }
 }
 
+function fmtDateBR(iso: string): string {
+  if (!iso) return "—";
+  const m = iso.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if (m) {
+    const [, y, mo, d] = m;
+    return d ? `${d}/${mo}/${y}` : `${mo}/${y}`;
+  }
+  try {
+    return new Date(iso).toLocaleDateString("pt-BR");
+  } catch {
+    return iso;
+  }
+}
+
 function fmtShortDate(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString("pt-BR", {
@@ -440,6 +454,12 @@ function SocietaryDocItem({
   const [picked, setPicked] = useState<Set<number>>(
     () => new Set(sociosList.map((_, i) => i)),
   );
+  const canMarkExited =
+    doc.tipo === "alteracao" &&
+    typeof ext?.data_referencia === "string" &&
+    ext.data_referencia.trim().length > 0 &&
+    sociosList.length > 0;
+  const [markExited, setMarkExited] = useState<boolean>(canMarkExited);
 
   const togglePick = (i: number) => {
     setPicked((prev) => {
@@ -456,12 +476,21 @@ function SocietaryDocItem({
         id: doc.id,
         applyCapitalSocial: applyCapital,
         socioIndices: Array.from(picked),
+        markOmittedAsExited: canMarkExited && markExited,
       },
       {
         onSuccess: (r) => {
+          const parts = [
+            `Capital ${r.capitalUpdated ? "atualizado" : "mantido"}`,
+            `sócios criados: ${r.sociosCreated}`,
+            `atualizados: ${r.sociosUpdated}`,
+          ];
+          if (r.sociosExited > 0) {
+            parts.push(`marcados como retirados: ${r.sociosExited}`);
+          }
           toast({
             title: "Sugestões aplicadas",
-            description: `Capital ${r.capitalUpdated ? "atualizado" : "mantido"}, sócios criados: ${r.sociosCreated}, atualizados: ${r.sociosUpdated}.`,
+            description: parts.join(", ") + ".",
           });
           onApplied();
         },
@@ -700,6 +729,23 @@ function SocietaryDocItem({
               </div>
             </div>
           )}
+          {canMarkExited && (
+            <label className="flex items-start gap-2 text-sm rounded-md border border-amber-300 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 p-2">
+              <Checkbox
+                checked={markExited}
+                onCheckedChange={(v) => setMarkExited(v === true)}
+                className="mt-0.5"
+              />
+              <span className="leading-snug">
+                Marcar sócios atuais <strong>omitidos</strong> nesta alteração
+                como <strong>retirados em {fmtDateBR(ext!.data_referencia!)}</strong>.
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Use só quando esta alteração contratual lista o quadro
+                  societário completo após a mudança.
+                </span>
+              </span>
+            </label>
+          )}
           {(ext?.capital_social != null || sociosList.length > 0) && (
             <div className="flex justify-end">
               <Button
@@ -707,7 +753,7 @@ function SocietaryDocItem({
                 onClick={onApply}
                 disabled={
                   applyMut.isPending ||
-                  (!applyCapital && picked.size === 0)
+                  (!applyCapital && picked.size === 0 && !(canMarkExited && markExited))
                 }
                 data-testid={`btn-apply-${doc.id}`}
               >

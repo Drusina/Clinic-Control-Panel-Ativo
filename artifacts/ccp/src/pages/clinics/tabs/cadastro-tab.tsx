@@ -72,7 +72,22 @@ const socioFormSchema = z.object({
   cargo: z.string().optional(),
   qualificacao: z.string().optional(),
   dataEntrada: z.string().optional(),
+  dataSaida: z.string().optional(),
 });
+
+function fmtDateBR(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const m = iso.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if (m) {
+    const [, y, mo, d] = m;
+    return d ? `${d}/${mo}/${y}` : `${mo}/${y}`;
+  }
+  try {
+    return new Date(iso).toLocaleDateString("pt-BR");
+  } catch {
+    return iso;
+  }
+}
 
 function brl(v: number | string | null | undefined): string {
   if (v == null || v === "") return "—";
@@ -141,6 +156,7 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
       cargo: "",
       qualificacao: "",
       dataEntrada: "",
+      dataSaida: "",
     },
   });
 
@@ -168,6 +184,7 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
         cargo: socio.cargo ?? "",
         qualificacao: socio.qualificacao ?? "",
         dataEntrada: socio.dataEntrada?.split("T")[0] ?? "",
+        dataSaida: socio.dataSaida?.split("T")[0] ?? "",
       });
     } else {
       setEditingSocio(null);
@@ -179,6 +196,7 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
         cargo: "",
         qualificacao: "",
         dataEntrada: "",
+        dataSaida: "",
       });
     }
     setIsSocioDialogOpen(true);
@@ -198,6 +216,7 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
       cargo: values.cargo?.trim() || null,
       qualificacao: values.qualificacao?.trim() || null,
       dataEntrada: values.dataEntrada?.trim() || null,
+      dataSaida: values.dataSaida?.trim() || null,
     };
     if (editingSocio) {
       updateSocio.mutate(
@@ -491,13 +510,33 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
             <div className="text-center py-4"><Loader2 className="h-5 w-5 animate-spin mx-auto text-primary" /></div>
           ) : socios && socios.length > 0 ? (
             <div className="space-y-2">
-              {socios.map((socio: Socio) => (
-                <div key={socio.id} className="flex items-start justify-between gap-3 p-3 rounded-lg border bg-card">
+              {[...socios]
+                .sort((a, b) => {
+                  const aOut = a.dataSaida ? 1 : 0;
+                  const bOut = b.dataSaida ? 1 : 0;
+                  if (aOut !== bOut) return aOut - bOut;
+                  if (aOut === 1) {
+                    return (b.dataSaida ?? "").localeCompare(a.dataSaida ?? "");
+                  }
+                  return a.nome.localeCompare(b.nome, "pt-BR");
+                })
+                .map((socio: Socio) => {
+                const retirado = !!socio.dataSaida;
+                return (
+                <div
+                  key={socio.id}
+                  className={`flex items-start justify-between gap-3 p-3 rounded-lg border bg-card ${retirado ? "opacity-60" : ""}`}
+                >
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     <UserCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm">{socio.nome}</p>
+                        <p className={`font-medium text-sm ${retirado ? "line-through text-muted-foreground" : ""}`}>
+                          {socio.nome}
+                        </p>
+                        {retirado && (
+                          <Badge variant="destructive" className="text-xs">Retirado</Badge>
+                        )}
                         {socio.qualificacao && (
                           <Badge variant="outline" className="text-xs">{socio.qualificacao}</Badge>
                         )}
@@ -516,7 +555,10 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                           <div><span className="font-medium text-foreground">Valor:</span> {brl(socio.valorQuotas)}</div>
                         )}
                         {socio.dataEntrada && (
-                          <div><span className="font-medium text-foreground">Desde:</span> {socio.dataEntrada}</div>
+                          <div><span className="font-medium text-foreground">Desde:</span> {fmtDateBR(socio.dataEntrada)}</div>
+                        )}
+                        {socio.dataSaida && (
+                          <div><span className="font-medium text-foreground">Até:</span> {fmtDateBR(socio.dataSaida)}</div>
                         )}
                       </div>
                     </div>
@@ -540,7 +582,8 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground text-sm border border-dashed rounded-lg">
@@ -625,17 +668,36 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={socioForm.control}
-                name="dataEntrada"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Data de Entrada</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={socioForm.control}
+                  name="dataEntrada"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data de Entrada</FormLabel>
+                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={socioForm.control}
+                  name="dataSaida"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Data de Saída
+                        <span className="text-muted-foreground font-normal">
+                          {" "}
+                          (se retirado)
+                        </span>
+                      </FormLabel>
+                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <DialogFooter>
                 <Button type="submit" disabled={createSocio.isPending || updateSocio.isPending}>
                   Salvar
