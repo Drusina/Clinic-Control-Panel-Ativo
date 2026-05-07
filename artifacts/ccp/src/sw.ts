@@ -10,7 +10,18 @@ cleanupOutdatedCaches();
 
 precacheAndRoute(self.__WB_MANIFEST);
 
+// Quando uma nova versão é instalada, controla as abas abertas imediatamente
+// (sem precisar de duplo reload). O `skipWaiting()` é disparado pelo cliente
+// via mensagem SKIP_WAITING (ver main.tsx → updateSW).
+self.addEventListener("activate", (event: ExtendableEvent) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener("message", (event: ExtendableMessageEvent) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
   if (event.data?.type === "CLEAR_API_CACHE") {
     event.waitUntil(
       caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
