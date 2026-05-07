@@ -217,9 +217,9 @@ router.post(
     const fileName = decodeMultipartFilename(file.originalname || "documento.pdf");
     const mimeType = file.mimetype || "application/pdf";
 
-    if (!isExtractableMimeType(mimeType)) {
+    if (mimeType !== "application/pdf" || !isExtractableMimeType(mimeType)) {
       res.status(415).json({
-        error: `Tipo não suportado para análise societária: ${mimeType}. Use PDF ou texto.`,
+        error: `Tipo não suportado para análise societária: ${mimeType}. Envie um arquivo PDF.`,
       });
       return;
     }

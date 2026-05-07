@@ -163,7 +163,7 @@ export default function SocietaryDocsCard({ clinicId }: { clinicId: string }) {
             <Input
               id="societary-file-input"
               type="file"
-              accept="application/pdf,text/plain"
+              accept="application/pdf"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               data-testid="input-societary-file"
             />
