@@ -360,7 +360,7 @@ export default function Clinics() {
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <Link
-                              href={`/admin/clinicas/${clinic.id}/editar`}
+                              href={`/admin/clinicas/${clinic.id}`}
                               className="cursor-pointer w-full"
                               data-testid={`link-edit-${clinic.id}`}
                             >
