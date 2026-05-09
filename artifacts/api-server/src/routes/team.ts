@@ -441,6 +441,27 @@ router.post(
       return;
     }
 
+    const ALLOWED_MIME = new Set([
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel.sheet.macroEnabled.12",
+      "application/octet-stream", // some browsers don't set the proper MIME
+    ]);
+    const filename = file.originalname || "";
+    const hasXlsxExt = /\.xlsx$/i.test(filename);
+    if (!hasXlsxExt) {
+      res.status(400).json({ error: "Envie um arquivo .xlsx (Excel)." });
+      return;
+    }
+    if (file.mimetype && !ALLOWED_MIME.has(file.mimetype)) {
+      res.status(400).json({ error: `Tipo de arquivo não suportado: ${file.mimetype}. Envie um .xlsx.` });
+      return;
+    }
+    // xlsx magic bytes: PK\x03\x04 (ZIP container)
+    if (file.buffer.length < 4 || !(file.buffer[0] === 0x50 && file.buffer[1] === 0x4b && file.buffer[2] === 0x03 && file.buffer[3] === 0x04)) {
+      res.status(400).json({ error: "Arquivo não é um .xlsx válido (assinatura inválida)." });
+      return;
+    }
+
     let workbook: XLSX.WorkBook;
     try {
       workbook = XLSX.read(file.buffer, { type: "buffer", cellDates: false });
