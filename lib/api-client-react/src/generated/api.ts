@@ -42,6 +42,7 @@ import type {
   GetSocietaryDocSignedUrl200,
   HealthStatus,
   ImportTeamSpreadsheet200,
+  ImportTeamSpreadsheetBody,
   InviteUserBody,
   InviteUserResponse,
   Kickoff,
@@ -3905,19 +3906,18 @@ export const getImportTeamSpreadsheetUrl = (clinicId: string) => {
 
 export const importTeamSpreadsheet = async (
   clinicId: string,
-  importTeamSpreadsheetBody: Blob,
+  importTeamSpreadsheetBody: ImportTeamSpreadsheetBody,
   options?: RequestInit,
 ): Promise<ImportTeamSpreadsheet200> => {
+  const formData = new FormData();
+  formData.append(`file`, importTeamSpreadsheetBody.file);
+
   return customFetch<ImportTeamSpreadsheet200>(
     getImportTeamSpreadsheetUrl(clinicId),
     {
       ...options,
       method: "POST",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        ...options?.headers,
-      },
-      body: JSON.stringify(importTeamSpreadsheetBody),
+      body: formData,
     },
   );
 };
@@ -3929,14 +3929,14 @@ export const getImportTeamSpreadsheetMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof importTeamSpreadsheet>>,
     TError,
-    { clinicId: string; data: BodyType<Blob> },
+    { clinicId: string; data: BodyType<ImportTeamSpreadsheetBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof importTeamSpreadsheet>>,
   TError,
-  { clinicId: string; data: BodyType<Blob> },
+  { clinicId: string; data: BodyType<ImportTeamSpreadsheetBody> },
   TContext
 > => {
   const mutationKey = ["importTeamSpreadsheet"];
@@ -3950,7 +3950,7 @@ export const getImportTeamSpreadsheetMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof importTeamSpreadsheet>>,
-    { clinicId: string; data: BodyType<Blob> }
+    { clinicId: string; data: BodyType<ImportTeamSpreadsheetBody> }
   > = (props) => {
     const { clinicId, data } = props ?? {};
 
@@ -3963,7 +3963,8 @@ export const getImportTeamSpreadsheetMutationOptions = <
 export type ImportTeamSpreadsheetMutationResult = NonNullable<
   Awaited<ReturnType<typeof importTeamSpreadsheet>>
 >;
-export type ImportTeamSpreadsheetMutationBody = BodyType<Blob>;
+export type ImportTeamSpreadsheetMutationBody =
+  BodyType<ImportTeamSpreadsheetBody>;
 export type ImportTeamSpreadsheetMutationError = ErrorType<void>;
 
 /**
@@ -3976,14 +3977,14 @@ export const useImportTeamSpreadsheet = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof importTeamSpreadsheet>>,
     TError,
-    { clinicId: string; data: BodyType<Blob> },
+    { clinicId: string; data: BodyType<ImportTeamSpreadsheetBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof importTeamSpreadsheet>>,
   TError,
-  { clinicId: string; data: BodyType<Blob> },
+  { clinicId: string; data: BodyType<ImportTeamSpreadsheetBody> },
   TContext
 > => {
   return useMutation(getImportTeamSpreadsheetMutationOptions(options));

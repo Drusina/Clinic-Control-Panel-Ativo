@@ -935,6 +935,11 @@ export type ListActionsParams = {
   coluna?: string | null;
 };
 
+export type ImportTeamSpreadsheetBody = {
+  /** .xlsx workbook (≤ 2MB) */
+  file: Blob;
+};
+
 export type ImportTeamSpreadsheet200ErrorsItem = {
   row: number;
   /** @nullable */

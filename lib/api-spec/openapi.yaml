@@ -995,15 +995,16 @@ paths:
             type: string
       requestBody:
         required: true
-        description: |
-          multipart/form-data with a single field `file` containing the
-          .xlsx workbook (≤ 2MB). Documented separately because OpenAPI/Orval
-          generated client cannot model browser File handles in a Node lib.
         content:
-          application/octet-stream:
+          multipart/form-data:
             schema:
-              type: string
-              format: binary
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: .xlsx workbook (≤ 2MB)
       responses:
         "200":
           description: Import summary

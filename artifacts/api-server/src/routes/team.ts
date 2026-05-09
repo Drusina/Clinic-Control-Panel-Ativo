@@ -482,8 +482,10 @@ router.post(
 
     const summary: ImportSummary = { created: 0, updated: 0, skipped: 0, errors: [] };
 
+    try {
+      await db.transaction(async (tx) => {
     // Pre-load existing members for this clinic for matching
-    const existing = await db.select().from(teamTable).where(eq(teamTable.clinicId, clinicId));
+    const existing = await tx.select().from(teamTable).where(eq(teamTable.clinicId, clinicId));
     const byCpf = new Map<string, typeof teamTable.$inferSelect>();
     const byEmail = new Map<string, typeof teamTable.$inferSelect>();
     const ambiguousEmails = new Set<string>();
@@ -584,23 +586,43 @@ router.post(
             }
           }
           if (Object.keys(updates).length > 0) {
-            await db.update(teamTable).set(updates).where(eq(teamTable.id, match.id));
+            await tx.update(teamTable).set(updates).where(eq(teamTable.id, match.id));
           }
           summary.updated++;
           // Refresh maps to handle dup rows in the same import
           if (cpf) byCpf.set(cpf, { ...match, ...updates } as typeof teamTable.$inferSelect);
           if (email) byEmail.set(email, { ...match, ...updates } as typeof teamTable.$inferSelect);
         } else {
-          const [created] = await db.insert(teamTable).values(values).returning();
+          const [created] = await tx.insert(teamTable).values(values).returning();
           summary.created++;
           if (created.cpf) byCpf.set(created.cpf, created);
           if (created.email) byEmail.set(created.email.toLowerCase(), created);
         }
       } catch (err) {
+        // Per-row error: record + rollback the entire batch by throwing.
         const message = err instanceof Error ? err.message : "Erro ao gravar linha";
         summary.errors.push({ row: xlsxRow, message });
         summary.skipped++;
+        throw new Error("__import_row_failed__");
       }
+    }
+      });
+    } catch (err) {
+      // If we aborted because of a per-row failure, the per-row error is
+      // already in summary.errors. Reset created/updated since the tx rolled
+      // back and report skipped totals + a top-level note.
+      if (err instanceof Error && err.message === "__import_row_failed__") {
+        const totalRows = summary.created + summary.updated + summary.skipped;
+        summary.created = 0;
+        summary.updated = 0;
+        summary.skipped = totalRows;
+        res.status(409).json({
+          ...summary,
+          error: "Importação revertida: uma ou mais linhas falharam. Corrija os erros e reenvie.",
+        });
+        return;
+      }
+      throw err;
     }
 
     res.json(summary);

@@ -1114,6 +1114,10 @@ export const ImportTeamSpreadsheetParams = zod.object({
   clinicId: zod.coerce.string(),
 });
 
+export const ImportTeamSpreadsheetBody = zod.object({
+  file: zod.instanceof(File).describe(".xlsx workbook (≤ 2MB)"),
+});
+
 export const ImportTeamSpreadsheetResponse = zod.object({
   created: zod.number(),
   updated: zod.number(),
