@@ -110,6 +110,7 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -231,6 +232,36 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
           },
         }
       );
+    }
+  };
+
+  const exportTeam = async () => {
+    setExporting(true);
+    try {
+      const token = getStoredToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${BASE}/api/clinics/${clinicId}/team/export`, { headers });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error ?? res.statusText);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const match = cd.match(/filename="?([^";]+)"?/i);
+      const filename = match?.[1] || "Quadro_Funcional.xlsx";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Planilha exportada", description: `${(team ?? []).length} membro(s) incluídos.` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao exportar planilha";
+      toast({ variant: "destructive", title: "Erro ao exportar", description: message });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -389,6 +420,15 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
           <Button variant="outline" onClick={downloadTemplate} disabled={downloading}>
             {downloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Baixar modelo
+          </Button>
+          <Button
+            variant="outline"
+            onClick={exportTeam}
+            disabled={exporting || !team || team.length === 0}
+            title={!team || team.length === 0 ? "Nenhum membro para exportar" : undefined}
+          >
+            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileSpreadsheet className="mr-2 h-4 w-4" />}
+            Exportar planilha
           </Button>
           <Button variant="outline" onClick={openImport}>
             <Upload className="mr-2 h-4 w-4" /> Importar planilha

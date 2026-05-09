@@ -748,6 +748,114 @@ router.post(
   },
 );
 
+function formatDateBR(iso: string | null): string {
+  if (!iso) return "";
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function formatCpfBR(digits: string | null): string {
+  if (!digits) return "";
+  const d = digits.replace(/\D/g, "");
+  if (d.length !== 11) return digits;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+router.get("/clinics/:clinicId/team/export", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  if (await assertClinicAccess(req, res, clinicId)) return;
+
+  const [clinic] = await db
+    .select({ nome: clinicsTable.nome, cnpj: clinicsTable.cnpj, cidade: clinicsTable.cidade, uf: clinicsTable.uf })
+    .from(clinicsTable)
+    .where(eq(clinicsTable.id, clinicId));
+
+  if (!clinic) {
+    res.status(404).json({ error: "Clínica não encontrada" });
+    return;
+  }
+
+  const members = await db
+    .select()
+    .from(teamTable)
+    .where(eq(teamTable.clinicId, clinicId))
+    .orderBy(teamTable.nome);
+
+  const headers = [
+    "Nº",
+    "Nome completo",
+    "Função / Cargo",
+    "Área",
+    "Vínculo",
+    "Tipo de jornada",
+    "E-mail",
+    "Telefone / WhatsApp",
+    "CPF",
+    "Data de admissão",
+    "Responde a (gestor direto)",
+    "Observações",
+  ];
+
+  const localPart = [clinic.cidade, clinic.uf].filter(Boolean).join("/");
+  const titleLine = `QUADRO FUNCIONAL — ${clinic.nome}`;
+  const subtitleLine = `${clinic.cnpj}${localPart ? "  ·  " + localPart : ""}`;
+  const instructions =
+    "EDIÇÃO OFFLINE: atualize os dados abaixo e reimporte a planilha pela aba Equipe. " +
+    "A correspondência usa CPF (preferencial) e e-mail; mantenha esses campos para evitar duplicidades. " +
+    "VÍNCULO: CLT, PJ, Sócio ou Terceirizado.";
+
+  const aoa: unknown[][] = [
+    [titleLine],
+    [subtitleLine],
+    [],
+    [instructions],
+    [],
+    headers,
+  ];
+
+  members.forEach((m, idx) => {
+    aoa.push([
+      idx + 1,
+      m.nome ?? "",
+      m.funcao ?? "",
+      m.area ?? "",
+      m.vinculo ?? "",
+      m.tipoJornada ?? "",
+      m.email ?? "",
+      m.whatsapp ?? "",
+      formatCpfBR(m.cpf ?? null),
+      formatDateBR(m.dataAdmissao ?? null),
+      m.respondeA ?? "",
+      m.observacoes ?? "",
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 11 } },
+  ];
+  ws["!cols"] = [
+    { wch: 5 }, { wch: 30 }, { wch: 22 }, { wch: 22 }, { wch: 14 }, { wch: 18 },
+    { wch: 28 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 25 }, { wch: 30 },
+  ];
+  ws["!freeze"] = { xSplit: 1, ySplit: 6 };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Quadro Funcional");
+
+  const buf: Buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+  const safeName = clinic.nome.replace(/[^\w\-]+/g, "_").slice(0, 60);
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="Quadro_Funcional_${safeName}_${dateStamp}.xlsx"`);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.send(buf);
+});
+
 router.get("/clinics/:clinicId/team/template", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   if (await assertClinicAccess(req, res, clinicId)) return;
