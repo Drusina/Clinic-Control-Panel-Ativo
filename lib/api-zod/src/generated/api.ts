@@ -1103,6 +1103,45 @@ export const DownloadTeamTemplateParams = zod.object({
 });
 
 /**
+ * For each `memberIds[]` belonging to the clinic, sets `temAcessoPlataforma=true`
+and dispatches an invite (Supabase + email fallback). Members without a valid
+e-mail or already active are skipped. Returns per-member results.
+
+ * @summary Send platform invites to many team members at once
+ */
+export const BulkInviteTeamMembersParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const bulkInviteTeamMembersBodyMemberIdsMax = 200;
+
+export const BulkInviteTeamMembersBody = zod.object({
+  memberIds: zod.array(zod.string()).max(bulkInviteTeamMembersBodyMemberIdsMax),
+});
+
+export const BulkInviteTeamMembersResponse = zod.object({
+  sent: zod.number(),
+  skipped: zod.number(),
+  failed: zod.number(),
+  total: zod.number(),
+  results: zod.array(
+    zod.object({
+      id: zod.string(),
+      nome: zod.string(),
+      status: zod.enum([
+        "sent",
+        "pending",
+        "skipped_no_email",
+        "skipped_already_active",
+        "not_found",
+        "error",
+      ]),
+      reason: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
  * Accepts a multipart/form-data upload (`file` field, max 2MB) containing
 the Quadro Funcional spreadsheet. Members are matched first by CPF, then
 by unambiguous lowercased e-mail; matched rows are merged (only non-null

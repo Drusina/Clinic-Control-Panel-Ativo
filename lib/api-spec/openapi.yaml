@@ -977,6 +977,63 @@ paths:
                 type: string
                 format: binary
 
+  /clinics/{clinicId}/team/bulk-invite:
+    post:
+      operationId: bulkInviteTeamMembers
+      tags: [team]
+      summary: Send platform invites to many team members at once
+      description: |
+        For each `memberIds[]` belonging to the clinic, sets `temAcessoPlataforma=true`
+        and dispatches an invite (Supabase + email fallback). Members without a valid
+        e-mail or already active are skipped. Returns per-member results.
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [memberIds]
+              properties:
+                memberIds:
+                  type: array
+                  items:
+                    type: string
+                  maxItems: 200
+      responses:
+        "200":
+          description: Bulk invite summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sent, skipped, failed, total, results]
+                properties:
+                  sent: { type: integer }
+                  skipped: { type: integer }
+                  failed: { type: integer }
+                  total: { type: integer }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, nome, status]
+                      properties:
+                        id: { type: string }
+                        nome: { type: string }
+                        status:
+                          type: string
+                          enum: [sent, pending, skipped_no_email, skipped_already_active, not_found, error]
+                        reason:
+                          type: ["string", "null"]
+        "400":
+          description: Invalid request body
+
   /clinics/{clinicId}/team/import:
     post:
       operationId: importTeamSpreadsheet

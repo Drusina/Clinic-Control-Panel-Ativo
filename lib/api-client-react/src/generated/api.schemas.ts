@@ -935,6 +935,39 @@ export type ListActionsParams = {
   coluna?: string | null;
 };
 
+export type BulkInviteTeamMembersBody = {
+  /** @maxItems 200 */
+  memberIds: string[];
+};
+
+export type BulkInviteTeamMembers200ResultsItemStatus =
+  (typeof BulkInviteTeamMembers200ResultsItemStatus)[keyof typeof BulkInviteTeamMembers200ResultsItemStatus];
+
+export const BulkInviteTeamMembers200ResultsItemStatus = {
+  sent: "sent",
+  pending: "pending",
+  skipped_no_email: "skipped_no_email",
+  skipped_already_active: "skipped_already_active",
+  not_found: "not_found",
+  error: "error",
+} as const;
+
+export type BulkInviteTeamMembers200ResultsItem = {
+  id: string;
+  nome: string;
+  status: BulkInviteTeamMembers200ResultsItemStatus;
+  /** @nullable */
+  reason?: string | null;
+};
+
+export type BulkInviteTeamMembers200 = {
+  sent: number;
+  skipped: number;
+  failed: number;
+  total: number;
+  results: BulkInviteTeamMembers200ResultsItem[];
+};
+
 export type ImportTeamSpreadsheetBody = {
   /** .xlsx workbook (≤ 2MB) */
   file: Blob;

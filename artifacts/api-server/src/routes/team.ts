@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import multer, { MulterError } from "multer";
 import * as XLSX from "xlsx";
 import { db, teamTable, clinicsTable } from "@workspace/db";
@@ -7,6 +7,9 @@ import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
 import { generateInviteCode, assertClinicAccess, type AuthenticatedRequest as AuthRequest } from "../middleware/auth";
 import { sendEmail, buildInviteEmail, buildPushSetupEmail, resolveAppUrl } from "../lib/email.js";
+import { logger } from "../lib/logger.js";
+
+const BULK_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const router: IRouter = Router();
 
@@ -287,6 +290,89 @@ router.delete("/team/:id", async (req, res): Promise<void> => {
   }
 
   res.sendStatus(204);
+});
+
+// ─── BULK INVITE ────────────────────────────────────────────────────────────
+
+router.post("/clinics/:clinicId/team/bulk-invite", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  if (await assertClinicAccess(req, res, clinicId)) return;
+
+  const body = req.body as { memberIds?: unknown };
+  const memberIds = Array.isArray(body?.memberIds)
+    ? body.memberIds.filter((v): v is string => typeof v === "string" && v.length > 0)
+    : [];
+  if (memberIds.length === 0) {
+    res.status(400).json({ error: "memberIds[] é obrigatório" });
+    return;
+  }
+  if (memberIds.length > 200) {
+    res.status(400).json({ error: "Máximo de 200 membros por lote" });
+    return;
+  }
+
+  const members = await db
+    .select()
+    .from(teamTable)
+    .where(and(eq(teamTable.clinicId, clinicId), inArray(teamTable.id, memberIds)));
+
+  const foundIds = new Set(members.map((m) => m.id));
+  const results: { id: string; nome: string; status: "sent" | "pending" | "skipped_no_email" | "skipped_already_active" | "not_found" | "error"; reason?: string }[] = [];
+  let sent = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const id of memberIds) {
+    if (!foundIds.has(id)) {
+      results.push({ id, nome: "(desconhecido)", status: "not_found" });
+      skipped++;
+    }
+  }
+
+  for (const member of members) {
+    const emailRaw = member.email?.trim().toLowerCase() ?? "";
+    if (!emailRaw || !BULK_EMAIL_RE.test(emailRaw)) {
+      results.push({ id: member.id, nome: member.nome, status: "skipped_no_email" });
+      skipped++;
+      continue;
+    }
+    if (member.temAcessoPlataforma && member.lastAccessAt) {
+      results.push({ id: member.id, nome: member.nome, status: "skipped_already_active" });
+      skipped++;
+      continue;
+    }
+
+    try {
+      const memberForInvite = { ...member, email: emailRaw } as typeof teamTable.$inferSelect;
+      const status = await dispatchPlatformInvite(memberForInvite, req);
+      await db
+        .update(teamTable)
+        .set({
+          temAcessoPlataforma: true,
+          inviteStatus: status,
+          inviteRedeemedAt: null,
+        })
+        .where(eq(teamTable.id, member.id));
+
+      if (status === "sent") {
+        results.push({ id: member.id, nome: member.nome, status: "sent" });
+        sent++;
+      } else if (status === "no_email") {
+        results.push({ id: member.id, nome: member.nome, status: "skipped_no_email" });
+        skipped++;
+      } else {
+        results.push({ id: member.id, nome: member.nome, status: "pending", reason: status });
+        failed++;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha desconhecida";
+      logger.error({ err, memberId: member.id }, "bulk invite failed for member");
+      results.push({ id: member.id, nome: member.nome, status: "error", reason: message });
+      failed++;
+    }
+  }
+
+  res.json({ sent, skipped, failed, total: memberIds.length, results });
 });
 
 // ─── IMPORT QUADRO FUNCIONAL (xlsx) ─────────────────────────────────────────

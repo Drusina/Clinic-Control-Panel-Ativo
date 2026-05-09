@@ -7,7 +7,8 @@ import {
   useDeleteTeamMember 
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, MoreHorizontal, User, Mail, Phone, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, User, Mail, Phone, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Send } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -74,6 +75,33 @@ interface ImportSummary {
   errors: { row: number; field?: string; message: string }[];
 }
 
+type BulkInviteStatus =
+  | "sent"
+  | "pending"
+  | "skipped_no_email"
+  | "skipped_already_active"
+  | "not_found"
+  | "error";
+
+interface BulkInviteSummary {
+  sent: number;
+  skipped: number;
+  failed: number;
+  total: number;
+  results: { id: string; nome: string; status: BulkInviteStatus; reason?: string | null }[];
+}
+
+const STATUS_LABELS: Record<BulkInviteStatus, string> = {
+  sent: "Convite enviado",
+  pending: "Pendente (e-mail não enviou)",
+  skipped_no_email: "Sem e-mail válido",
+  skipped_already_active: "Já tem acesso ativo",
+  not_found: "Não encontrado",
+  error: "Erro",
+};
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function TeamTab({ clinicId }: { clinicId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -86,6 +114,11 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
   const [importError, setImportError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkInviteOpen, setIsBulkInviteOpen] = useState(false);
+  const [bulkInviting, setBulkInviting] = useState(false);
+  const [bulkInviteSummary, setBulkInviteSummary] = useState<BulkInviteSummary | null>(null);
+  const [bulkInviteError, setBulkInviteError] = useState<string | null>(null);
 
   const { data: team, isLoading } = useListTeam(clinicId, {
     query: { enabled: !!clinicId, queryKey: getListTeamQueryKey(clinicId) },
@@ -230,6 +263,74 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
     }
   };
 
+  const inviteCandidates = (team ?? []).filter(
+    (m) => !!m.email && EMAIL_RE.test(m.email) && !(m.temAcessoPlataforma && m.lastAccessAt),
+  );
+  const inviteCandidateIds = inviteCandidates.map((m) => m.id);
+  const allCandidatesSelected =
+    inviteCandidateIds.length > 0 && inviteCandidateIds.every((id) => selectedIds.has(id));
+  const someCandidatesSelected = inviteCandidateIds.some((id) => selectedIds.has(id));
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllCandidates = () => {
+    if (allCandidatesSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(inviteCandidateIds));
+    }
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const openBulkInvite = () => {
+    setBulkInviteSummary(null);
+    setBulkInviteError(null);
+    setIsBulkInviteOpen(true);
+  };
+
+  const submitBulkInvite = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkInviting(true);
+    setBulkInviteError(null);
+    setBulkInviteSummary(null);
+    try {
+      const token = getStoredToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${BASE}/api/clinics/${clinicId}/team/bulk-invite`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ memberIds: ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      const summary = data as BulkInviteSummary;
+      setBulkInviteSummary(summary);
+      queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
+      toast({
+        title: "Convites em lote concluídos",
+        description: `${summary.sent} enviados · ${summary.skipped} ignorados · ${summary.failed} falhas`,
+      });
+      setSelectedIds(new Set());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao enviar convites";
+      setBulkInviteError(message);
+    } finally {
+      setBulkInviting(false);
+    }
+  };
+
   const openImport = () => {
     setImportSummary(null);
     setImportError(null);
@@ -298,12 +399,52 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
         </div>
       </div>
 
+      {inviteCandidateIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-3">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="bulk-invite-select-all"
+              checked={allCandidatesSelected ? true : someCandidatesSelected ? "indeterminate" : false}
+              onCheckedChange={() => toggleSelectAllCandidates()}
+            />
+            <label htmlFor="bulk-invite-select-all" className="text-sm cursor-pointer">
+              Selecionar todos os membros sem acesso ({inviteCandidateIds.length})
+            </label>
+          </div>
+          <div className="flex-1" />
+          {selectedIds.size > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {selectedIds.size} selecionado{selectedIds.size === 1 ? "" : "s"}
+            </span>
+          )}
+          {selectedIds.size > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              Limpar
+            </Button>
+          )}
+          <Button size="sm" onClick={openBulkInvite} disabled={selectedIds.size === 0}>
+            <Send className="mr-2 h-4 w-4" /> Convidar selecionados
+          </Button>
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {team && team.length > 0 ? (
-          team.map((member) => (
+          team.map((member) => {
+            const isCandidate = inviteCandidateIds.includes(member.id);
+            return (
             <div key={member.id} className="flex flex-col bg-card border rounded-lg p-5">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
+                  {isCandidate ? (
+                    <Checkbox
+                      checked={selectedIds.has(member.id)}
+                      onCheckedChange={() => toggleSelected(member.id)}
+                      aria-label={`Selecionar ${member.nome}`}
+                    />
+                  ) : (
+                    <div className="h-4 w-4" aria-hidden />
+                  )}
                   <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                     <User className="h-5 w-5" />
                   </div>
@@ -369,7 +510,8 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
                 )}
               </div>
             </div>
-          ))
+            );
+          })
         ) : (
           <div className="col-span-full py-12 text-center border rounded-lg border-dashed text-muted-foreground">
             Nenhum membro cadastrado.
@@ -635,6 +777,72 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
               {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {importSummary ? "Importar novamente" : "Importar"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isBulkInviteOpen} onOpenChange={(open) => { if (!bulkInviting) setIsBulkInviteOpen(open); }}>
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Enviar convites em lote</DialogTitle>
+            <DialogDescription>
+              {bulkInviteSummary
+                ? "Resultado do envio de convites para os membros selecionados."
+                : `${selectedIds.size} membro${selectedIds.size === 1 ? "" : "s"} selecionado${selectedIds.size === 1 ? "" : "s"} receberão convite por e-mail. Membros sem e-mail válido ou já ativos serão ignorados automaticamente.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {bulkInviteError && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 flex gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{bulkInviteError}</span>
+              </div>
+            )}
+
+            {bulkInviteSummary && (
+              <>
+                <div className="rounded-md border bg-muted/30 p-3 flex gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-green-600" />
+                  <div className="flex-1">
+                    <p className="font-medium">Convites processados</p>
+                    <p className="text-muted-foreground">
+                      {bulkInviteSummary.sent} enviados · {bulkInviteSummary.skipped} ignorados · {bulkInviteSummary.failed} falhas
+                    </p>
+                  </div>
+                </div>
+                {bulkInviteSummary.results.length > 0 && (
+                  <div className="rounded-md border p-3 max-h-64 overflow-y-auto">
+                    <ul className="text-xs space-y-1">
+                      {bulkInviteSummary.results.map((r) => (
+                        <li key={r.id} className="flex justify-between gap-3">
+                          <span className="truncate">{r.nome}</span>
+                          <span className={
+                            r.status === "sent" ? "text-green-600" :
+                            r.status === "error" || r.status === "pending" ? "text-destructive" :
+                            "text-muted-foreground"
+                          }>
+                            {STATUS_LABELS[r.status]}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsBulkInviteOpen(false)} disabled={bulkInviting}>
+              {bulkInviteSummary ? "Fechar" : "Cancelar"}
+            </Button>
+            {!bulkInviteSummary && (
+              <Button onClick={submitBulkInvite} disabled={bulkInviting || selectedIds.size === 0}>
+                {bulkInviting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Send className="mr-2 h-4 w-4" /> Enviar convites
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -22,6 +22,8 @@ import type {
   ApplySocietaryBody,
   ApplySocietaryResponse,
   BatchSaveRespostasBody,
+  BulkInviteTeamMembers200,
+  BulkInviteTeamMembersBody,
   Clinic,
   ClinicListResponse,
   CreateActionBody,
@@ -3891,6 +3893,101 @@ export function useDownloadTeamTemplate<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * For each `memberIds[]` belonging to the clinic, sets `temAcessoPlataforma=true`
+and dispatches an invite (Supabase + email fallback). Members without a valid
+e-mail or already active are skipped. Returns per-member results.
+
+ * @summary Send platform invites to many team members at once
+ */
+export const getBulkInviteTeamMembersUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/team/bulk-invite`;
+};
+
+export const bulkInviteTeamMembers = async (
+  clinicId: string,
+  bulkInviteTeamMembersBody: BulkInviteTeamMembersBody,
+  options?: RequestInit,
+): Promise<BulkInviteTeamMembers200> => {
+  return customFetch<BulkInviteTeamMembers200>(
+    getBulkInviteTeamMembersUrl(clinicId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(bulkInviteTeamMembersBody),
+    },
+  );
+};
+
+export const getBulkInviteTeamMembersMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkInviteTeamMembers>>,
+    TError,
+    { clinicId: string; data: BodyType<BulkInviteTeamMembersBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof bulkInviteTeamMembers>>,
+  TError,
+  { clinicId: string; data: BodyType<BulkInviteTeamMembersBody> },
+  TContext
+> => {
+  const mutationKey = ["bulkInviteTeamMembers"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof bulkInviteTeamMembers>>,
+    { clinicId: string; data: BodyType<BulkInviteTeamMembersBody> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return bulkInviteTeamMembers(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BulkInviteTeamMembersMutationResult = NonNullable<
+  Awaited<ReturnType<typeof bulkInviteTeamMembers>>
+>;
+export type BulkInviteTeamMembersMutationBody =
+  BodyType<BulkInviteTeamMembersBody>;
+export type BulkInviteTeamMembersMutationError = ErrorType<void>;
+
+/**
+ * @summary Send platform invites to many team members at once
+ */
+export const useBulkInviteTeamMembers = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof bulkInviteTeamMembers>>,
+    TError,
+    { clinicId: string; data: BodyType<BulkInviteTeamMembersBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof bulkInviteTeamMembers>>,
+  TError,
+  { clinicId: string; data: BodyType<BulkInviteTeamMembersBody> },
+  TContext
+> => {
+  return useMutation(getBulkInviteTeamMembersMutationOptions(options));
+};
 
 /**
  * Accepts a multipart/form-data upload (`file` field, max 2MB) containing
