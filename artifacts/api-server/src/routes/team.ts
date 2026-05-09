@@ -10,6 +10,15 @@ import { sendEmail, buildInviteEmail, buildPushSetupEmail, resolveAppUrl } from 
 
 const router: IRouter = Router();
 
+function isDuplicateEmailError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: string; constraint?: string; constraint_name?: string; message?: string };
+  if (e.code !== "23505") return false;
+  const c = e.constraint ?? e.constraint_name ?? "";
+  if (c === "equipe_interna_clinic_email_uniq") return true;
+  return typeof e.message === "string" && e.message.includes("equipe_interna_clinic_email_uniq");
+}
+
 function mapTeamMember(t: typeof teamTable.$inferSelect) {
   return {
     id: t.id,
@@ -145,24 +154,33 @@ router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
     return;
   }
 
-  const [member] = await db
-    .insert(teamTable)
-    .values({
-      clinicId,
-      nome: parsed.data.nome,
-      funcao: parsed.data.funcao ?? null,
-      area: parsed.data.area ?? null,
-      vinculo: parsed.data.vinculo ?? null,
-      tipoJornada: parsed.data.tipoJornada ?? null,
-      email: parsed.data.email ?? null,
-      whatsapp: parsed.data.whatsapp ?? null,
-      cpf: parsed.data.cpf ? String(parsed.data.cpf).replace(/\D/g, "") || null : null,
-      dataAdmissao: parsed.data.dataAdmissao ?? null,
-      respondeA: parsed.data.respondeA ?? null,
-      observacoes: parsed.data.observacoes ?? null,
-      temAcessoPlataforma: parsed.data.temAcessoPlataforma ?? false,
-    })
-    .returning();
+  let member: typeof teamTable.$inferSelect;
+  try {
+    [member] = await db
+      .insert(teamTable)
+      .values({
+        clinicId,
+        nome: parsed.data.nome,
+        funcao: parsed.data.funcao ?? null,
+        area: parsed.data.area ?? null,
+        vinculo: parsed.data.vinculo ?? null,
+        tipoJornada: parsed.data.tipoJornada ?? null,
+        email: parsed.data.email ? parsed.data.email.trim().toLowerCase() || null : null,
+        whatsapp: parsed.data.whatsapp ?? null,
+        cpf: parsed.data.cpf ? String(parsed.data.cpf).replace(/\D/g, "") || null : null,
+        dataAdmissao: parsed.data.dataAdmissao ?? null,
+        respondeA: parsed.data.respondeA ?? null,
+        observacoes: parsed.data.observacoes ?? null,
+        temAcessoPlataforma: parsed.data.temAcessoPlataforma ?? false,
+      })
+      .returning();
+  } catch (err) {
+    if (isDuplicateEmailError(err)) {
+      res.status(409).json({ error: "Já existe um membro com este e-mail nesta clínica." });
+      return;
+    }
+    throw err;
+  }
 
   if (parsed.data.temAcessoPlataforma && parsed.data.email) {
     try {
@@ -201,7 +219,7 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
   if (d.funcao !== undefined) updates.funcao = d.funcao;
   if (d.area !== undefined) updates.area = d.area;
   if (d.vinculo !== undefined) updates.vinculo = d.vinculo;
-  if (d.email !== undefined) updates.email = d.email;
+  if (d.email !== undefined) updates.email = d.email ? d.email.trim().toLowerCase() || null : null;
   if (d.whatsapp !== undefined) updates.whatsapp = d.whatsapp;
   if (d.tipoJornada !== undefined) updates.tipoJornada = d.tipoJornada;
   if (d.cpf !== undefined) updates.cpf = d.cpf ? String(d.cpf).replace(/\D/g, "") || null : null;
@@ -234,7 +252,16 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
     await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.teamMemberId, id));
   }
 
-  const [member] = await db.update(teamTable).set(updates).where(eq(teamTable.id, id)).returning();
+  let member: typeof teamTable.$inferSelect | undefined;
+  try {
+    [member] = await db.update(teamTable).set(updates).where(eq(teamTable.id, id)).returning();
+  } catch (err) {
+    if (isDuplicateEmailError(err)) {
+      res.status(409).json({ error: "Já existe um membro com este e-mail nesta clínica." });
+      return;
+    }
+    throw err;
+  }
   if (!member) {
     res.status(404).json({ error: "Team member not found" });
     return;
@@ -509,14 +536,9 @@ router.post(
     const existing = await tx.select().from(teamTable).where(eq(teamTable.clinicId, clinicId));
     const byCpf = new Map<string, typeof teamTable.$inferSelect>();
     const byEmail = new Map<string, typeof teamTable.$inferSelect>();
-    const ambiguousEmails = new Set<string>();
     for (const m of existing) {
       if (m.cpf) byCpf.set(m.cpf, m);
-      if (m.email) {
-        const k = m.email.toLowerCase();
-        if (byEmail.has(k)) ambiguousEmails.add(k);
-        else byEmail.set(k, m);
-      }
+      if (m.email) byEmail.set(m.email.toLowerCase(), m);
     }
 
     for (let i = headerRowIdx + 1; i < rows.length; i++) {
@@ -581,20 +603,10 @@ router.post(
       };
 
       try {
-        // Email fallback only when unambiguous within this clinic.
-        let emailMatch: typeof teamTable.$inferSelect | undefined;
-        if (email) {
-          if (ambiguousEmails.has(email)) {
-            summary.errors.push({
-              row: xlsxRow,
-              field: "email",
-              message: `E-mail "${email}" duplicado nesta clínica — atualize manualmente ou informe o CPF para identificar o membro.`,
-            });
-            summary.skipped++;
-            continue;
-          }
-          emailMatch = byEmail.get(email);
-        }
+        // Email is now unique per clinic (DB partial unique index), so the
+        // email map is unambiguous and can be trusted as a fallback when CPF
+        // is missing.
+        const emailMatch = email ? byEmail.get(email) : undefined;
         const match = (cpf ? byCpf.get(cpf) : undefined) ?? emailMatch;
 
         if (match) {

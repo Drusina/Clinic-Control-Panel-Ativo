@@ -35,6 +35,9 @@ export const teamTable = pgTable("equipe_interna", {
   cpfPerClinicUnique: uniqueIndex("equipe_interna_clinic_cpf_uniq")
     .on(t.clinicId, t.cpf)
     .where(sql`${t.cpf} IS NOT NULL`),
+  emailPerClinicUnique: uniqueIndex("equipe_interna_clinic_email_uniq")
+    .on(t.clinicId, sql`lower(${t.email})`)
+    .where(sql`${t.email} IS NOT NULL`),
 }));
 
 export const insertTeamMemberSchema = createInsertSchema(teamTable).omit({

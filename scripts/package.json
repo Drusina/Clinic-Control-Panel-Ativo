@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "backfill-summary-analysis-mode": "tsx ./src/backfill-summary-analysis-mode.ts",
+    "dedupe-team-emails": "tsx ./src/dedupe-team-emails.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
