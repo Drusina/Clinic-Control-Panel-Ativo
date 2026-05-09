@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { 
   useListTeam, 
   getListTeamQueryKey, 
@@ -7,18 +7,21 @@ import {
   useDeleteTeamMember 
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, MoreHorizontal, User, Mail, Phone } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, User, Mail, Phone, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { getStoredToken } from "@/hooks/use-auth";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -31,31 +34,58 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import type { TeamMember } from "@workspace/api-client-react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function formatCpf(raw: string): string {
+  const d = raw.replace(/\D/g, "");
+  if (d.length !== 11) return raw;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+
+function formatDate(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
 
 const formSchema = z.object({
   nome: z.string().min(2, "Nome obrigatório"),
   funcao: z.string().optional(),
-  area: z.enum(["Administrativo", "Clínico", "Atendimento", "Marketing", "TI", "Outro"]).optional(),
+  area: z.string().optional(),
   vinculo: z.enum(["CLT", "PJ", "Socio", "Terceirizado"]).optional(),
+  tipoJornada: z.string().optional(),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
   whatsapp: z.string().optional(),
+  cpf: z.string().optional(),
+  dataAdmissao: z.string().optional(),
+  respondeA: z.string().optional(),
+  observacoes: z.string().optional(),
   temAcessoPlataforma: z.boolean().default(false),
 });
+
+type FormValues = z.infer<typeof formSchema>;
+
+interface ImportSummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: { row: number; field?: string; message: string }[];
+}
 
 export default function TeamTab({ clinicId }: { clinicId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: team, isLoading } = useListTeam(clinicId, {
     query: { enabled: !!clinicId, queryKey: getListTeamQueryKey(clinicId) },
@@ -65,15 +95,20 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
   const updateMember = useUpdateTeamMember();
   const deleteMember = useDeleteTeamMember();
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       nome: "",
       funcao: "",
-      area: "Administrativo",
+      area: "",
       vinculo: "CLT",
+      tipoJornada: "",
       email: "",
       whatsapp: "",
+      cpf: "",
+      dataAdmissao: "",
+      respondeA: "",
+      observacoes: "",
       temAcessoPlataforma: false,
     },
   });
@@ -84,10 +119,15 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
       form.reset({
         nome: member.nome,
         funcao: member.funcao || "",
-        area: (member.area as any) || "Administrativo",
-        vinculo: (member.vinculo as any) || "CLT",
+        area: member.area || "",
+        vinculo: (member.vinculo as FormValues["vinculo"]) || "CLT",
+        tipoJornada: member.tipoJornada || "",
         email: member.email || "",
         whatsapp: member.whatsapp || "",
+        cpf: member.cpf || "",
+        dataAdmissao: member.dataAdmissao || "",
+        respondeA: member.respondeA || "",
+        observacoes: member.observacoes || "",
         temAcessoPlataforma: member.temAcessoPlataforma,
       });
     } else {
@@ -95,39 +135,53 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
       form.reset({
         nome: "",
         funcao: "",
-        area: "Administrativo",
+        area: "",
         vinculo: "CLT",
+        tipoJornada: "",
         email: "",
         whatsapp: "",
+        cpf: "",
+        dataAdmissao: "",
+        respondeA: "",
+        observacoes: "",
         temAcessoPlataforma: false,
       });
     }
     setIsDialogOpen(true);
   };
 
-  const onSubmit = (values: z.infer<typeof formSchema>) => {
+  const onSubmit = (values: FormValues) => {
+    const payload = {
+      ...values,
+      area: values.area || null,
+      tipoJornada: values.tipoJornada || null,
+      cpf: values.cpf || null,
+      dataAdmissao: values.dataAdmissao || null,
+      respondeA: values.respondeA || null,
+      observacoes: values.observacoes || null,
+    };
     if (editingMember) {
       updateMember.mutate(
-        { id: editingMember.id, data: values },
+        { id: editingMember.id, data: payload },
         {
           onSuccess: () => {
             toast({ title: "Membro atualizado" });
             queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
             setIsDialogOpen(false);
           },
-          onError: () => toast({ variant: "destructive", title: "Erro ao atualizar" }),
+          onError: (err: Error) => toast({ variant: "destructive", title: "Erro ao atualizar", description: err.message }),
         }
       );
     } else {
       createMember.mutate(
-        { clinicId, data: values as any },
+        { clinicId, data: payload as Parameters<typeof createMember.mutate>[0]["data"] },
         {
           onSuccess: () => {
             toast({ title: "Membro adicionado" });
             queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
             setIsDialogOpen(false);
           },
-          onError: () => toast({ variant: "destructive", title: "Erro ao adicionar" }),
+          onError: (err: Error) => toast({ variant: "destructive", title: "Erro ao adicionar", description: err.message }),
         }
       );
     }
@@ -147,20 +201,101 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
     }
   };
 
+  const downloadTemplate = async () => {
+    setDownloading(true);
+    try {
+      const token = getStoredToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${BASE}/api/clinics/${clinicId}/team/template`, { headers });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error ?? res.statusText);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const match = cd.match(/filename="?([^";]+)"?/i);
+      const filename = match?.[1] || "Quadro_Funcional.xlsx";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao baixar modelo";
+      toast({ variant: "destructive", title: "Erro ao baixar modelo", description: message });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const openImport = () => {
+    setImportSummary(null);
+    setImportError(null);
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setIsImportOpen(true);
+  };
+
+  const submitImport = async () => {
+    if (!selectedFile) return;
+    setImporting(true);
+    setImportError(null);
+    setImportSummary(null);
+    try {
+      const token = getStoredToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      const res = await fetch(`${BASE}/api/clinics/${clinicId}/team/import`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      setImportSummary(data as ImportSummary);
+      queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
+      const summary = data as ImportSummary;
+      toast({
+        title: "Importação concluída",
+        description: `${summary.created} criados, ${summary.updated} atualizados, ${summary.skipped} ignorados`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao importar";
+      setImportError(message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" /></div>;
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <div>
           <h3 className="text-lg font-medium">Equipe da Clínica</h3>
           <p className="text-sm text-muted-foreground">Gerencie os colaboradores e seus acessos.</p>
         </div>
-        <Button onClick={() => openDialog()}>
-          <Plus className="mr-2 h-4 w-4" /> Adicionar Membro
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={downloadTemplate} disabled={downloading}>
+            {downloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            Baixar modelo
+          </Button>
+          <Button variant="outline" onClick={openImport}>
+            <Upload className="mr-2 h-4 w-4" /> Importar planilha
+          </Button>
+          <Button onClick={() => openDialog()}>
+            <Plus className="mr-2 h-4 w-4" /> Adicionar Membro
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -203,11 +338,32 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
                     <Phone className="h-3.5 w-3.5" /> <span>{member.whatsapp}</span>
                   </div>
                 )}
+                {member.cpf && (
+                  <div className="text-xs text-muted-foreground">
+                    CPF: <span className="text-foreground font-mono">{formatCpf(member.cpf)}</span>
+                  </div>
+                )}
+                {member.dataAdmissao && (
+                  <div className="text-xs text-muted-foreground">
+                    Admissão: <span className="text-foreground">{formatDate(member.dataAdmissao)}</span>
+                  </div>
+                )}
+                {member.respondeA && (
+                  <div className="text-xs text-muted-foreground">
+                    Responde a: <span className="text-foreground">{member.respondeA}</span>
+                  </div>
+                )}
+                {member.observacoes && (
+                  <div className="text-xs text-muted-foreground line-clamp-2" title={member.observacoes}>
+                    Obs.: <span className="text-foreground">{member.observacoes}</span>
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-2 mt-4 pt-4 border-t">
-                <Badge variant="outline">{member.area || "Outro"}</Badge>
-                <Badge variant="outline">{member.vinculo || "CLT"}</Badge>
+              <div className="flex items-center gap-2 mt-4 pt-4 border-t flex-wrap">
+                {member.area && <Badge variant="outline">{member.area}</Badge>}
+                {member.vinculo && <Badge variant="outline">{member.vinculo}</Badge>}
+                {member.tipoJornada && <Badge variant="outline">{member.tipoJornada}</Badge>}
                 {member.temAcessoPlataforma && (
                   <Badge variant="secondary" className="ml-auto">Com Acesso</Badge>
                 )}
@@ -222,7 +378,7 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingMember ? "Editar Membro" : "Adicionar Membro"}</DialogTitle>
           </DialogHeader>
@@ -233,7 +389,7 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
                 name="nome"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nome</FormLabel>
+                    <FormLabel>Nome completo *</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -245,7 +401,7 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
                   name="funcao"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Função</FormLabel>
+                      <FormLabel>Função / Cargo</FormLabel>
                       <FormControl><Input {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
@@ -257,41 +413,7 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Área</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="Administrativo">Administrativo</SelectItem>
-                          <SelectItem value="Clínico">Clínico</SelectItem>
-                          <SelectItem value="Atendimento">Atendimento</SelectItem>
-                          <SelectItem value="Marketing">Marketing</SelectItem>
-                          <SelectItem value="TI">TI</SelectItem>
-                          <SelectItem value="Outro">Outro</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl><Input type="email" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="whatsapp"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>WhatsApp</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
+                      <FormControl><Input {...field} placeholder="Ex.: Recepção, Médicos…" /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -317,7 +439,88 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="tipoJornada"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tipo de jornada</FormLabel>
+                      <FormControl><Input {...field} placeholder="Integral, parcial…" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>E-mail</FormLabel>
+                      <FormControl><Input type="email" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="whatsapp"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Telefone / WhatsApp</FormLabel>
+                      <FormControl><Input {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="cpf"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>CPF</FormLabel>
+                      <FormControl><Input {...field} placeholder="000.000.000-00" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="dataAdmissao"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data de admissão</FormLabel>
+                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="respondeA"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Responde a (gestor direto)</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="observacoes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Observações</FormLabel>
+                    <FormControl><Textarea rows={2} {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="temAcessoPlataforma"
@@ -337,11 +540,102 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
               />
               <DialogFooter className="pt-4">
                 <Button type="submit" disabled={createMember.isPending || updateMember.isPending}>
+                  {(createMember.isPending || updateMember.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar
                 </Button>
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isImportOpen} onOpenChange={(open) => { if (!importing) setIsImportOpen(open); }}>
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Importar planilha — Quadro Funcional</DialogTitle>
+            <DialogDescription>
+              Envie a planilha modelo preenchida. Membros existentes serão atualizados (busca por CPF, depois e-mail).
+              Limite: 2MB. Sem disparo automático de convite.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 rounded-md border p-3">
+              <FileSpreadsheet className="h-5 w-5 text-muted-foreground shrink-0" />
+              <div className="flex-1 min-w-0">
+                {selectedFile ? (
+                  <>
+                    <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+                    <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nenhum arquivo selecionado</p>
+                )}
+              </div>
+              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+                Selecionar
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setSelectedFile(f);
+                  setImportSummary(null);
+                  setImportError(null);
+                }}
+              />
+            </div>
+
+            {importError && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 flex gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{importError}</span>
+              </div>
+            )}
+
+            {importSummary && (
+              <div className="space-y-2">
+                <div className="rounded-md border bg-muted/30 p-3 flex gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-green-600" />
+                  <div className="flex-1">
+                    <p className="font-medium">Importação concluída</p>
+                    <p className="text-muted-foreground">
+                      {importSummary.created} criados · {importSummary.updated} atualizados · {importSummary.skipped} ignorados
+                    </p>
+                  </div>
+                </div>
+                {importSummary.errors.length > 0 && (
+                  <div className="rounded-md border p-3 max-h-48 overflow-y-auto">
+                    <p className="text-sm font-medium mb-2">Linhas ignoradas:</p>
+                    <ul className="text-xs space-y-1 text-muted-foreground">
+                      {importSummary.errors.slice(0, 50).map((err, i) => (
+                        <li key={i}>
+                          <span className="font-mono">L{err.row}</span>
+                          {err.field ? ` (${err.field})` : ""}: {err.message}
+                        </li>
+                      ))}
+                      {importSummary.errors.length > 50 && (
+                        <li className="italic">…e mais {importSummary.errors.length - 50} linhas</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsImportOpen(false)} disabled={importing}>
+              {importSummary ? "Fechar" : "Cancelar"}
+            </Button>
+            <Button onClick={submitImport} disabled={!selectedFile || importing}>
+              {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {importSummary ? "Importar novamente" : "Importar"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

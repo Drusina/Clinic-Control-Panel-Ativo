@@ -2069,9 +2069,20 @@ components:
           type: ["string", "null"]
         vinculo:
           type: ["string", "null"]
+        tipoJornada:
+          type: ["string", "null"]
         email:
           type: ["string", "null"]
         whatsapp:
+          type: ["string", "null"]
+        cpf:
+          type: ["string", "null"]
+        dataAdmissao:
+          type: ["string", "null"]
+          description: "ISO date (YYYY-MM-DD)"
+        respondeA:
+          type: ["string", "null"]
+        observacoes:
           type: ["string", "null"]
         temAcessoPlataforma:
           type: boolean
@@ -2101,9 +2112,19 @@ components:
           type: ["string", "null"]
         vinculo:
           type: ["string", "null"]
+        tipoJornada:
+          type: ["string", "null"]
         email:
           type: ["string", "null"]
         whatsapp:
+          type: ["string", "null"]
+        cpf:
+          type: ["string", "null"]
+        dataAdmissao:
+          type: ["string", "null"]
+        respondeA:
+          type: ["string", "null"]
+        observacoes:
           type: ["string", "null"]
         temAcessoPlataforma:
           type: boolean
@@ -2121,9 +2142,19 @@ components:
           type: ["string", "null"]
         vinculo:
           type: ["string", "null"]
+        tipoJornada:
+          type: ["string", "null"]
         email:
           type: ["string", "null"]
         whatsapp:
+          type: ["string", "null"]
+        cpf:
+          type: ["string", "null"]
+        dataAdmissao:
+          type: ["string", "null"]
+        respondeA:
+          type: ["string", "null"]
+        observacoes:
           type: ["string", "null"]
         temAcessoPlataforma:
           type: ["boolean", "null"]

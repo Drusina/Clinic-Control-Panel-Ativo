@@ -29,6 +29,7 @@
     "pino": "^9",
     "pino-http": "^10",
     "web-push": "^3.6.7",
+    "xlsx": "^0.18.5",
     "zod": "catalog:"
   },
   "devDependencies": {

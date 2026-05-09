@@ -1,6 +1,8 @@
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { eq } from "drizzle-orm";
-import { db, teamTable } from "@workspace/db";
+import multer, { MulterError } from "multer";
+import * as XLSX from "xlsx";
+import { db, teamTable, clinicsTable } from "@workspace/db";
 import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
 import { generateInviteCode, assertClinicAccess, type AuthenticatedRequest as AuthRequest } from "../middleware/auth";
@@ -16,8 +18,13 @@ function mapTeamMember(t: typeof teamTable.$inferSelect) {
     funcao: t.funcao,
     area: t.area,
     vinculo: t.vinculo,
+    tipoJornada: t.tipoJornada ?? null,
     email: t.email,
     whatsapp: t.whatsapp,
+    cpf: t.cpf ?? null,
+    dataAdmissao: t.dataAdmissao ?? null,
+    respondeA: t.respondeA ?? null,
+    observacoes: t.observacoes ?? null,
     temAcessoPlataforma: t.temAcessoPlataforma ?? false,
     inviteStatus: t.inviteStatus ?? null,
     lastAccessAt: t.lastAccessAt ? t.lastAccessAt.toISOString() : null,
@@ -146,8 +153,13 @@ router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
       funcao: parsed.data.funcao ?? null,
       area: parsed.data.area ?? null,
       vinculo: parsed.data.vinculo ?? null,
+      tipoJornada: parsed.data.tipoJornada ?? null,
       email: parsed.data.email ?? null,
       whatsapp: parsed.data.whatsapp ?? null,
+      cpf: parsed.data.cpf ? String(parsed.data.cpf).replace(/\D/g, "") || null : null,
+      dataAdmissao: parsed.data.dataAdmissao ?? null,
+      respondeA: parsed.data.respondeA ?? null,
+      observacoes: parsed.data.observacoes ?? null,
       temAcessoPlataforma: parsed.data.temAcessoPlataforma ?? false,
     })
     .returning();
@@ -191,6 +203,11 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
   if (d.vinculo !== undefined) updates.vinculo = d.vinculo;
   if (d.email !== undefined) updates.email = d.email;
   if (d.whatsapp !== undefined) updates.whatsapp = d.whatsapp;
+  if (d.tipoJornada !== undefined) updates.tipoJornada = d.tipoJornada;
+  if (d.cpf !== undefined) updates.cpf = d.cpf ? String(d.cpf).replace(/\D/g, "") || null : null;
+  if (d.dataAdmissao !== undefined) updates.dataAdmissao = d.dataAdmissao;
+  if (d.respondeA !== undefined) updates.respondeA = d.respondeA;
+  if (d.observacoes !== undefined) updates.observacoes = d.observacoes;
 
   const enablingAccess = d.temAcessoPlataforma === true && !existing.temAcessoPlataforma;
   if (d.temAcessoPlataforma != null) updates.temAcessoPlataforma = d.temAcessoPlataforma;
@@ -243,6 +260,418 @@ router.delete("/team/:id", async (req, res): Promise<void> => {
   }
 
   res.sendStatus(204);
+});
+
+// ─── IMPORT QUADRO FUNCIONAL (xlsx) ─────────────────────────────────────────
+
+const MAX_IMPORT_BYTES = 2 * 1024 * 1024; // 2 MB
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_IMPORT_BYTES, files: 1 },
+});
+
+function importUploadHandler(req: Request, res: Response, next: NextFunction): void {
+  importUpload.single("file")(req, res, (err: unknown) => {
+    if (err) {
+      if (err instanceof MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({ error: `Planilha excede o limite de ${Math.round(MAX_IMPORT_BYTES / 1024 / 1024)}MB` });
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Falha ao processar upload";
+      res.status(400).json({ error: message });
+      return;
+    }
+    next();
+  });
+}
+
+const HEADER_ALIASES: Record<string, string> = {
+  numero: "n",
+  no: "n",
+  "nº": "n",
+  "n°": "n",
+  nomecompleto: "nome",
+  nome: "nome",
+  funcao: "funcao",
+  cargo: "funcao",
+  funcaocargo: "funcao",
+  area: "area",
+  vinculo: "vinculo",
+  tipodejornada: "tipoJornada",
+  jornada: "tipoJornada",
+  email: "email",
+  "e-mail": "email",
+  telefone: "whatsapp",
+  whatsapp: "whatsapp",
+  telefonewhatsapp: "whatsapp",
+  cpf: "cpf",
+  dataadmissao: "dataAdmissao",
+  dataadmissão: "dataAdmissao",
+  respondea: "respondeA",
+  respondeagestordireto: "respondeA",
+  gestordireto: "respondeA",
+  observacoes: "observacoes",
+  observacao: "observacoes",
+};
+
+function normalizeHeader(s: unknown): string {
+  if (s == null) return "";
+  return String(s)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeVinculo(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const norm = s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (norm === "clt") return "CLT";
+  if (norm === "pj") return "PJ";
+  if (norm === "socio" || norm.startsWith("socio")) return "Socio";
+  if (norm === "terceirizado" || norm.startsWith("terceir")) return "Terceirizado";
+  return null;
+}
+
+function normalizeArea(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  return s || null;
+}
+
+function normalizeEmail(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim().toLowerCase();
+  return s || null;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeCpf(raw: unknown): string | null {
+  if (raw == null) return null;
+  const digits = String(raw).replace(/\D/g, "");
+  if (!digits) return null;
+  return digits;
+}
+
+function isValidCpfDigits(digits: string): boolean {
+  if (digits.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(digits[i], 10) * (10 - i);
+  let d1 = (sum * 10) % 11;
+  if (d1 === 10) d1 = 0;
+  if (d1 !== parseInt(digits[9], 10)) return false;
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(digits[i], 10) * (11 - i);
+  let d2 = (sum * 10) % 11;
+  if (d2 === 10) d2 = 0;
+  return d2 === parseInt(digits[10], 10);
+}
+
+function excelSerialToISODate(serial: number): string | null {
+  if (!Number.isFinite(serial) || serial <= 0) return null;
+  const ms = Math.round((serial - 25569) * 86400 * 1000);
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function normalizeDate(raw: unknown): string | null {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "number") return excelSerialToISODate(raw);
+  if (raw instanceof Date) return raw.toISOString().slice(0, 10);
+  const s = String(raw).trim();
+  if (!s) return null;
+  // dd/mm/yyyy
+  const br = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if (br) {
+    const dd = br[1].padStart(2, "0");
+    const mm = br[2].padStart(2, "0");
+    let yyyy = br[3];
+    if (yyyy.length === 2) yyyy = (parseInt(yyyy, 10) > 50 ? "19" : "20") + yyyy;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  // yyyy-mm-dd
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return s;
+  return null;
+}
+
+function normalizeText(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  return s || null;
+}
+
+interface ImportError {
+  row: number;
+  field?: string;
+  message: string;
+}
+
+interface ImportSummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: ImportError[];
+}
+
+router.post(
+  "/clinics/:clinicId/team/import",
+  importUploadHandler,
+  async (req: Request, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+    if (await assertClinicAccess(req, res, clinicId)) return;
+
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: "Arquivo (campo 'file') é obrigatório" });
+      return;
+    }
+
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(file.buffer, { type: "buffer", cellDates: false });
+    } catch {
+      res.status(400).json({ error: "Não foi possível ler o arquivo. Envie um .xlsx válido." });
+      return;
+    }
+
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      res.status(400).json({ error: "Planilha vazia." });
+      return;
+    }
+    const sheet = workbook.Sheets[sheetName];
+    const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true, blankrows: false });
+
+    // Find header row by scanning for "nome" column. The template has headers
+    // on row 6 (index 5), but be tolerant if the user shifts things.
+    let headerRowIdx = -1;
+    let headerMap: Record<string, number> = {};
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      const row = rows[i] ?? [];
+      const map: Record<string, number> = {};
+      for (let c = 0; c < row.length; c++) {
+        const key = HEADER_ALIASES[normalizeHeader(row[c])];
+        if (key && map[key] === undefined) map[key] = c;
+      }
+      if (map.nome !== undefined) {
+        headerRowIdx = i;
+        headerMap = map;
+        break;
+      }
+    }
+
+    if (headerRowIdx === -1) {
+      res.status(400).json({ error: "Cabeçalho não encontrado. Use o template Quadro Funcional (coluna 'Nome completo' obrigatória)." });
+      return;
+    }
+
+    const summary: ImportSummary = { created: 0, updated: 0, skipped: 0, errors: [] };
+
+    // Pre-load existing members for this clinic for matching
+    const existing = await db.select().from(teamTable).where(eq(teamTable.clinicId, clinicId));
+    const byCpf = new Map<string, typeof teamTable.$inferSelect>();
+    const byEmail = new Map<string, typeof teamTable.$inferSelect>();
+    const ambiguousEmails = new Set<string>();
+    for (const m of existing) {
+      if (m.cpf) byCpf.set(m.cpf, m);
+      if (m.email) {
+        const k = m.email.toLowerCase();
+        if (byEmail.has(k)) ambiguousEmails.add(k);
+        else byEmail.set(k, m);
+      }
+    }
+
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const xlsxRow = i + 1; // 1-indexed for user-facing messages
+      const row = rows[i] ?? [];
+      if (!row || row.every((c) => c == null || String(c).trim() === "")) continue;
+
+      const get = (key: string): unknown => {
+        const idx = headerMap[key];
+        return idx === undefined ? null : row[idx];
+      };
+
+      const nome = normalizeText(get("nome"));
+      if (!nome) {
+        // Likely a blank or note row; skip silently
+        continue;
+      }
+
+      const email = normalizeEmail(get("email"));
+      if (email && !EMAIL_RE.test(email)) {
+        summary.errors.push({ row: xlsxRow, field: "email", message: `E-mail inválido: ${email}` });
+        summary.skipped++;
+        continue;
+      }
+
+      const cpf = normalizeCpf(get("cpf"));
+      if (cpf && !isValidCpfDigits(cpf)) {
+        summary.errors.push({ row: xlsxRow, field: "cpf", message: `CPF inválido na linha ${xlsxRow}` });
+        summary.skipped++;
+        continue;
+      }
+
+      const vinculoRaw = get("vinculo");
+      const vinculo = normalizeVinculo(vinculoRaw);
+      if (vinculoRaw && !vinculo) {
+        summary.errors.push({ row: xlsxRow, field: "vinculo", message: `Vínculo desconhecido: "${vinculoRaw}". Use CLT, PJ, Sócio ou Terceirizado.` });
+        summary.skipped++;
+        continue;
+      }
+
+      const dataAdmissaoRaw = get("dataAdmissao");
+      const dataAdmissao = normalizeDate(dataAdmissaoRaw);
+      if (dataAdmissaoRaw && !dataAdmissao) {
+        summary.errors.push({ row: xlsxRow, field: "dataAdmissao", message: `Data de admissão inválida: "${dataAdmissaoRaw}"` });
+        summary.skipped++;
+        continue;
+      }
+
+      const values = {
+        clinicId,
+        nome,
+        funcao: normalizeText(get("funcao")),
+        area: normalizeArea(get("area")),
+        vinculo,
+        tipoJornada: normalizeText(get("tipoJornada")),
+        email,
+        whatsapp: normalizeText(get("whatsapp")),
+        cpf,
+        dataAdmissao,
+        respondeA: normalizeText(get("respondeA")),
+        observacoes: normalizeText(get("observacoes")),
+      };
+
+      try {
+        // Email fallback only when unambiguous within this clinic.
+        let emailMatch: typeof teamTable.$inferSelect | undefined;
+        if (email) {
+          if (ambiguousEmails.has(email)) {
+            summary.errors.push({
+              row: xlsxRow,
+              field: "email",
+              message: `E-mail "${email}" duplicado nesta clínica — atualize manualmente ou informe o CPF para identificar o membro.`,
+            });
+            summary.skipped++;
+            continue;
+          }
+          emailMatch = byEmail.get(email);
+        }
+        const match = (cpf ? byCpf.get(cpf) : undefined) ?? emailMatch;
+
+        if (match) {
+          // Merge: only overwrite when planilha has a non-null value
+          const updates: Partial<typeof teamTable.$inferInsert> = {};
+          for (const [k, v] of Object.entries(values)) {
+            if (k === "clinicId") continue;
+            if (v != null && v !== "") {
+              (updates as Record<string, unknown>)[k] = v;
+            }
+          }
+          if (Object.keys(updates).length > 0) {
+            await db.update(teamTable).set(updates).where(eq(teamTable.id, match.id));
+          }
+          summary.updated++;
+          // Refresh maps to handle dup rows in the same import
+          if (cpf) byCpf.set(cpf, { ...match, ...updates } as typeof teamTable.$inferSelect);
+          if (email) byEmail.set(email, { ...match, ...updates } as typeof teamTable.$inferSelect);
+        } else {
+          const [created] = await db.insert(teamTable).values(values).returning();
+          summary.created++;
+          if (created.cpf) byCpf.set(created.cpf, created);
+          if (created.email) byEmail.set(created.email.toLowerCase(), created);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Erro ao gravar linha";
+        summary.errors.push({ row: xlsxRow, message });
+        summary.skipped++;
+      }
+    }
+
+    res.json(summary);
+  },
+);
+
+router.get("/clinics/:clinicId/team/template", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  if (await assertClinicAccess(req, res, clinicId)) return;
+
+  const [clinic] = await db
+    .select({ nome: clinicsTable.nome, cnpj: clinicsTable.cnpj, cidade: clinicsTable.cidade, uf: clinicsTable.uf })
+    .from(clinicsTable)
+    .where(eq(clinicsTable.id, clinicId));
+
+  if (!clinic) {
+    res.status(404).json({ error: "Clínica não encontrada" });
+    return;
+  }
+
+  const headers = [
+    "Nº",
+    "Nome completo",
+    "Função / Cargo",
+    "Área",
+    "Vínculo",
+    "Tipo de jornada",
+    "E-mail",
+    "Telefone / WhatsApp",
+    "CPF",
+    "Data de admissão",
+    "Responde a (gestor direto)",
+    "Observações",
+  ];
+
+  const localPart = [clinic.cidade, clinic.uf].filter(Boolean).join("/");
+  const titleLine = `QUADRO FUNCIONAL — ${clinic.nome}`;
+  const subtitleLine = `${clinic.cnpj}${localPart ? "  ·  " + localPart : ""}`;
+  const instructions =
+    "PREENCHIMENTO: inclua TODAS as pessoas que trabalham na clínica, inclusive sócios atuantes. " +
+    "VÍNCULO: CLT, PJ, Sócio ou Terceirizado. ÁREA: agrupe por função (Diretoria, Médicos, Enfermagem, Recepção, Financeiro, Administrativo, Limpeza).";
+
+  const aoa: unknown[][] = [
+    [titleLine],
+    [subtitleLine],
+    [],
+    [instructions],
+    [],
+    headers,
+  ];
+  // 3 blank example rows so user sees a few prefilled numbers
+  for (let n = 1; n <= 3; n++) {
+    aoa.push([n, "", "", "", "", "", "", "", "", "", "", ""]);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 11 } },
+  ];
+  ws["!cols"] = [
+    { wch: 5 }, { wch: 30 }, { wch: 22 }, { wch: 22 }, { wch: 14 }, { wch: 18 },
+    { wch: 28 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 25 }, { wch: 30 },
+  ];
+  ws["!freeze"] = { xSplit: 1, ySplit: 6 };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Quadro Funcional");
+
+  const buf: Buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+  const safeName = clinic.nome.replace(/[^\w\-]+/g, "_").slice(0, 60);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="Quadro_Funcional_${safeName}.xlsx"`);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.send(buf);
 });
 
 export default router;

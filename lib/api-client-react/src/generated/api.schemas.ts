@@ -744,9 +744,22 @@ export interface TeamMember {
   /** @nullable */
   vinculo?: string | null;
   /** @nullable */
+  tipoJornada?: string | null;
+  /** @nullable */
   email?: string | null;
   /** @nullable */
   whatsapp?: string | null;
+  /** @nullable */
+  cpf?: string | null;
+  /**
+   * ISO date (YYYY-MM-DD)
+   * @nullable
+   */
+  dataAdmissao?: string | null;
+  /** @nullable */
+  respondeA?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
   temAcessoPlataforma: boolean;
   /**
    * pending | accepted | revoked
@@ -770,9 +783,19 @@ export interface CreateTeamMemberBody {
   /** @nullable */
   vinculo?: string | null;
   /** @nullable */
+  tipoJornada?: string | null;
+  /** @nullable */
   email?: string | null;
   /** @nullable */
   whatsapp?: string | null;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  dataAdmissao?: string | null;
+  /** @nullable */
+  respondeA?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
   temAcessoPlataforma?: boolean;
 }
 
@@ -786,9 +809,19 @@ export interface UpdateTeamMemberBody {
   /** @nullable */
   vinculo?: string | null;
   /** @nullable */
+  tipoJornada?: string | null;
+  /** @nullable */
   email?: string | null;
   /** @nullable */
   whatsapp?: string | null;
+  /** @nullable */
+  cpf?: string | null;
+  /** @nullable */
+  dataAdmissao?: string | null;
+  /** @nullable */
+  respondeA?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
   /** @nullable */
   temAcessoPlataforma?: boolean | null;
 }
