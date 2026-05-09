@@ -1092,6 +1092,42 @@ export const CreateTeamMemberBody = zod.object({
 });
 
 /**
+ * Returns an .xlsx workbook with the clinic name, CNPJ, city/UF and
+instruction header rows, plus the Quadro Funcional column headers
+ready to be filled and re-imported via POST /clinics/{clinicId}/team/import.
+
+ * @summary Download Quadro Funcional xlsx template prefilled with clinic header
+ */
+export const DownloadTeamTemplateParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+/**
+ * Accepts a multipart/form-data upload (`file` field, max 2MB) containing
+the Quadro Funcional spreadsheet. Members are matched first by CPF, then
+by unambiguous lowercased e-mail; matched rows are merged (only non-null
+spreadsheet values overwrite existing data). Does NOT dispatch invites.
+
+ * @summary Import Quadro Funcional xlsx into the clinic team
+ */
+export const ImportTeamSpreadsheetParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ImportTeamSpreadsheetResponse = zod.object({
+  created: zod.number(),
+  updated: zod.number(),
+  skipped: zod.number(),
+  errors: zod.array(
+    zod.object({
+      row: zod.number(),
+      field: zod.string().nullish(),
+      message: zod.string(),
+    }),
+  ),
+});
+
+/**
  * @summary Update a team member
  */
 export const UpdateTeamMemberParams = zod.object({

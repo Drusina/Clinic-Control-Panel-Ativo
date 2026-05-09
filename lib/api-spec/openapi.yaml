@@ -953,6 +953,89 @@ paths:
               schema:
                 $ref: "#/components/schemas/TeamMember"
 
+  /clinics/{clinicId}/team/template:
+    get:
+      operationId: downloadTeamTemplate
+      tags: [team]
+      summary: Download Quadro Funcional xlsx template prefilled with clinic header
+      description: |
+        Returns an .xlsx workbook with the clinic name, CNPJ, city/UF and
+        instruction header rows, plus the Quadro Funcional column headers
+        ready to be filled and re-imported via POST /clinics/{clinicId}/team/import.
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: xlsx file download
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /clinics/{clinicId}/team/import:
+    post:
+      operationId: importTeamSpreadsheet
+      tags: [team]
+      summary: Import Quadro Funcional xlsx into the clinic team
+      description: |
+        Accepts a multipart/form-data upload (`file` field, max 2MB) containing
+        the Quadro Funcional spreadsheet. Members are matched first by CPF, then
+        by unambiguous lowercased e-mail; matched rows are merged (only non-null
+        spreadsheet values overwrite existing data). Does NOT dispatch invites.
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        description: |
+          multipart/form-data with a single field `file` containing the
+          .xlsx workbook (≤ 2MB). Documented separately because OpenAPI/Orval
+          generated client cannot model browser File handles in a Node lib.
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [created, updated, skipped, errors]
+                properties:
+                  created:
+                    type: integer
+                  updated:
+                    type: integer
+                  skipped:
+                    type: integer
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      required: [row, message]
+                      properties:
+                        row:
+                          type: integer
+                        field:
+                          type: ["string", "null"]
+                        message:
+                          type: string
+        "400":
+          description: Invalid file or header
+        "413":
+          description: File exceeds 2MB
+
   /team/{id}:
     patch:
       operationId: updateTeamMember

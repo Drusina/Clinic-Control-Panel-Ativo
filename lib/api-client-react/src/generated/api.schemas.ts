@@ -934,3 +934,17 @@ export type ListActionsParams = {
    */
   coluna?: string | null;
 };
+
+export type ImportTeamSpreadsheet200ErrorsItem = {
+  row: number;
+  /** @nullable */
+  field?: string | null;
+  message: string;
+};
+
+export type ImportTeamSpreadsheet200 = {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: ImportTeamSpreadsheet200ErrorsItem[];
+};

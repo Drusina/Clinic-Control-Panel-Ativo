@@ -41,6 +41,7 @@ import type {
   Fatura,
   GetSocietaryDocSignedUrl200,
   HealthStatus,
+  ImportTeamSpreadsheet200,
   InviteUserBody,
   InviteUserResponse,
   Kickoff,
@@ -3795,6 +3796,197 @@ export const useCreateTeamMember = <
   TContext
 > => {
   return useMutation(getCreateTeamMemberMutationOptions(options));
+};
+
+/**
+ * Returns an .xlsx workbook with the clinic name, CNPJ, city/UF and
+instruction header rows, plus the Quadro Funcional column headers
+ready to be filled and re-imported via POST /clinics/{clinicId}/team/import.
+
+ * @summary Download Quadro Funcional xlsx template prefilled with clinic header
+ */
+export const getDownloadTeamTemplateUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/team/template`;
+};
+
+export const downloadTeamTemplate = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadTeamTemplateUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getDownloadTeamTemplateQueryKey = (clinicId: string) => {
+  return [`/api/clinics/${clinicId}/team/template`] as const;
+};
+
+export const getDownloadTeamTemplateQueryOptions = <
+  TData = Awaited<ReturnType<typeof downloadTeamTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadTeamTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getDownloadTeamTemplateQueryKey(clinicId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof downloadTeamTemplate>>
+  > = ({ signal }) =>
+    downloadTeamTemplate(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof downloadTeamTemplate>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type DownloadTeamTemplateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof downloadTeamTemplate>>
+>;
+export type DownloadTeamTemplateQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Download Quadro Funcional xlsx template prefilled with clinic header
+ */
+
+export function useDownloadTeamTemplate<
+  TData = Awaited<ReturnType<typeof downloadTeamTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadTeamTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getDownloadTeamTemplateQueryOptions(clinicId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Accepts a multipart/form-data upload (`file` field, max 2MB) containing
+the Quadro Funcional spreadsheet. Members are matched first by CPF, then
+by unambiguous lowercased e-mail; matched rows are merged (only non-null
+spreadsheet values overwrite existing data). Does NOT dispatch invites.
+
+ * @summary Import Quadro Funcional xlsx into the clinic team
+ */
+export const getImportTeamSpreadsheetUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/team/import`;
+};
+
+export const importTeamSpreadsheet = async (
+  clinicId: string,
+  importTeamSpreadsheetBody: Blob,
+  options?: RequestInit,
+): Promise<ImportTeamSpreadsheet200> => {
+  return customFetch<ImportTeamSpreadsheet200>(
+    getImportTeamSpreadsheetUrl(clinicId),
+    {
+      ...options,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        ...options?.headers,
+      },
+      body: JSON.stringify(importTeamSpreadsheetBody),
+    },
+  );
+};
+
+export const getImportTeamSpreadsheetMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importTeamSpreadsheet>>,
+    TError,
+    { clinicId: string; data: BodyType<Blob> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importTeamSpreadsheet>>,
+  TError,
+  { clinicId: string; data: BodyType<Blob> },
+  TContext
+> => {
+  const mutationKey = ["importTeamSpreadsheet"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importTeamSpreadsheet>>,
+    { clinicId: string; data: BodyType<Blob> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return importTeamSpreadsheet(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportTeamSpreadsheetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importTeamSpreadsheet>>
+>;
+export type ImportTeamSpreadsheetMutationBody = BodyType<Blob>;
+export type ImportTeamSpreadsheetMutationError = ErrorType<void>;
+
+/**
+ * @summary Import Quadro Funcional xlsx into the clinic team
+ */
+export const useImportTeamSpreadsheet = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importTeamSpreadsheet>>,
+    TError,
+    { clinicId: string; data: BodyType<Blob> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importTeamSpreadsheet>>,
+  TError,
+  { clinicId: string; data: BodyType<Blob> },
+  TContext
+> => {
+  return useMutation(getImportTeamSpreadsheetMutationOptions(options));
 };
 
 /**

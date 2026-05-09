@@ -422,12 +422,18 @@ interface ImportSummary {
   errors: ImportError[];
 }
 
+async function importClinicAccessGuard(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  if (await assertClinicAccess(req, res, clinicId)) return;
+  next();
+}
+
 router.post(
   "/clinics/:clinicId/team/import",
+  importClinicAccessGuard,
   importUploadHandler,
   async (req: Request, res): Promise<void> => {
     const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
-    if (await assertClinicAccess(req, res, clinicId)) return;
 
     const file = (req as Request & { file?: Express.Multer.File }).file;
     if (!file) {
