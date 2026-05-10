@@ -32,6 +32,7 @@ import type {
   CreateFaturaBody,
   CreateParceiroExternoBody,
   CreateRiskBody,
+  CreateSistemaUsoBody,
   CreateSocioBody,
   CreateTeamMemberBody,
   DashboardSummary,
@@ -46,6 +47,8 @@ import type {
   HealthStatus,
   ImportParceirosExternosSpreadsheet200,
   ImportParceirosExternosSpreadsheetBody,
+  ImportSistemasUsoSpreadsheet200,
+  ImportSistemasUsoSpreadsheetBody,
   ImportTeamSpreadsheet200,
   ImportTeamSpreadsheetBody,
   InviteUserBody,
@@ -57,6 +60,7 @@ import type {
   ParceiroExterno,
   PipelineItem,
   Risk,
+  SistemaUso,
   SocietaryDoc,
   Socio,
   StatusHistory,
@@ -67,6 +71,7 @@ import type {
   UpdateFaturaBody,
   UpdateParceiroExternoBody,
   UpdateRiskBody,
+  UpdateSistemaUsoBody,
   UpdateSocioBody,
   UpdateTeamMemberBody,
   UpsertKickoffBody,
@@ -4764,6 +4769,646 @@ export const useImportParceirosExternosSpreadsheet = <
   return useMutation(
     getImportParceirosExternosSpreadsheetMutationOptions(options),
   );
+};
+
+/**
+ * @summary List systems & accesses (Sistemas e Acessos) for a clinic
+ */
+export const getListSistemasUsoUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/sistemas-uso`;
+};
+
+export const listSistemasUso = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<SistemaUso[]> => {
+  return customFetch<SistemaUso[]>(getListSistemasUsoUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSistemasUsoQueryKey = (clinicId: string) => {
+  return [`/api/clinics/${clinicId}/sistemas-uso`] as const;
+};
+
+export const getListSistemasUsoQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSistemasUso>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSistemasUso>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSistemasUsoQueryKey(clinicId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSistemasUso>>> = ({
+    signal,
+  }) => listSistemasUso(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSistemasUso>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSistemasUsoQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSistemasUso>>
+>;
+export type ListSistemasUsoQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List systems & accesses (Sistemas e Acessos) for a clinic
+ */
+
+export function useListSistemasUso<
+  TData = Awaited<ReturnType<typeof listSistemasUso>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSistemasUso>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSistemasUsoQueryOptions(clinicId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a system / access entry
+ */
+export const getCreateSistemaUsoUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/sistemas-uso`;
+};
+
+export const createSistemaUso = async (
+  clinicId: string,
+  createSistemaUsoBody: CreateSistemaUsoBody,
+  options?: RequestInit,
+): Promise<SistemaUso> => {
+  return customFetch<SistemaUso>(getCreateSistemaUsoUrl(clinicId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSistemaUsoBody),
+  });
+};
+
+export const getCreateSistemaUsoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSistemaUso>>,
+    TError,
+    { clinicId: string; data: BodyType<CreateSistemaUsoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSistemaUso>>,
+  TError,
+  { clinicId: string; data: BodyType<CreateSistemaUsoBody> },
+  TContext
+> => {
+  const mutationKey = ["createSistemaUso"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSistemaUso>>,
+    { clinicId: string; data: BodyType<CreateSistemaUsoBody> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return createSistemaUso(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSistemaUsoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSistemaUso>>
+>;
+export type CreateSistemaUsoMutationBody = BodyType<CreateSistemaUsoBody>;
+export type CreateSistemaUsoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a system / access entry
+ */
+export const useCreateSistemaUso = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSistemaUso>>,
+    TError,
+    { clinicId: string; data: BodyType<CreateSistemaUsoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSistemaUso>>,
+  TError,
+  { clinicId: string; data: BodyType<CreateSistemaUsoBody> },
+  TContext
+> => {
+  return useMutation(getCreateSistemaUsoMutationOptions(options));
+};
+
+/**
+ * @summary Update a system / access entry
+ */
+export const getUpdateSistemaUsoUrl = (clinicId: string, sistemaId: string) => {
+  return `/api/clinics/${clinicId}/sistemas-uso/${sistemaId}`;
+};
+
+export const updateSistemaUso = async (
+  clinicId: string,
+  sistemaId: string,
+  updateSistemaUsoBody: UpdateSistemaUsoBody,
+  options?: RequestInit,
+): Promise<SistemaUso> => {
+  return customFetch<SistemaUso>(getUpdateSistemaUsoUrl(clinicId, sistemaId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSistemaUsoBody),
+  });
+};
+
+export const getUpdateSistemaUsoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSistemaUso>>,
+    TError,
+    {
+      clinicId: string;
+      sistemaId: string;
+      data: BodyType<UpdateSistemaUsoBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSistemaUso>>,
+  TError,
+  { clinicId: string; sistemaId: string; data: BodyType<UpdateSistemaUsoBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSistemaUso"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSistemaUso>>,
+    {
+      clinicId: string;
+      sistemaId: string;
+      data: BodyType<UpdateSistemaUsoBody>;
+    }
+  > = (props) => {
+    const { clinicId, sistemaId, data } = props ?? {};
+
+    return updateSistemaUso(clinicId, sistemaId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSistemaUsoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSistemaUso>>
+>;
+export type UpdateSistemaUsoMutationBody = BodyType<UpdateSistemaUsoBody>;
+export type UpdateSistemaUsoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a system / access entry
+ */
+export const useUpdateSistemaUso = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSistemaUso>>,
+    TError,
+    {
+      clinicId: string;
+      sistemaId: string;
+      data: BodyType<UpdateSistemaUsoBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSistemaUso>>,
+  TError,
+  { clinicId: string; sistemaId: string; data: BodyType<UpdateSistemaUsoBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSistemaUsoMutationOptions(options));
+};
+
+/**
+ * @summary Delete a system / access entry
+ */
+export const getDeleteSistemaUsoUrl = (clinicId: string, sistemaId: string) => {
+  return `/api/clinics/${clinicId}/sistemas-uso/${sistemaId}`;
+};
+
+export const deleteSistemaUso = async (
+  clinicId: string,
+  sistemaId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteSistemaUsoUrl(clinicId, sistemaId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteSistemaUsoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSistemaUso>>,
+    TError,
+    { clinicId: string; sistemaId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteSistemaUso>>,
+  TError,
+  { clinicId: string; sistemaId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteSistemaUso"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteSistemaUso>>,
+    { clinicId: string; sistemaId: string }
+  > = (props) => {
+    const { clinicId, sistemaId } = props ?? {};
+
+    return deleteSistemaUso(clinicId, sistemaId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteSistemaUsoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteSistemaUso>>
+>;
+
+export type DeleteSistemaUsoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a system / access entry
+ */
+export const useDeleteSistemaUso = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSistemaUso>>,
+    TError,
+    { clinicId: string; sistemaId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteSistemaUso>>,
+  TError,
+  { clinicId: string; sistemaId: string },
+  TContext
+> => {
+  return useMutation(getDeleteSistemaUsoMutationOptions(options));
+};
+
+/**
+ * @summary Download Sistemas e Acessos xlsx template prefilled with clinic header
+ */
+export const getDownloadSistemasUsoTemplateUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/sistemas-uso/template`;
+};
+
+export const downloadSistemasUsoTemplate = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadSistemasUsoTemplateUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getDownloadSistemasUsoTemplateQueryKey = (clinicId: string) => {
+  return [`/api/clinics/${clinicId}/sistemas-uso/template`] as const;
+};
+
+export const getDownloadSistemasUsoTemplateQueryOptions = <
+  TData = Awaited<ReturnType<typeof downloadSistemasUsoTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadSistemasUsoTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getDownloadSistemasUsoTemplateQueryKey(clinicId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof downloadSistemasUsoTemplate>>
+  > = ({ signal }) =>
+    downloadSistemasUsoTemplate(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof downloadSistemasUsoTemplate>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type DownloadSistemasUsoTemplateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof downloadSistemasUsoTemplate>>
+>;
+export type DownloadSistemasUsoTemplateQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Download Sistemas e Acessos xlsx template prefilled with clinic header
+ */
+
+export function useDownloadSistemasUsoTemplate<
+  TData = Awaited<ReturnType<typeof downloadSistemasUsoTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadSistemasUsoTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getDownloadSistemasUsoTemplateQueryOptions(
+    clinicId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Export current Sistemas e Acessos as xlsx
+ */
+export const getExportSistemasUsoUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/sistemas-uso/export`;
+};
+
+export const exportSistemasUso = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportSistemasUsoUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportSistemasUsoQueryKey = (clinicId: string) => {
+  return [`/api/clinics/${clinicId}/sistemas-uso/export`] as const;
+};
+
+export const getExportSistemasUsoQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportSistemasUso>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportSistemasUso>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getExportSistemasUsoQueryKey(clinicId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof exportSistemasUso>>
+  > = ({ signal }) =>
+    exportSistemasUso(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportSistemasUso>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportSistemasUsoQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportSistemasUso>>
+>;
+export type ExportSistemasUsoQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Export current Sistemas e Acessos as xlsx
+ */
+
+export function useExportSistemasUso<
+  TData = Awaited<ReturnType<typeof exportSistemasUso>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportSistemasUso>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportSistemasUsoQueryOptions(clinicId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Accepts a multipart/form-data upload (`file` field, max 2MB) containing
+the Sistemas e Acessos spreadsheet. Systems are matched by the
+composite key (lower(nome) + lower(fornecedor) + lower(tipo)); matched
+rows are merged (only non-null spreadsheet values overwrite existing
+data). Does NOT dispatch invites.
+
+ * @summary Import Sistemas e Acessos xlsx into the clinic
+ */
+export const getImportSistemasUsoSpreadsheetUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/sistemas-uso/import`;
+};
+
+export const importSistemasUsoSpreadsheet = async (
+  clinicId: string,
+  importSistemasUsoSpreadsheetBody: ImportSistemasUsoSpreadsheetBody,
+  options?: RequestInit,
+): Promise<ImportSistemasUsoSpreadsheet200> => {
+  const formData = new FormData();
+  formData.append(`file`, importSistemasUsoSpreadsheetBody.file);
+
+  return customFetch<ImportSistemasUsoSpreadsheet200>(
+    getImportSistemasUsoSpreadsheetUrl(clinicId),
+    {
+      ...options,
+      method: "POST",
+      body: formData,
+    },
+  );
+};
+
+export const getImportSistemasUsoSpreadsheetMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importSistemasUsoSpreadsheet>>,
+    TError,
+    { clinicId: string; data: BodyType<ImportSistemasUsoSpreadsheetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importSistemasUsoSpreadsheet>>,
+  TError,
+  { clinicId: string; data: BodyType<ImportSistemasUsoSpreadsheetBody> },
+  TContext
+> => {
+  const mutationKey = ["importSistemasUsoSpreadsheet"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importSistemasUsoSpreadsheet>>,
+    { clinicId: string; data: BodyType<ImportSistemasUsoSpreadsheetBody> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return importSistemasUsoSpreadsheet(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportSistemasUsoSpreadsheetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importSistemasUsoSpreadsheet>>
+>;
+export type ImportSistemasUsoSpreadsheetMutationBody =
+  BodyType<ImportSistemasUsoSpreadsheetBody>;
+export type ImportSistemasUsoSpreadsheetMutationError = ErrorType<void>;
+
+/**
+ * @summary Import Sistemas e Acessos xlsx into the clinic
+ */
+export const useImportSistemasUsoSpreadsheet = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importSistemasUsoSpreadsheet>>,
+    TError,
+    { clinicId: string; data: BodyType<ImportSistemasUsoSpreadsheetBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importSistemasUsoSpreadsheet>>,
+  TError,
+  { clinicId: string; data: BodyType<ImportSistemasUsoSpreadsheetBody> },
+  TContext
+> => {
+  return useMutation(getImportSistemasUsoSpreadsheetMutationOptions(options));
 };
 
 /**

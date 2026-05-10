@@ -912,6 +912,93 @@ export interface UpdateParceiroExternoBody {
   observacoes?: string | null;
 }
 
+export interface SistemaUso {
+  id: string;
+  clinicId: string;
+  nome: string;
+  /** @nullable */
+  fornecedor?: string | null;
+  /** @nullable */
+  tipo?: string | null;
+  /** @nullable */
+  site?: string | null;
+  /** @nullable */
+  responsavelInterno?: string | null;
+  /** @nullable */
+  emailResponsavel?: string | null;
+  /** @nullable */
+  telefoneResponsavel?: string | null;
+  /** @nullable */
+  suporteExterno?: string | null;
+  /** @nullable */
+  criticidade?: string | null;
+  /** @nullable */
+  apiDisponivel?: string | null;
+  integrado: boolean;
+  /** @nullable */
+  quemTemAcesso?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+  createdAt: string;
+}
+
+export interface CreateSistemaUsoBody {
+  nome: string;
+  /** @nullable */
+  fornecedor?: string | null;
+  /** @nullable */
+  tipo?: string | null;
+  /** @nullable */
+  site?: string | null;
+  /** @nullable */
+  responsavelInterno?: string | null;
+  /** @nullable */
+  emailResponsavel?: string | null;
+  /** @nullable */
+  telefoneResponsavel?: string | null;
+  /** @nullable */
+  suporteExterno?: string | null;
+  /** @nullable */
+  criticidade?: string | null;
+  /** @nullable */
+  apiDisponivel?: string | null;
+  /** @nullable */
+  integrado?: boolean | null;
+  /** @nullable */
+  quemTemAcesso?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+}
+
+export interface UpdateSistemaUsoBody {
+  /** @nullable */
+  nome?: string | null;
+  /** @nullable */
+  fornecedor?: string | null;
+  /** @nullable */
+  tipo?: string | null;
+  /** @nullable */
+  site?: string | null;
+  /** @nullable */
+  responsavelInterno?: string | null;
+  /** @nullable */
+  emailResponsavel?: string | null;
+  /** @nullable */
+  telefoneResponsavel?: string | null;
+  /** @nullable */
+  suporteExterno?: string | null;
+  /** @nullable */
+  criticidade?: string | null;
+  /** @nullable */
+  apiDisponivel?: string | null;
+  /** @nullable */
+  integrado?: boolean | null;
+  /** @nullable */
+  quemTemAcesso?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+}
+
 export type FaturaStatus = (typeof FaturaStatus)[keyof typeof FaturaStatus];
 
 export const FaturaStatus = {
@@ -1090,4 +1177,23 @@ export type ImportParceirosExternosSpreadsheet200 = {
   updated: number;
   skipped: number;
   errors: ImportParceirosExternosSpreadsheet200ErrorsItem[];
+};
+
+export type ImportSistemasUsoSpreadsheetBody = {
+  /** .xlsx workbook (≤ 2MB) */
+  file: Blob;
+};
+
+export type ImportSistemasUsoSpreadsheet200ErrorsItem = {
+  row: number;
+  /** @nullable */
+  field?: string | null;
+  message: string;
+};
+
+export type ImportSistemasUsoSpreadsheet200 = {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: ImportSistemasUsoSpreadsheet200ErrorsItem[];
 };

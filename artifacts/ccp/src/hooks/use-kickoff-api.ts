@@ -232,9 +232,12 @@ export function useDeleteParceiroExterno(clinicId: string) {
 
 export interface SistemaUsoData {
   id: string; clinicId: string; nome: string; fornecedor?: string | null;
-  tipo?: string | null; apiDisponivel?: string | null;
-  responsavelInterno?: string | null; criticidade?: string | null;
-  integrado: boolean; createdAt: string;
+  tipo?: string | null; site?: string | null; apiDisponivel?: string | null;
+  responsavelInterno?: string | null; emailResponsavel?: string | null;
+  telefoneResponsavel?: string | null; suporteExterno?: string | null;
+  criticidade?: string | null; integrado: boolean;
+  quemTemAcesso?: string | null; observacoes?: string | null;
+  createdAt: string;
 }
 
 export function useSistemasUso(clinicId: string) {

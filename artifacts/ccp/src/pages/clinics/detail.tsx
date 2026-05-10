@@ -17,6 +17,7 @@ import ActionPlanTab from "./tabs/action-plan-tab";
 import RisksTab from "./tabs/risks-tab";
 import TeamTab from "./tabs/team-tab";
 import RedeExternaTab from "./tabs/rede-externa-tab";
+import SistemasAcessosTab from "./tabs/sistemas-acessos-tab";
 import FinancialTab from "./tabs/financial-tab";
 import CadastroTab from "./tabs/cadastro-tab";
 import StatusTab from "./tabs/status-tab";
@@ -92,6 +93,7 @@ export default function ClinicDetail() {
           <TabsTrigger value="actions" className="min-w-fit">Plano de Ação</TabsTrigger>
           <TabsTrigger value="team" className="min-w-fit">Equipe</TabsTrigger>
           <TabsTrigger value="rede-externa" className="min-w-fit" data-testid="tab-rede-externa">Rede Externa</TabsTrigger>
+          <TabsTrigger value="sistemas-acessos" className="min-w-fit" data-testid="tab-sistemas-acessos">Sistemas e Acessos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="cadastro">
@@ -132,6 +134,9 @@ export default function ClinicDetail() {
         </TabsContent>
         <TabsContent value="rede-externa">
           <RedeExternaTab clinicId={id} />
+        </TabsContent>
+        <TabsContent value="sistemas-acessos">
+          <SistemasAcessosTab clinicId={id} />
         </TabsContent>
       </Tabs>
     </div>

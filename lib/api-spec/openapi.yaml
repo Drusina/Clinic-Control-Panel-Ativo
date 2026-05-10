@@ -1283,6 +1283,195 @@ paths:
         "413":
           description: File exceeds 2MB
 
+  /clinics/{clinicId}/sistemas-uso:
+    get:
+      operationId: listSistemasUso
+      tags: [sistemas-uso]
+      summary: List systems & accesses (Sistemas e Acessos) for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Systems
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SistemaUso"
+    post:
+      operationId: createSistemaUso
+      tags: [sistemas-uso]
+      summary: Add a system / access entry
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSistemaUsoBody"
+      responses:
+        "201":
+          description: Created system
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SistemaUso"
+
+  /clinics/{clinicId}/sistemas-uso/{sistemaId}:
+    patch:
+      operationId: updateSistemaUso
+      tags: [sistemas-uso]
+      summary: Update a system / access entry
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sistemaId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSistemaUsoBody"
+      responses:
+        "200":
+          description: Updated system
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SistemaUso"
+    delete:
+      operationId: deleteSistemaUso
+      tags: [sistemas-uso]
+      summary: Delete a system / access entry
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sistemaId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /clinics/{clinicId}/sistemas-uso/template:
+    get:
+      operationId: downloadSistemasUsoTemplate
+      tags: [sistemas-uso]
+      summary: Download Sistemas e Acessos xlsx template prefilled with clinic header
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: xlsx file download
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /clinics/{clinicId}/sistemas-uso/export:
+    get:
+      operationId: exportSistemasUso
+      tags: [sistemas-uso]
+      summary: Export current Sistemas e Acessos as xlsx
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: xlsx file download
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /clinics/{clinicId}/sistemas-uso/import:
+    post:
+      operationId: importSistemasUsoSpreadsheet
+      tags: [sistemas-uso]
+      summary: Import Sistemas e Acessos xlsx into the clinic
+      description: |
+        Accepts a multipart/form-data upload (`file` field, max 2MB) containing
+        the Sistemas e Acessos spreadsheet. Systems are matched by the
+        composite key (lower(nome) + lower(fornecedor) + lower(tipo)); matched
+        rows are merged (only non-null spreadsheet values overwrite existing
+        data). Does NOT dispatch invites.
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: .xlsx workbook (≤ 2MB)
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [created, updated, skipped, errors]
+                properties:
+                  created: { type: integer }
+                  updated: { type: integer }
+                  skipped: { type: integer }
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      required: [row, message]
+                      properties:
+                        row: { type: integer }
+                        field: { type: ["string", "null"] }
+                        message: { type: string }
+        "400":
+          description: Invalid file or header
+        "409":
+          description: Import rolled back due to per-row failure
+        "413":
+          description: File exceeds 2MB
+
   /team/{id}:
     patch:
       operationId: updateTeamMember
@@ -2543,6 +2732,63 @@ components:
         temContratoFormal: { type: ["boolean", "null"] }
         ondeContrato: { type: ["string", "null"] }
         frequenciaContato: { type: ["string", "null"] }
+        observacoes: { type: ["string", "null"] }
+
+    # ─── SISTEMA EM USO (Sistemas e Acessos) ───────────────────────────────
+    SistemaUso:
+      type: object
+      properties:
+        id: { type: string }
+        clinicId: { type: string }
+        nome: { type: string }
+        fornecedor: { type: ["string", "null"] }
+        tipo: { type: ["string", "null"] }
+        site: { type: ["string", "null"] }
+        responsavelInterno: { type: ["string", "null"] }
+        emailResponsavel: { type: ["string", "null"] }
+        telefoneResponsavel: { type: ["string", "null"] }
+        suporteExterno: { type: ["string", "null"] }
+        criticidade: { type: ["string", "null"] }
+        apiDisponivel: { type: ["string", "null"] }
+        integrado: { type: boolean }
+        quemTemAcesso: { type: ["string", "null"] }
+        observacoes: { type: ["string", "null"] }
+        createdAt: { type: string }
+      required: [id, clinicId, nome, integrado, createdAt]
+
+    CreateSistemaUsoBody:
+      type: object
+      properties:
+        nome: { type: string }
+        fornecedor: { type: ["string", "null"] }
+        tipo: { type: ["string", "null"] }
+        site: { type: ["string", "null"] }
+        responsavelInterno: { type: ["string", "null"] }
+        emailResponsavel: { type: ["string", "null"] }
+        telefoneResponsavel: { type: ["string", "null"] }
+        suporteExterno: { type: ["string", "null"] }
+        criticidade: { type: ["string", "null"] }
+        apiDisponivel: { type: ["string", "null"] }
+        integrado: { type: ["boolean", "null"] }
+        quemTemAcesso: { type: ["string", "null"] }
+        observacoes: { type: ["string", "null"] }
+      required: [nome]
+
+    UpdateSistemaUsoBody:
+      type: object
+      properties:
+        nome: { type: ["string", "null"] }
+        fornecedor: { type: ["string", "null"] }
+        tipo: { type: ["string", "null"] }
+        site: { type: ["string", "null"] }
+        responsavelInterno: { type: ["string", "null"] }
+        emailResponsavel: { type: ["string", "null"] }
+        telefoneResponsavel: { type: ["string", "null"] }
+        suporteExterno: { type: ["string", "null"] }
+        criticidade: { type: ["string", "null"] }
+        apiDisponivel: { type: ["string", "null"] }
+        integrado: { type: ["boolean", "null"] }
+        quemTemAcesso: { type: ["string", "null"] }
         observacoes: { type: ["string", "null"] }
 
     # ─── FATURA ─────────────────────────────────────────────────────────────

@@ -1318,6 +1318,151 @@ export const ImportParceirosExternosSpreadsheetResponse = zod.object({
 });
 
 /**
+ * @summary List systems & accesses (Sistemas e Acessos) for a clinic
+ */
+export const ListSistemasUsoParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ListSistemasUsoResponseItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  nome: zod.string(),
+  fornecedor: zod.string().nullish(),
+  tipo: zod.string().nullish(),
+  site: zod.string().nullish(),
+  responsavelInterno: zod.string().nullish(),
+  emailResponsavel: zod.string().nullish(),
+  telefoneResponsavel: zod.string().nullish(),
+  suporteExterno: zod.string().nullish(),
+  criticidade: zod.string().nullish(),
+  apiDisponivel: zod.string().nullish(),
+  integrado: zod.boolean(),
+  quemTemAcesso: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListSistemasUsoResponse = zod.array(ListSistemasUsoResponseItem);
+
+/**
+ * @summary Add a system / access entry
+ */
+export const CreateSistemaUsoParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const CreateSistemaUsoBody = zod.object({
+  nome: zod.string(),
+  fornecedor: zod.string().nullish(),
+  tipo: zod.string().nullish(),
+  site: zod.string().nullish(),
+  responsavelInterno: zod.string().nullish(),
+  emailResponsavel: zod.string().nullish(),
+  telefoneResponsavel: zod.string().nullish(),
+  suporteExterno: zod.string().nullish(),
+  criticidade: zod.string().nullish(),
+  apiDisponivel: zod.string().nullish(),
+  integrado: zod.boolean().nullish(),
+  quemTemAcesso: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+});
+
+/**
+ * @summary Update a system / access entry
+ */
+export const UpdateSistemaUsoParams = zod.object({
+  clinicId: zod.coerce.string(),
+  sistemaId: zod.coerce.string(),
+});
+
+export const UpdateSistemaUsoBody = zod.object({
+  nome: zod.string().nullish(),
+  fornecedor: zod.string().nullish(),
+  tipo: zod.string().nullish(),
+  site: zod.string().nullish(),
+  responsavelInterno: zod.string().nullish(),
+  emailResponsavel: zod.string().nullish(),
+  telefoneResponsavel: zod.string().nullish(),
+  suporteExterno: zod.string().nullish(),
+  criticidade: zod.string().nullish(),
+  apiDisponivel: zod.string().nullish(),
+  integrado: zod.boolean().nullish(),
+  quemTemAcesso: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+});
+
+export const UpdateSistemaUsoResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  nome: zod.string(),
+  fornecedor: zod.string().nullish(),
+  tipo: zod.string().nullish(),
+  site: zod.string().nullish(),
+  responsavelInterno: zod.string().nullish(),
+  emailResponsavel: zod.string().nullish(),
+  telefoneResponsavel: zod.string().nullish(),
+  suporteExterno: zod.string().nullish(),
+  criticidade: zod.string().nullish(),
+  apiDisponivel: zod.string().nullish(),
+  integrado: zod.boolean(),
+  quemTemAcesso: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a system / access entry
+ */
+export const DeleteSistemaUsoParams = zod.object({
+  clinicId: zod.coerce.string(),
+  sistemaId: zod.coerce.string(),
+});
+
+/**
+ * @summary Download Sistemas e Acessos xlsx template prefilled with clinic header
+ */
+export const DownloadSistemasUsoTemplateParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+/**
+ * @summary Export current Sistemas e Acessos as xlsx
+ */
+export const ExportSistemasUsoParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+/**
+ * Accepts a multipart/form-data upload (`file` field, max 2MB) containing
+the Sistemas e Acessos spreadsheet. Systems are matched by the
+composite key (lower(nome) + lower(fornecedor) + lower(tipo)); matched
+rows are merged (only non-null spreadsheet values overwrite existing
+data). Does NOT dispatch invites.
+
+ * @summary Import Sistemas e Acessos xlsx into the clinic
+ */
+export const ImportSistemasUsoSpreadsheetParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ImportSistemasUsoSpreadsheetBody = zod.object({
+  file: zod.instanceof(File).describe(".xlsx workbook (≤ 2MB)"),
+});
+
+export const ImportSistemasUsoSpreadsheetResponse = zod.object({
+  created: zod.number(),
+  updated: zod.number(),
+  skipped: zod.number(),
+  errors: zod.array(
+    zod.object({
+      row: zod.number(),
+      field: zod.string().nullish(),
+      message: zod.string(),
+    }),
+  ),
+});
+
+/**
  * @summary Update a team member
  */
 export const UpdateTeamMemberParams = zod.object({
