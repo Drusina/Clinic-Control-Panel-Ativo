@@ -293,7 +293,7 @@ router.post("/perguntas/import", async (req, res): Promise<void> => {
     }
   }
 
-  res.json({ inserted, updated, total: items.length });
+  res.json({ inserted, updated, invalid: [] });
 });
 
 router.post("/perguntas/reset-to-seed", async (req, res): Promise<void> => {
@@ -331,7 +331,8 @@ router.post("/perguntas/reset-to-seed", async (req, res): Promise<void> => {
     await db.insert(perguntasTable).values(toInsert);
   }
 
-  res.json({ inserted: toInsert.length });
+  const [{ value: total }] = await db.select({ value: count() }).from(perguntasTable);
+  res.json({ inserted: toInsert.length, total });
 });
 
 // ─── Respostas (clinic-scoped via diagnostic) ───────────────────────────────
