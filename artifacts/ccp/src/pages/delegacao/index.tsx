@@ -314,7 +314,7 @@ function DelegacaoBoard({ clinicId }: { clinicId: string }) {
           onChange={(id) => setSelectedDiagId(id)}
           onCreate={() => createDiagMut.mutate()}
           creating={createDiagMut.isPending}
-          canCreate={isSuperAdmin}
+          canCreate={true}
         />
         {isSuperAdmin && (
           <Button variant="outline" size="sm" onClick={() => setShowBancoDialog(true)}>
@@ -1659,7 +1659,7 @@ function BancoPerguntasDialog({
       const fd = new FormData();
       fd.append("file", file);
       const token = getStoredToken();
-      const res = await fetch("/api/perguntas/import-file", {
+      const res = await fetch(`${BASE}/api/perguntas/import-file`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
