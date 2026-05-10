@@ -826,6 +826,92 @@ export interface UpdateTeamMemberBody {
   temAcessoPlataforma?: boolean | null;
 }
 
+export interface ParceiroExterno {
+  id: string;
+  clinicId: string;
+  /** Categoria do parceiro (ex: Contador, Jurídico…) */
+  tipo: string;
+  /** @nullable */
+  nomeEmpresa?: string | null;
+  /** @nullable */
+  responsavel?: string | null;
+  /**
+   * Digits only (11 = CPF, 14 = CNPJ)
+   * @nullable
+   */
+  cnpjCpf?: string | null;
+  /** @nullable */
+  registroProfissional?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  telefone?: string | null;
+  /** @nullable */
+  site?: string | null;
+  /** @nullable */
+  temContratoFormal?: boolean | null;
+  /** @nullable */
+  ondeContrato?: string | null;
+  /** @nullable */
+  frequenciaContato?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+  createdAt: string;
+}
+
+export interface CreateParceiroExternoBody {
+  tipo: string;
+  /** @nullable */
+  nomeEmpresa?: string | null;
+  /** @nullable */
+  responsavel?: string | null;
+  /** @nullable */
+  cnpjCpf?: string | null;
+  /** @nullable */
+  registroProfissional?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  telefone?: string | null;
+  /** @nullable */
+  site?: string | null;
+  /** @nullable */
+  temContratoFormal?: boolean | null;
+  /** @nullable */
+  ondeContrato?: string | null;
+  /** @nullable */
+  frequenciaContato?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+}
+
+export interface UpdateParceiroExternoBody {
+  /** @nullable */
+  tipo?: string | null;
+  /** @nullable */
+  nomeEmpresa?: string | null;
+  /** @nullable */
+  responsavel?: string | null;
+  /** @nullable */
+  cnpjCpf?: string | null;
+  /** @nullable */
+  registroProfissional?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  telefone?: string | null;
+  /** @nullable */
+  site?: string | null;
+  /** @nullable */
+  temContratoFormal?: boolean | null;
+  /** @nullable */
+  ondeContrato?: string | null;
+  /** @nullable */
+  frequenciaContato?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+}
+
 export type FaturaStatus = (typeof FaturaStatus)[keyof typeof FaturaStatus];
 
 export const FaturaStatus = {
@@ -985,4 +1071,23 @@ export type ImportTeamSpreadsheet200 = {
   updated: number;
   skipped: number;
   errors: ImportTeamSpreadsheet200ErrorsItem[];
+};
+
+export type ImportParceirosExternosSpreadsheetBody = {
+  /** .xlsx workbook (≤ 2MB) */
+  file: Blob;
+};
+
+export type ImportParceirosExternosSpreadsheet200ErrorsItem = {
+  row: number;
+  /** @nullable */
+  field?: string | null;
+  message: string;
+};
+
+export type ImportParceirosExternosSpreadsheet200 = {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: ImportParceirosExternosSpreadsheet200ErrorsItem[];
 };

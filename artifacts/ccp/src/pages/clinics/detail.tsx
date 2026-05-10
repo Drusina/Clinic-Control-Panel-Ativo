@@ -16,6 +16,7 @@ import DiagnosticsTab from "./tabs/diagnostics-tab";
 import ActionPlanTab from "./tabs/action-plan-tab";
 import RisksTab from "./tabs/risks-tab";
 import TeamTab from "./tabs/team-tab";
+import RedeExternaTab from "./tabs/rede-externa-tab";
 import FinancialTab from "./tabs/financial-tab";
 import CadastroTab from "./tabs/cadastro-tab";
 import StatusTab from "./tabs/status-tab";
@@ -90,6 +91,7 @@ export default function ClinicDetail() {
           <TabsTrigger value="risks" className="min-w-fit">Riscos</TabsTrigger>
           <TabsTrigger value="actions" className="min-w-fit">Plano de Ação</TabsTrigger>
           <TabsTrigger value="team" className="min-w-fit">Equipe</TabsTrigger>
+          <TabsTrigger value="rede-externa" className="min-w-fit" data-testid="tab-rede-externa">Rede Externa</TabsTrigger>
         </TabsList>
 
         <TabsContent value="cadastro">
@@ -127,6 +129,9 @@ export default function ClinicDetail() {
         </TabsContent>
         <TabsContent value="team">
           <TeamTab clinicId={id} />
+        </TabsContent>
+        <TabsContent value="rede-externa">
+          <RedeExternaTab clinicId={id} />
         </TabsContent>
       </Tabs>
     </div>

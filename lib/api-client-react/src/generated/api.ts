@@ -30,6 +30,7 @@ import type {
   CreateActivityBody,
   CreateClinicBody,
   CreateFaturaBody,
+  CreateParceiroExternoBody,
   CreateRiskBody,
   CreateSocioBody,
   CreateTeamMemberBody,
@@ -43,6 +44,8 @@ import type {
   Fatura,
   GetSocietaryDocSignedUrl200,
   HealthStatus,
+  ImportParceirosExternosSpreadsheet200,
+  ImportParceirosExternosSpreadsheetBody,
   ImportTeamSpreadsheet200,
   ImportTeamSpreadsheetBody,
   InviteUserBody,
@@ -51,6 +54,7 @@ import type {
   ListActionsParams,
   ListClinicsParams,
   Notification,
+  ParceiroExterno,
   PipelineItem,
   Risk,
   SocietaryDoc,
@@ -61,6 +65,7 @@ import type {
   UpdateClinicBody,
   UpdateClinicStatusBody,
   UpdateFaturaBody,
+  UpdateParceiroExternoBody,
   UpdateRiskBody,
   UpdateSocioBody,
   UpdateTeamMemberBody,
@@ -4085,6 +4090,680 @@ export const useImportTeamSpreadsheet = <
   TContext
 > => {
   return useMutation(getImportTeamSpreadsheetMutationOptions(options));
+};
+
+/**
+ * @summary List external partners (Rede Externa) for a clinic
+ */
+export const getListParceirosExternosUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/parceiros-externos`;
+};
+
+export const listParceirosExternos = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<ParceiroExterno[]> => {
+  return customFetch<ParceiroExterno[]>(getListParceirosExternosUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListParceirosExternosQueryKey = (clinicId: string) => {
+  return [`/api/clinics/${clinicId}/parceiros-externos`] as const;
+};
+
+export const getListParceirosExternosQueryOptions = <
+  TData = Awaited<ReturnType<typeof listParceirosExternos>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listParceirosExternos>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListParceirosExternosQueryKey(clinicId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listParceirosExternos>>
+  > = ({ signal }) =>
+    listParceirosExternos(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listParceirosExternos>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListParceirosExternosQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listParceirosExternos>>
+>;
+export type ListParceirosExternosQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List external partners (Rede Externa) for a clinic
+ */
+
+export function useListParceirosExternos<
+  TData = Awaited<ReturnType<typeof listParceirosExternos>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listParceirosExternos>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListParceirosExternosQueryOptions(clinicId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add an external partner
+ */
+export const getCreateParceiroExternoUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/parceiros-externos`;
+};
+
+export const createParceiroExterno = async (
+  clinicId: string,
+  createParceiroExternoBody: CreateParceiroExternoBody,
+  options?: RequestInit,
+): Promise<ParceiroExterno> => {
+  return customFetch<ParceiroExterno>(getCreateParceiroExternoUrl(clinicId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createParceiroExternoBody),
+  });
+};
+
+export const getCreateParceiroExternoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createParceiroExterno>>,
+    TError,
+    { clinicId: string; data: BodyType<CreateParceiroExternoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createParceiroExterno>>,
+  TError,
+  { clinicId: string; data: BodyType<CreateParceiroExternoBody> },
+  TContext
+> => {
+  const mutationKey = ["createParceiroExterno"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createParceiroExterno>>,
+    { clinicId: string; data: BodyType<CreateParceiroExternoBody> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return createParceiroExterno(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateParceiroExternoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createParceiroExterno>>
+>;
+export type CreateParceiroExternoMutationBody =
+  BodyType<CreateParceiroExternoBody>;
+export type CreateParceiroExternoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add an external partner
+ */
+export const useCreateParceiroExterno = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createParceiroExterno>>,
+    TError,
+    { clinicId: string; data: BodyType<CreateParceiroExternoBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createParceiroExterno>>,
+  TError,
+  { clinicId: string; data: BodyType<CreateParceiroExternoBody> },
+  TContext
+> => {
+  return useMutation(getCreateParceiroExternoMutationOptions(options));
+};
+
+/**
+ * @summary Update an external partner
+ */
+export const getUpdateParceiroExternoUrl = (
+  clinicId: string,
+  parceiroId: string,
+) => {
+  return `/api/clinics/${clinicId}/parceiros-externos/${parceiroId}`;
+};
+
+export const updateParceiroExterno = async (
+  clinicId: string,
+  parceiroId: string,
+  updateParceiroExternoBody: UpdateParceiroExternoBody,
+  options?: RequestInit,
+): Promise<ParceiroExterno> => {
+  return customFetch<ParceiroExterno>(
+    getUpdateParceiroExternoUrl(clinicId, parceiroId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateParceiroExternoBody),
+    },
+  );
+};
+
+export const getUpdateParceiroExternoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateParceiroExterno>>,
+    TError,
+    {
+      clinicId: string;
+      parceiroId: string;
+      data: BodyType<UpdateParceiroExternoBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateParceiroExterno>>,
+  TError,
+  {
+    clinicId: string;
+    parceiroId: string;
+    data: BodyType<UpdateParceiroExternoBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["updateParceiroExterno"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateParceiroExterno>>,
+    {
+      clinicId: string;
+      parceiroId: string;
+      data: BodyType<UpdateParceiroExternoBody>;
+    }
+  > = (props) => {
+    const { clinicId, parceiroId, data } = props ?? {};
+
+    return updateParceiroExterno(clinicId, parceiroId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateParceiroExternoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateParceiroExterno>>
+>;
+export type UpdateParceiroExternoMutationBody =
+  BodyType<UpdateParceiroExternoBody>;
+export type UpdateParceiroExternoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update an external partner
+ */
+export const useUpdateParceiroExterno = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateParceiroExterno>>,
+    TError,
+    {
+      clinicId: string;
+      parceiroId: string;
+      data: BodyType<UpdateParceiroExternoBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateParceiroExterno>>,
+  TError,
+  {
+    clinicId: string;
+    parceiroId: string;
+    data: BodyType<UpdateParceiroExternoBody>;
+  },
+  TContext
+> => {
+  return useMutation(getUpdateParceiroExternoMutationOptions(options));
+};
+
+/**
+ * @summary Delete an external partner
+ */
+export const getDeleteParceiroExternoUrl = (
+  clinicId: string,
+  parceiroId: string,
+) => {
+  return `/api/clinics/${clinicId}/parceiros-externos/${parceiroId}`;
+};
+
+export const deleteParceiroExterno = async (
+  clinicId: string,
+  parceiroId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteParceiroExternoUrl(clinicId, parceiroId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteParceiroExternoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteParceiroExterno>>,
+    TError,
+    { clinicId: string; parceiroId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteParceiroExterno>>,
+  TError,
+  { clinicId: string; parceiroId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteParceiroExterno"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteParceiroExterno>>,
+    { clinicId: string; parceiroId: string }
+  > = (props) => {
+    const { clinicId, parceiroId } = props ?? {};
+
+    return deleteParceiroExterno(clinicId, parceiroId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteParceiroExternoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteParceiroExterno>>
+>;
+
+export type DeleteParceiroExternoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an external partner
+ */
+export const useDeleteParceiroExterno = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteParceiroExterno>>,
+    TError,
+    { clinicId: string; parceiroId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteParceiroExterno>>,
+  TError,
+  { clinicId: string; parceiroId: string },
+  TContext
+> => {
+  return useMutation(getDeleteParceiroExternoMutationOptions(options));
+};
+
+/**
+ * @summary Download Rede Externa xlsx template prefilled with clinic header
+ */
+export const getDownloadParceirosExternosTemplateUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/parceiros-externos/template`;
+};
+
+export const downloadParceirosExternosTemplate = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getDownloadParceirosExternosTemplateUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getDownloadParceirosExternosTemplateQueryKey = (
+  clinicId: string,
+) => {
+  return [`/api/clinics/${clinicId}/parceiros-externos/template`] as const;
+};
+
+export const getDownloadParceirosExternosTemplateQueryOptions = <
+  TData = Awaited<ReturnType<typeof downloadParceirosExternosTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadParceirosExternosTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getDownloadParceirosExternosTemplateQueryKey(clinicId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof downloadParceirosExternosTemplate>>
+  > = ({ signal }) =>
+    downloadParceirosExternosTemplate(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof downloadParceirosExternosTemplate>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type DownloadParceirosExternosTemplateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof downloadParceirosExternosTemplate>>
+>;
+export type DownloadParceirosExternosTemplateQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Download Rede Externa xlsx template prefilled with clinic header
+ */
+
+export function useDownloadParceirosExternosTemplate<
+  TData = Awaited<ReturnType<typeof downloadParceirosExternosTemplate>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof downloadParceirosExternosTemplate>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getDownloadParceirosExternosTemplateQueryOptions(
+    clinicId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Export current Rede Externa as xlsx
+ */
+export const getExportParceirosExternosUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/parceiros-externos/export`;
+};
+
+export const exportParceirosExternos = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportParceirosExternosUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportParceirosExternosQueryKey = (clinicId: string) => {
+  return [`/api/clinics/${clinicId}/parceiros-externos/export`] as const;
+};
+
+export const getExportParceirosExternosQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportParceirosExternos>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportParceirosExternos>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getExportParceirosExternosQueryKey(clinicId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof exportParceirosExternos>>
+  > = ({ signal }) =>
+    exportParceirosExternos(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportParceirosExternos>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportParceirosExternosQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportParceirosExternos>>
+>;
+export type ExportParceirosExternosQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Export current Rede Externa as xlsx
+ */
+
+export function useExportParceirosExternos<
+  TData = Awaited<ReturnType<typeof exportParceirosExternos>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportParceirosExternos>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportParceirosExternosQueryOptions(
+    clinicId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Accepts a multipart/form-data upload (`file` field, max 2MB) containing
+the Rede Externa spreadsheet. Partners are matched first by normalized
+CNPJ/CPF (digits only), then by (nomeEmpresa + responsavel) when
+CNPJ/CPF is empty; matched rows are merged (only non-null spreadsheet
+values overwrite existing data). Does NOT dispatch invites.
+
+ * @summary Import Rede Externa xlsx into the clinic external network
+ */
+export const getImportParceirosExternosSpreadsheetUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/parceiros-externos/import`;
+};
+
+export const importParceirosExternosSpreadsheet = async (
+  clinicId: string,
+  importParceirosExternosSpreadsheetBody: ImportParceirosExternosSpreadsheetBody,
+  options?: RequestInit,
+): Promise<ImportParceirosExternosSpreadsheet200> => {
+  const formData = new FormData();
+  formData.append(`file`, importParceirosExternosSpreadsheetBody.file);
+
+  return customFetch<ImportParceirosExternosSpreadsheet200>(
+    getImportParceirosExternosSpreadsheetUrl(clinicId),
+    {
+      ...options,
+      method: "POST",
+      body: formData,
+    },
+  );
+};
+
+export const getImportParceirosExternosSpreadsheetMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importParceirosExternosSpreadsheet>>,
+    TError,
+    {
+      clinicId: string;
+      data: BodyType<ImportParceirosExternosSpreadsheetBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importParceirosExternosSpreadsheet>>,
+  TError,
+  { clinicId: string; data: BodyType<ImportParceirosExternosSpreadsheetBody> },
+  TContext
+> => {
+  const mutationKey = ["importParceirosExternosSpreadsheet"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importParceirosExternosSpreadsheet>>,
+    { clinicId: string; data: BodyType<ImportParceirosExternosSpreadsheetBody> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return importParceirosExternosSpreadsheet(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportParceirosExternosSpreadsheetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importParceirosExternosSpreadsheet>>
+>;
+export type ImportParceirosExternosSpreadsheetMutationBody =
+  BodyType<ImportParceirosExternosSpreadsheetBody>;
+export type ImportParceirosExternosSpreadsheetMutationError = ErrorType<void>;
+
+/**
+ * @summary Import Rede Externa xlsx into the clinic external network
+ */
+export const useImportParceirosExternosSpreadsheet = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importParceirosExternosSpreadsheet>>,
+    TError,
+    {
+      clinicId: string;
+      data: BodyType<ImportParceirosExternosSpreadsheetBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importParceirosExternosSpreadsheet>>,
+  TError,
+  { clinicId: string; data: BodyType<ImportParceirosExternosSpreadsheetBody> },
+  TContext
+> => {
+  return useMutation(
+    getImportParceirosExternosSpreadsheetMutationOptions(options),
+  );
 };
 
 /**

@@ -1171,6 +1171,153 @@ export const ImportTeamSpreadsheetResponse = zod.object({
 });
 
 /**
+ * @summary List external partners (Rede Externa) for a clinic
+ */
+export const ListParceirosExternosParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ListParceirosExternosResponseItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  tipo: zod
+    .string()
+    .describe("Categoria do parceiro (ex: Contador, Jurídico…)"),
+  nomeEmpresa: zod.string().nullish(),
+  responsavel: zod.string().nullish(),
+  cnpjCpf: zod.string().nullish().describe("Digits only (11 = CPF, 14 = CNPJ)"),
+  registroProfissional: zod.string().nullish(),
+  email: zod.string().nullish(),
+  telefone: zod.string().nullish(),
+  site: zod.string().nullish(),
+  temContratoFormal: zod.boolean().nullish(),
+  ondeContrato: zod.string().nullish(),
+  frequenciaContato: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListParceirosExternosResponse = zod.array(
+  ListParceirosExternosResponseItem,
+);
+
+/**
+ * @summary Add an external partner
+ */
+export const CreateParceiroExternoParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const CreateParceiroExternoBody = zod.object({
+  tipo: zod.string(),
+  nomeEmpresa: zod.string().nullish(),
+  responsavel: zod.string().nullish(),
+  cnpjCpf: zod.string().nullish(),
+  registroProfissional: zod.string().nullish(),
+  email: zod.string().nullish(),
+  telefone: zod.string().nullish(),
+  site: zod.string().nullish(),
+  temContratoFormal: zod.boolean().nullish(),
+  ondeContrato: zod.string().nullish(),
+  frequenciaContato: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+});
+
+/**
+ * @summary Update an external partner
+ */
+export const UpdateParceiroExternoParams = zod.object({
+  clinicId: zod.coerce.string(),
+  parceiroId: zod.coerce.string(),
+});
+
+export const UpdateParceiroExternoBody = zod.object({
+  tipo: zod.string().nullish(),
+  nomeEmpresa: zod.string().nullish(),
+  responsavel: zod.string().nullish(),
+  cnpjCpf: zod.string().nullish(),
+  registroProfissional: zod.string().nullish(),
+  email: zod.string().nullish(),
+  telefone: zod.string().nullish(),
+  site: zod.string().nullish(),
+  temContratoFormal: zod.boolean().nullish(),
+  ondeContrato: zod.string().nullish(),
+  frequenciaContato: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+});
+
+export const UpdateParceiroExternoResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  tipo: zod
+    .string()
+    .describe("Categoria do parceiro (ex: Contador, Jurídico…)"),
+  nomeEmpresa: zod.string().nullish(),
+  responsavel: zod.string().nullish(),
+  cnpjCpf: zod.string().nullish().describe("Digits only (11 = CPF, 14 = CNPJ)"),
+  registroProfissional: zod.string().nullish(),
+  email: zod.string().nullish(),
+  telefone: zod.string().nullish(),
+  site: zod.string().nullish(),
+  temContratoFormal: zod.boolean().nullish(),
+  ondeContrato: zod.string().nullish(),
+  frequenciaContato: zod.string().nullish(),
+  observacoes: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete an external partner
+ */
+export const DeleteParceiroExternoParams = zod.object({
+  clinicId: zod.coerce.string(),
+  parceiroId: zod.coerce.string(),
+});
+
+/**
+ * @summary Download Rede Externa xlsx template prefilled with clinic header
+ */
+export const DownloadParceirosExternosTemplateParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+/**
+ * @summary Export current Rede Externa as xlsx
+ */
+export const ExportParceirosExternosParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+/**
+ * Accepts a multipart/form-data upload (`file` field, max 2MB) containing
+the Rede Externa spreadsheet. Partners are matched first by normalized
+CNPJ/CPF (digits only), then by (nomeEmpresa + responsavel) when
+CNPJ/CPF is empty; matched rows are merged (only non-null spreadsheet
+values overwrite existing data). Does NOT dispatch invites.
+
+ * @summary Import Rede Externa xlsx into the clinic external network
+ */
+export const ImportParceirosExternosSpreadsheetParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ImportParceirosExternosSpreadsheetBody = zod.object({
+  file: zod.instanceof(File).describe(".xlsx workbook (≤ 2MB)"),
+});
+
+export const ImportParceirosExternosSpreadsheetResponse = zod.object({
+  created: zod.number(),
+  updated: zod.number(),
+  skipped: zod.number(),
+  errors: zod.array(
+    zod.object({
+      row: zod.number(),
+      field: zod.string().nullish(),
+      message: zod.string(),
+    }),
+  ),
+});
+
+/**
  * @summary Update a team member
  */
 export const UpdateTeamMemberParams = zod.object({
