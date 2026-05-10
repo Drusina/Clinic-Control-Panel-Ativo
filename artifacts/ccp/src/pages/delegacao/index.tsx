@@ -271,6 +271,14 @@ function DelegacaoBoard({ clinicId }: { clinicId: string }) {
     queryKey: ["delegacao-hydrated", clinicId, selectedDiagId],
     queryFn: () => fetchHydrated(clinicId, selectedDiagId!),
     enabled: !!clinicId && !!selectedDiagId,
+    refetchInterval: (query) => {
+      if (query.state.status === "error") return false;
+      const data = query.state.data as HydratedDiagnostic | undefined;
+      if (data && data.diagnostic.status !== "em_andamento") return false;
+      return 7000;
+    },
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   // Delegacoes & team now come from the hydrated payload — no extra round-trip.
