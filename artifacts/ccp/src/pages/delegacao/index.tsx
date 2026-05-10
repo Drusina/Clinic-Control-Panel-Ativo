@@ -623,6 +623,12 @@ function PilaresTable({
           clinicId={clinicId}
           context={delegateContext}
           team={team}
+          parentDelegacao={
+            delegateContext.nivel === 2
+              ? delegacoesByPilar.get(delegateContext.pilar.slug)?.n1 ?? null
+              : null
+          }
+          pilarQuestions={questionsByPilar.get(delegateContext.pilar.slug) ?? []}
           onClose={() => setDelegateContext(null)}
         />
       )}
@@ -1096,6 +1102,8 @@ function DelegacaoDialog({
   clinicId,
   context,
   team,
+  parentDelegacao,
+  pilarQuestions,
   onClose,
 }: {
   clinicId: string;
@@ -1107,6 +1115,8 @@ function DelegacaoDialog({
     existing?: Delegacao;
   };
   team: TeamMember[];
+  parentDelegacao: Delegacao | null;
+  pilarQuestions: PerguntaTipo[];
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -1194,6 +1204,8 @@ function DelegacaoDialog({
       questaoInicio: form.questaoInicio ? parseInt(form.questaoInicio) : undefined,
       questaoFim: form.questaoFim ? parseInt(form.questaoFim) : undefined,
       observacoes: form.observacoes || undefined,
+      // Link sub-delegations to their parent N1 when one exists.
+      parentId: context.nivel === 2 ? parentDelegacao?.id ?? undefined : undefined,
     });
   };
 
@@ -1281,7 +1293,10 @@ function DelegacaoDialog({
                 Clique novamente para reiniciar a seleção.
               </p>
               <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto p-2 border rounded-md">
-                {Array.from({ length: context.pilar.questionCount }, (_, i) => i + 1).map((n) => {
+                {(pilarQuestions.length > 0
+                  ? pilarQuestions.map((q) => q.ordem)
+                  : Array.from({ length: context.pilar.questionCount }, (_, i) => i + 1)
+                ).map((n) => {
                   const ini = form.questaoInicio ? parseInt(form.questaoInicio) : null;
                   const fim = form.questaoFim ? parseInt(form.questaoFim) : null;
                   const inRange = ini != null && fim != null && n >= ini && n <= fim;

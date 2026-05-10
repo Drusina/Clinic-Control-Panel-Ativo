@@ -565,6 +565,150 @@ export interface DiagnosticQuestion {
   inverso: boolean;
 }
 
+export type PerguntaInputTipo =
+  (typeof PerguntaInputTipo)[keyof typeof PerguntaInputTipo];
+
+export const PerguntaInputTipo = {
+  sim_nao: "sim_nao",
+  escala_1_5: "escala_1_5",
+  texto_livre: "texto_livre",
+  numerico: "numerico",
+} as const;
+
+export interface PerguntaInput {
+  pilarSlug: string;
+  pilarNome: string;
+  pilarOrdem: number;
+  texto: string;
+  tipo: PerguntaInputTipo;
+  peso?: number;
+  ordem: number;
+  /** @nullable */
+  dica?: string | null;
+  /** @nullable */
+  valorMin?: number | null;
+  /** @nullable */
+  valorMax?: number | null;
+  inverso?: boolean;
+}
+
+export type PerguntasImportResultInvalidItem = {
+  row: number;
+  error: string;
+};
+
+export interface PerguntasImportResult {
+  inserted: number;
+  updated: number;
+  invalid: PerguntasImportResultInvalidItem[];
+}
+
+export interface HydratedDelegacao {
+  id: string;
+  clinicId: string;
+  pilarSlug: string;
+  pilarNome: string;
+  nivel: number;
+  /** @nullable */
+  responsavelNome?: string | null;
+  /** @nullable */
+  responsavelEmail?: string | null;
+  /** @nullable */
+  prazo?: string | null;
+  status: string;
+  /** @nullable */
+  questaoInicio?: number | null;
+  /** @nullable */
+  questaoFim?: number | null;
+  /** @nullable */
+  parentId?: string | null;
+  /** @nullable */
+  observacoes?: string | null;
+}
+
+export interface HydratedTeamMember {
+  id: string;
+  nome: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  funcao?: string | null;
+  /** @nullable */
+  whatsapp?: string | null;
+}
+
+export type HydratedDiagnosticDiagnosticStatus =
+  (typeof HydratedDiagnosticDiagnosticStatus)[keyof typeof HydratedDiagnosticDiagnosticStatus];
+
+export const HydratedDiagnosticDiagnosticStatus = {
+  em_andamento: "em_andamento",
+  concluido: "concluido",
+  cancelado: "cancelado",
+} as const;
+
+/**
+ * @nullable
+ */
+export type HydratedDiagnosticDiagnosticScoresPilares = {
+  [key: string]: number;
+} | null;
+
+/**
+ * @nullable
+ */
+export type HydratedDiagnosticDiagnosticMetasPilares = {
+  [key: string]: number;
+} | null;
+
+/**
+ * @nullable
+ */
+export type HydratedDiagnosticDiagnosticInsightsIa = {
+  [key: string]: unknown;
+} | null;
+
+export type HydratedDiagnosticDiagnostic = {
+  id: string;
+  clinicId: string;
+  versao: number;
+  status: HydratedDiagnosticDiagnosticStatus;
+  iniciadoEm: string;
+  /** @nullable */
+  concluidoEm?: string | null;
+  /** @nullable */
+  scoreGlobal?: number | null;
+  /** @nullable */
+  scoresPilares?: HydratedDiagnosticDiagnosticScoresPilares;
+  /** @nullable */
+  metasPilares?: HydratedDiagnosticDiagnosticMetasPilares;
+  /** @nullable */
+  insightsIa?: HydratedDiagnosticDiagnosticInsightsIa;
+};
+
+export type HydratedDiagnosticPillarsItem = {
+  slug: string;
+  nome: string;
+  ordem: number;
+  questionCount: number;
+  answeredCount: number;
+};
+
+export type HydratedDiagnosticRespostasItem = {
+  id: string;
+  perguntaId: string;
+  valor: string;
+  respondidoEm: string;
+};
+
+export interface HydratedDiagnostic {
+  diagnostic: HydratedDiagnosticDiagnostic;
+  pillars: HydratedDiagnosticPillarsItem[];
+  questions: DiagnosticQuestion[];
+  respostas: HydratedDiagnosticRespostasItem[];
+  delegacoes: HydratedDelegacao[];
+  team: HydratedTeamMember[];
+}
+
 export interface DiagnosticResposta {
   id: string;
   diagnosticoId: string;
@@ -1099,6 +1243,24 @@ export type DeleteSocietaryDoc200 = {
 
 export type GetSocietaryDocSignedUrl200 = {
   url: string;
+};
+
+export type DeletePerguntaParams = {
+  force?: boolean;
+};
+
+export type ImportPerguntasJsonBody = {
+  items: PerguntaInput[];
+  upsert?: boolean;
+};
+
+export type ImportPerguntasFileBody = {
+  file: Blob;
+};
+
+export type ResetPerguntasToSeed200 = {
+  inserted: number;
+  total: number;
 };
 
 export type ListActionsParams = {

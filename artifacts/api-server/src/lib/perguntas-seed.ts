@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { db, perguntasTable } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -179,20 +179,12 @@ export const PERGUNTAS_SEED: SeedPilar[] = [
  * porque a chave (pilar_slug, ordem) já existe no banco.
  */
 export async function seedPerguntasIfEmpty(): Promise<{ inserted: number; total: number }> {
-  const existing = await db
-    .select({ pilarSlug: perguntasTable.pilarSlug, ordem: perguntasTable.ordem })
-    .from(perguntasTable);
-
-  const existingKey = new Set(existing.map((r) => `${r.pilarSlug}::${r.ordem}`));
-
   type InsertRow = typeof perguntasTable.$inferInsert;
   const toInsert: InsertRow[] = [];
 
   for (const pilar of PERGUNTAS_SEED) {
     pilar.perguntas.forEach((p, idx) => {
       const ordem = idx + 1;
-      const key = `${pilar.slug}::${ordem}`;
-      if (existingKey.has(key)) return;
       toInsert.push({
         pilarSlug: pilar.slug,
         pilarNome: pilar.nome,
@@ -209,11 +201,23 @@ export async function seedPerguntasIfEmpty(): Promise<{ inserted: number; total:
     });
   }
 
-  if (toInsert.length === 0) {
-    return { inserted: 0, total: existing.length };
-  }
+  // DB-level idempotency: relies on the unique index on (pilar_slug, ordem).
+  // Safe under concurrent multi-instance startup.
+  const inserted = await db
+    .insert(perguntasTable)
+    .values(toInsert)
+    .onConflictDoNothing({
+      target: [perguntasTable.pilarSlug, perguntasTable.ordem],
+    })
+    .returning({ id: perguntasTable.id });
 
-  await db.insert(perguntasTable).values(toInsert);
+  // Skip the rest of the original "fall-through" logic — keep parity below.
+  if (inserted.length === 0) {
+    const [{ value: total }] = await db
+      .select({ value: count() })
+      .from(perguntasTable);
+    return { inserted: 0, total };
+  }
 
   // Update pilar_nome/pilar_ordem on existing rows so renaming a pilar (in
   // the seed file) propagates without needing to re-create rows.
@@ -224,12 +228,16 @@ export async function seedPerguntasIfEmpty(): Promise<{ inserted: number; total:
       .where(eq(perguntasTable.pilarSlug, pilar.slug));
   }
 
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(perguntasTable);
+
   logger.info(
-    { inserted: toInsert.length, totalAfter: existing.length + toInsert.length },
+    { inserted: inserted.length, totalAfter: total },
     "Perguntas seed: inserted missing rows",
   );
 
-  return { inserted: toInsert.length, total: existing.length + toInsert.length };
+  return { inserted: inserted.length, total };
 }
 
 /**

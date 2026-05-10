@@ -796,6 +796,230 @@ export const CalculateDiagnosticScoresResponse = zod.object({
 });
 
 /**
+ * @summary Get a diagnostic with pillars, questions, respostas, delegacoes and team in one call
+ */
+export const GetHydratedDiagnosticParams = zod.object({
+  clinicId: zod.coerce.string(),
+  diagnosticoId: zod.coerce.string(),
+});
+
+export const GetHydratedDiagnosticResponse = zod.object({
+  diagnostic: zod.object({
+    id: zod.string(),
+    clinicId: zod.string(),
+    versao: zod.number(),
+    status: zod.enum(["em_andamento", "concluido", "cancelado"]),
+    iniciadoEm: zod.string(),
+    concluidoEm: zod.string().nullish(),
+    scoreGlobal: zod.number().nullish(),
+    scoresPilares: zod.record(zod.string(), zod.number()).nullish(),
+    metasPilares: zod.record(zod.string(), zod.number()).nullish(),
+    insightsIa: zod.object({}).passthrough().nullish(),
+  }),
+  pillars: zod.array(
+    zod.object({
+      slug: zod.string(),
+      nome: zod.string(),
+      ordem: zod.number(),
+      questionCount: zod.number(),
+      answeredCount: zod.number(),
+    }),
+  ),
+  questions: zod.array(
+    zod.object({
+      id: zod.string(),
+      pilarSlug: zod.string(),
+      pilarNome: zod.string(),
+      pilarOrdem: zod.number(),
+      texto: zod.string(),
+      tipo: zod.enum(["sim_nao", "escala_1_5", "texto_livre", "numerico"]),
+      peso: zod.number(),
+      ordem: zod.number(),
+      dica: zod.string().nullish(),
+      valorMin: zod.number().nullish(),
+      valorMax: zod.number().nullish(),
+      inverso: zod.boolean(),
+    }),
+  ),
+  respostas: zod.array(
+    zod.object({
+      id: zod.string(),
+      perguntaId: zod.string(),
+      valor: zod.string(),
+      respondidoEm: zod.string(),
+    }),
+  ),
+  delegacoes: zod.array(
+    zod.object({
+      id: zod.string(),
+      clinicId: zod.string(),
+      pilarSlug: zod.string(),
+      pilarNome: zod.string(),
+      nivel: zod.number(),
+      responsavelNome: zod.string().nullish(),
+      responsavelEmail: zod.string().nullish(),
+      prazo: zod.string().nullish(),
+      status: zod.string(),
+      questaoInicio: zod.number().nullish(),
+      questaoFim: zod.number().nullish(),
+      parentId: zod.string().nullish(),
+      observacoes: zod.string().nullish(),
+    }),
+  ),
+  team: zod.array(
+    zod.object({
+      id: zod.string(),
+      nome: zod.string(),
+      email: zod.string().nullish(),
+      funcao: zod.string().nullish(),
+      whatsapp: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary List every pergunta across all pilares
+ */
+export const ListAllPerguntasResponseItem = zod.object({
+  id: zod.string(),
+  pilarSlug: zod.string(),
+  pilarNome: zod.string(),
+  pilarOrdem: zod.number(),
+  texto: zod.string(),
+  tipo: zod.enum(["sim_nao", "escala_1_5", "texto_livre", "numerico"]),
+  peso: zod.number(),
+  ordem: zod.number(),
+  dica: zod.string().nullish(),
+  valorMin: zod.number().nullish(),
+  valorMax: zod.number().nullish(),
+  inverso: zod.boolean(),
+});
+export const ListAllPerguntasResponse = zod.array(ListAllPerguntasResponseItem);
+
+/**
+ * @summary Create a new pergunta (super_admin only)
+ */
+export const CreatePerguntaBody = zod.object({
+  pilarSlug: zod.string(),
+  pilarNome: zod.string(),
+  pilarOrdem: zod.number(),
+  texto: zod.string(),
+  tipo: zod.enum(["sim_nao", "escala_1_5", "texto_livre", "numerico"]),
+  peso: zod.number().optional(),
+  ordem: zod.number(),
+  dica: zod.string().nullish(),
+  valorMin: zod.number().nullish(),
+  valorMax: zod.number().nullish(),
+  inverso: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update a pergunta (super_admin only)
+ */
+export const UpdatePerguntaParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdatePerguntaBody = zod.object({
+  pilarSlug: zod.string(),
+  pilarNome: zod.string(),
+  pilarOrdem: zod.number(),
+  texto: zod.string(),
+  tipo: zod.enum(["sim_nao", "escala_1_5", "texto_livre", "numerico"]),
+  peso: zod.number().optional(),
+  ordem: zod.number(),
+  dica: zod.string().nullish(),
+  valorMin: zod.number().nullish(),
+  valorMax: zod.number().nullish(),
+  inverso: zod.boolean().optional(),
+});
+
+export const UpdatePerguntaResponse = zod.object({
+  id: zod.string(),
+  pilarSlug: zod.string(),
+  pilarNome: zod.string(),
+  pilarOrdem: zod.number(),
+  texto: zod.string(),
+  tipo: zod.enum(["sim_nao", "escala_1_5", "texto_livre", "numerico"]),
+  peso: zod.number(),
+  ordem: zod.number(),
+  dica: zod.string().nullish(),
+  valorMin: zod.number().nullish(),
+  valorMax: zod.number().nullish(),
+  inverso: zod.boolean(),
+});
+
+/**
+ * @summary Delete a pergunta (super_admin only); pass ?force=true to cascade respostas
+ */
+export const DeletePerguntaParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const DeletePerguntaQueryParams = zod.object({
+  force: zod.coerce.boolean().optional(),
+});
+
+/**
+ * @summary Bulk import perguntas via JSON (super_admin only)
+ */
+export const ImportPerguntasJsonBody = zod.object({
+  items: zod.array(
+    zod.object({
+      pilarSlug: zod.string(),
+      pilarNome: zod.string(),
+      pilarOrdem: zod.number(),
+      texto: zod.string(),
+      tipo: zod.enum(["sim_nao", "escala_1_5", "texto_livre", "numerico"]),
+      peso: zod.number().optional(),
+      ordem: zod.number(),
+      dica: zod.string().nullish(),
+      valorMin: zod.number().nullish(),
+      valorMax: zod.number().nullish(),
+      inverso: zod.boolean().optional(),
+    }),
+  ),
+  upsert: zod.boolean().optional(),
+});
+
+export const ImportPerguntasJsonResponse = zod.object({
+  inserted: zod.number(),
+  updated: zod.number(),
+  invalid: zod.array(
+    zod.object({
+      row: zod.number(),
+      error: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Bulk import perguntas via CSV/XLSX upload (super_admin only)
+ */
+export const ImportPerguntasFileBody = zod.object({
+  file: zod.instanceof(File),
+});
+
+export const ImportPerguntasFileResponse = zod.object({
+  inserted: zod.number(),
+  updated: zod.number(),
+  invalid: zod.array(
+    zod.object({
+      row: zod.number(),
+      error: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Re-seed any missing perguntas from the built-in bank (super_admin only)
+ */
+export const ResetPerguntasToSeedResponse = zod.object({
+  inserted: zod.number(),
+  total: zod.number(),
+});
+
+/**
  * @summary List all diagnostic pillars
  */
 export const ListDiagnosticPillarsResponseItem = zod.object({

@@ -675,6 +675,141 @@ paths:
               schema:
                 $ref: "#/components/schemas/Diagnostic"
 
+  /clinics/{clinicId}/diagnostics/{diagnosticoId}/hydrated:
+    get:
+      operationId: getHydratedDiagnostic
+      tags: [diagnostics]
+      summary: Get a diagnostic with pillars, questions, respostas, delegacoes and team in one call
+      parameters:
+        - { name: clinicId, in: path, required: true, schema: { type: string } }
+        - { name: diagnosticoId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Hydrated diagnostic payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HydratedDiagnostic"
+
+  /perguntas:
+    get:
+      operationId: listAllPerguntas
+      tags: [diagnostics]
+      summary: List every pergunta across all pilares
+      responses:
+        "200":
+          description: All perguntas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DiagnosticQuestion" }
+    post:
+      operationId: createPergunta
+      tags: [diagnostics]
+      summary: Create a new pergunta (super_admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PerguntaInput" }
+      responses:
+        "201":
+          description: Created pergunta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DiagnosticQuestion" }
+
+  /perguntas/{id}:
+    patch:
+      operationId: updatePergunta
+      tags: [diagnostics]
+      summary: Update a pergunta (super_admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PerguntaInput" }
+      responses:
+        "200":
+          description: Updated pergunta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DiagnosticQuestion" }
+    delete:
+      operationId: deletePergunta
+      tags: [diagnostics]
+      summary: Delete a pergunta (super_admin only); pass ?force=true to cascade respostas
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: force, in: query, required: false, schema: { type: boolean } }
+      responses:
+        "204": { description: Deleted }
+
+  /perguntas/import:
+    post:
+      operationId: importPerguntasJson
+      tags: [diagnostics]
+      summary: Bulk import perguntas via JSON (super_admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items: { $ref: "#/components/schemas/PerguntaInput" }
+                upsert: { type: boolean }
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerguntasImportResult" }
+
+  /perguntas/import-file:
+    post:
+      operationId: importPerguntasFile
+      tags: [diagnostics]
+      summary: Bulk import perguntas via CSV/XLSX upload (super_admin only)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PerguntasImportResult" }
+
+  /perguntas/reset-to-seed:
+    post:
+      operationId: resetPerguntasToSeed
+      tags: [diagnostics]
+      summary: Re-seed any missing perguntas from the built-in bank (super_admin only)
+      responses:
+        "200":
+          description: Seed result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [inserted, total]
+                properties:
+                  inserted: { type: integer }
+                  total: { type: integer }
+
   /diagnostic/pillars:
     get:
       operationId: listDiagnosticPillars
@@ -2370,6 +2505,119 @@ components:
         - peso
         - ordem
         - inverso
+
+    PerguntaInput:
+      type: object
+      required: [pilarSlug, pilarNome, pilarOrdem, texto, tipo, ordem]
+      properties:
+        pilarSlug: { type: string }
+        pilarNome: { type: string }
+        pilarOrdem: { type: integer }
+        texto: { type: string }
+        tipo: { type: string, enum: [sim_nao, escala_1_5, texto_livre, numerico] }
+        peso: { type: number }
+        ordem: { type: integer }
+        dica: { type: ["string", "null"] }
+        valorMin: { type: ["number", "null"] }
+        valorMax: { type: ["number", "null"] }
+        inverso: { type: boolean }
+
+    PerguntasImportResult:
+      type: object
+      required: [inserted, updated, invalid]
+      properties:
+        inserted: { type: integer }
+        updated: { type: integer }
+        invalid:
+          type: array
+          items:
+            type: object
+            required: [row, error]
+            properties:
+              row: { type: integer }
+              error: { type: string }
+
+    HydratedDelegacao:
+      type: object
+      required: [id, clinicId, pilarSlug, pilarNome, nivel, status]
+      properties:
+        id: { type: string }
+        clinicId: { type: string }
+        pilarSlug: { type: string }
+        pilarNome: { type: string }
+        nivel: { type: integer }
+        responsavelNome: { type: ["string", "null"] }
+        responsavelEmail: { type: ["string", "null"] }
+        prazo: { type: ["string", "null"] }
+        status: { type: string }
+        questaoInicio: { type: ["integer", "null"] }
+        questaoFim: { type: ["integer", "null"] }
+        parentId: { type: ["string", "null"] }
+        observacoes: { type: ["string", "null"] }
+
+    HydratedTeamMember:
+      type: object
+      required: [id, nome]
+      properties:
+        id: { type: string }
+        nome: { type: string }
+        email: { type: ["string", "null"] }
+        funcao: { type: ["string", "null"] }
+        whatsapp: { type: ["string", "null"] }
+
+    HydratedDiagnostic:
+      type: object
+      required: [diagnostic, pillars, questions, respostas, delegacoes, team]
+      properties:
+        diagnostic:
+          type: object
+          required: [id, clinicId, versao, status, iniciadoEm]
+          properties:
+            id: { type: string }
+            clinicId: { type: string }
+            versao: { type: integer }
+            status: { type: string, enum: [em_andamento, concluido, cancelado] }
+            iniciadoEm: { type: string }
+            concluidoEm: { type: ["string", "null"] }
+            scoreGlobal: { type: ["number", "null"] }
+            scoresPilares:
+              type: ["object", "null"]
+              additionalProperties: { type: number }
+            metasPilares:
+              type: ["object", "null"]
+              additionalProperties: { type: number }
+            insightsIa:
+              type: ["object", "null"]
+        pillars:
+          type: array
+          items:
+            type: object
+            required: [slug, nome, ordem, questionCount, answeredCount]
+            properties:
+              slug: { type: string }
+              nome: { type: string }
+              ordem: { type: integer }
+              questionCount: { type: integer }
+              answeredCount: { type: integer }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/DiagnosticQuestion" }
+        respostas:
+          type: array
+          items:
+            type: object
+            required: [id, perguntaId, valor, respondidoEm]
+            properties:
+              id: { type: string }
+              perguntaId: { type: string }
+              valor: { type: string }
+              respondidoEm: { type: string }
+        delegacoes:
+          type: array
+          items: { $ref: "#/components/schemas/HydratedDelegacao" }
+        team:
+          type: array
+          items: { $ref: "#/components/schemas/HydratedTeamMember" }
 
     DiagnosticResposta:
       type: object

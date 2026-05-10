@@ -36,6 +36,7 @@ import type {
   CreateSocioBody,
   CreateTeamMemberBody,
   DashboardSummary,
+  DeletePerguntaParams,
   DeleteSocietaryDoc200,
   Diagnostic,
   DiagnosticPillar,
@@ -45,8 +46,11 @@ import type {
   Fatura,
   GetSocietaryDocSignedUrl200,
   HealthStatus,
+  HydratedDiagnostic,
   ImportParceirosExternosSpreadsheet200,
   ImportParceirosExternosSpreadsheetBody,
+  ImportPerguntasFileBody,
+  ImportPerguntasJsonBody,
   ImportSistemasUsoSpreadsheet200,
   ImportSistemasUsoSpreadsheetBody,
   ImportTeamSpreadsheet200,
@@ -58,7 +62,10 @@ import type {
   ListClinicsParams,
   Notification,
   ParceiroExterno,
+  PerguntaInput,
+  PerguntasImportResult,
   PipelineItem,
+  ResetPerguntasToSeed200,
   Risk,
   SistemaUso,
   SocietaryDoc,
@@ -2662,6 +2669,720 @@ export const useCalculateDiagnosticScores = <
   TContext
 > => {
   return useMutation(getCalculateDiagnosticScoresMutationOptions(options));
+};
+
+/**
+ * @summary Get a diagnostic with pillars, questions, respostas, delegacoes and team in one call
+ */
+export const getGetHydratedDiagnosticUrl = (
+  clinicId: string,
+  diagnosticoId: string,
+) => {
+  return `/api/clinics/${clinicId}/diagnostics/${diagnosticoId}/hydrated`;
+};
+
+export const getHydratedDiagnostic = async (
+  clinicId: string,
+  diagnosticoId: string,
+  options?: RequestInit,
+): Promise<HydratedDiagnostic> => {
+  return customFetch<HydratedDiagnostic>(
+    getGetHydratedDiagnosticUrl(clinicId, diagnosticoId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetHydratedDiagnosticQueryKey = (
+  clinicId: string,
+  diagnosticoId: string,
+) => {
+  return [
+    `/api/clinics/${clinicId}/diagnostics/${diagnosticoId}/hydrated`,
+  ] as const;
+};
+
+export const getGetHydratedDiagnosticQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHydratedDiagnostic>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  diagnosticoId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHydratedDiagnostic>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetHydratedDiagnosticQueryKey(clinicId, diagnosticoId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHydratedDiagnostic>>
+  > = ({ signal }) =>
+    getHydratedDiagnostic(clinicId, diagnosticoId, {
+      signal,
+      ...requestOptions,
+    });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(clinicId && diagnosticoId),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHydratedDiagnostic>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHydratedDiagnosticQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHydratedDiagnostic>>
+>;
+export type GetHydratedDiagnosticQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get a diagnostic with pillars, questions, respostas, delegacoes and team in one call
+ */
+
+export function useGetHydratedDiagnostic<
+  TData = Awaited<ReturnType<typeof getHydratedDiagnostic>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  diagnosticoId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHydratedDiagnostic>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHydratedDiagnosticQueryOptions(
+    clinicId,
+    diagnosticoId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List every pergunta across all pilares
+ */
+export const getListAllPerguntasUrl = () => {
+  return `/api/perguntas`;
+};
+
+export const listAllPerguntas = async (
+  options?: RequestInit,
+): Promise<DiagnosticQuestion[]> => {
+  return customFetch<DiagnosticQuestion[]>(getListAllPerguntasUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAllPerguntasQueryKey = () => {
+  return [`/api/perguntas`] as const;
+};
+
+export const getListAllPerguntasQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAllPerguntas>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAllPerguntas>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAllPerguntasQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAllPerguntas>>
+  > = ({ signal }) => listAllPerguntas({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAllPerguntas>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAllPerguntasQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAllPerguntas>>
+>;
+export type ListAllPerguntasQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List every pergunta across all pilares
+ */
+
+export function useListAllPerguntas<
+  TData = Awaited<ReturnType<typeof listAllPerguntas>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAllPerguntas>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAllPerguntasQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new pergunta (super_admin only)
+ */
+export const getCreatePerguntaUrl = () => {
+  return `/api/perguntas`;
+};
+
+export const createPergunta = async (
+  perguntaInput: PerguntaInput,
+  options?: RequestInit,
+): Promise<DiagnosticQuestion> => {
+  return customFetch<DiagnosticQuestion>(getCreatePerguntaUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(perguntaInput),
+  });
+};
+
+export const getCreatePerguntaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPergunta>>,
+    TError,
+    { data: BodyType<PerguntaInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPergunta>>,
+  TError,
+  { data: BodyType<PerguntaInput> },
+  TContext
+> => {
+  const mutationKey = ["createPergunta"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPergunta>>,
+    { data: BodyType<PerguntaInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPergunta(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePerguntaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPergunta>>
+>;
+export type CreatePerguntaMutationBody = BodyType<PerguntaInput>;
+export type CreatePerguntaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new pergunta (super_admin only)
+ */
+export const useCreatePergunta = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPergunta>>,
+    TError,
+    { data: BodyType<PerguntaInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPergunta>>,
+  TError,
+  { data: BodyType<PerguntaInput> },
+  TContext
+> => {
+  return useMutation(getCreatePerguntaMutationOptions(options));
+};
+
+/**
+ * @summary Update a pergunta (super_admin only)
+ */
+export const getUpdatePerguntaUrl = (id: string) => {
+  return `/api/perguntas/${id}`;
+};
+
+export const updatePergunta = async (
+  id: string,
+  perguntaInput: PerguntaInput,
+  options?: RequestInit,
+): Promise<DiagnosticQuestion> => {
+  return customFetch<DiagnosticQuestion>(getUpdatePerguntaUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(perguntaInput),
+  });
+};
+
+export const getUpdatePerguntaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePergunta>>,
+    TError,
+    { id: string; data: BodyType<PerguntaInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updatePergunta>>,
+  TError,
+  { id: string; data: BodyType<PerguntaInput> },
+  TContext
+> => {
+  const mutationKey = ["updatePergunta"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updatePergunta>>,
+    { id: string; data: BodyType<PerguntaInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updatePergunta(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdatePerguntaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updatePergunta>>
+>;
+export type UpdatePerguntaMutationBody = BodyType<PerguntaInput>;
+export type UpdatePerguntaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a pergunta (super_admin only)
+ */
+export const useUpdatePergunta = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updatePergunta>>,
+    TError,
+    { id: string; data: BodyType<PerguntaInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updatePergunta>>,
+  TError,
+  { id: string; data: BodyType<PerguntaInput> },
+  TContext
+> => {
+  return useMutation(getUpdatePerguntaMutationOptions(options));
+};
+
+/**
+ * @summary Delete a pergunta (super_admin only); pass ?force=true to cascade respostas
+ */
+export const getDeletePerguntaUrl = (
+  id: string,
+  params?: DeletePerguntaParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/perguntas/${id}?${stringifiedParams}`
+    : `/api/perguntas/${id}`;
+};
+
+export const deletePergunta = async (
+  id: string,
+  params?: DeletePerguntaParams,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeletePerguntaUrl(id, params), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeletePerguntaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePergunta>>,
+    TError,
+    { id: string; params?: DeletePerguntaParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePergunta>>,
+  TError,
+  { id: string; params?: DeletePerguntaParams },
+  TContext
+> => {
+  const mutationKey = ["deletePergunta"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deletePergunta>>,
+    { id: string; params?: DeletePerguntaParams }
+  > = (props) => {
+    const { id, params } = props ?? {};
+
+    return deletePergunta(id, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePerguntaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deletePergunta>>
+>;
+
+export type DeletePerguntaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a pergunta (super_admin only); pass ?force=true to cascade respostas
+ */
+export const useDeletePergunta = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePergunta>>,
+    TError,
+    { id: string; params?: DeletePerguntaParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePergunta>>,
+  TError,
+  { id: string; params?: DeletePerguntaParams },
+  TContext
+> => {
+  return useMutation(getDeletePerguntaMutationOptions(options));
+};
+
+/**
+ * @summary Bulk import perguntas via JSON (super_admin only)
+ */
+export const getImportPerguntasJsonUrl = () => {
+  return `/api/perguntas/import`;
+};
+
+export const importPerguntasJson = async (
+  importPerguntasJsonBody: ImportPerguntasJsonBody,
+  options?: RequestInit,
+): Promise<PerguntasImportResult> => {
+  return customFetch<PerguntasImportResult>(getImportPerguntasJsonUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(importPerguntasJsonBody),
+  });
+};
+
+export const getImportPerguntasJsonMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importPerguntasJson>>,
+    TError,
+    { data: BodyType<ImportPerguntasJsonBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importPerguntasJson>>,
+  TError,
+  { data: BodyType<ImportPerguntasJsonBody> },
+  TContext
+> => {
+  const mutationKey = ["importPerguntasJson"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importPerguntasJson>>,
+    { data: BodyType<ImportPerguntasJsonBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return importPerguntasJson(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportPerguntasJsonMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importPerguntasJson>>
+>;
+export type ImportPerguntasJsonMutationBody = BodyType<ImportPerguntasJsonBody>;
+export type ImportPerguntasJsonMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Bulk import perguntas via JSON (super_admin only)
+ */
+export const useImportPerguntasJson = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importPerguntasJson>>,
+    TError,
+    { data: BodyType<ImportPerguntasJsonBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importPerguntasJson>>,
+  TError,
+  { data: BodyType<ImportPerguntasJsonBody> },
+  TContext
+> => {
+  return useMutation(getImportPerguntasJsonMutationOptions(options));
+};
+
+/**
+ * @summary Bulk import perguntas via CSV/XLSX upload (super_admin only)
+ */
+export const getImportPerguntasFileUrl = () => {
+  return `/api/perguntas/import-file`;
+};
+
+export const importPerguntasFile = async (
+  importPerguntasFileBody: ImportPerguntasFileBody,
+  options?: RequestInit,
+): Promise<PerguntasImportResult> => {
+  const formData = new FormData();
+  formData.append(`file`, importPerguntasFileBody.file);
+
+  return customFetch<PerguntasImportResult>(getImportPerguntasFileUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getImportPerguntasFileMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importPerguntasFile>>,
+    TError,
+    { data: BodyType<ImportPerguntasFileBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importPerguntasFile>>,
+  TError,
+  { data: BodyType<ImportPerguntasFileBody> },
+  TContext
+> => {
+  const mutationKey = ["importPerguntasFile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importPerguntasFile>>,
+    { data: BodyType<ImportPerguntasFileBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return importPerguntasFile(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportPerguntasFileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importPerguntasFile>>
+>;
+export type ImportPerguntasFileMutationBody = BodyType<ImportPerguntasFileBody>;
+export type ImportPerguntasFileMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Bulk import perguntas via CSV/XLSX upload (super_admin only)
+ */
+export const useImportPerguntasFile = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importPerguntasFile>>,
+    TError,
+    { data: BodyType<ImportPerguntasFileBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importPerguntasFile>>,
+  TError,
+  { data: BodyType<ImportPerguntasFileBody> },
+  TContext
+> => {
+  return useMutation(getImportPerguntasFileMutationOptions(options));
+};
+
+/**
+ * @summary Re-seed any missing perguntas from the built-in bank (super_admin only)
+ */
+export const getResetPerguntasToSeedUrl = () => {
+  return `/api/perguntas/reset-to-seed`;
+};
+
+export const resetPerguntasToSeed = async (
+  options?: RequestInit,
+): Promise<ResetPerguntasToSeed200> => {
+  return customFetch<ResetPerguntasToSeed200>(getResetPerguntasToSeedUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResetPerguntasToSeedMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPerguntasToSeed>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetPerguntasToSeed>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["resetPerguntasToSeed"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetPerguntasToSeed>>,
+    void
+  > = () => {
+    return resetPerguntasToSeed(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetPerguntasToSeedMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetPerguntasToSeed>>
+>;
+
+export type ResetPerguntasToSeedMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Re-seed any missing perguntas from the built-in bank (super_admin only)
+ */
+export const useResetPerguntasToSeed = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPerguntasToSeed>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetPerguntasToSeed>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getResetPerguntasToSeedMutationOptions(options));
 };
 
 /**

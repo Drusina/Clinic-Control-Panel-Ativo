@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, integer, numeric, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, integer, numeric, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -16,7 +16,9 @@ export const perguntasTable = pgTable("perguntas", {
   valorMax: numeric("valor_max", { precision: 10, scale: 2 }),
   inverso: boolean("inverso").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  pilarOrdemUnique: uniqueIndex("perguntas_pilar_slug_ordem_uniq").on(t.pilarSlug, t.ordem),
+}));
 
 export const insertPerguntaSchema = createInsertSchema(perguntasTable).omit({
   id: true,
