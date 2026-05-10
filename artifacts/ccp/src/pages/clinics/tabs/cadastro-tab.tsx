@@ -14,6 +14,7 @@ import type { Clinic, Socio, UpdateClinicBody, UpdateSocioBody } from "@workspac
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { MaskedInput } from "@/components/ui/masked-input";
 import {
   Select,
   SelectContent,
@@ -309,7 +310,16 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>CNPJ</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl>
+                      <MaskedInput
+                        mask="cnpj"
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -485,7 +495,16 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>WhatsApp</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl>
+                      <MaskedInput
+                        mask="phone"
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -627,7 +646,16 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>CPF</FormLabel>
-                      <FormControl><Input placeholder="000.000.000-00" {...field} /></FormControl>
+                      <FormControl>
+                        <MaskedInput
+                          mask="cpf"
+                          value={field.value ?? ""}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

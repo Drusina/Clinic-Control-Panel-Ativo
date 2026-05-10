@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { MaskedInput, applyMask } from "@/components/ui/masked-input";
 import {
   Select,
   SelectContent,
@@ -86,16 +87,6 @@ export const clinicFormDefaults: ClinicFormValues = {
   valorRecorrente: 0,
   diaVencimento: 10,
 };
-
-function formatCNPJ(value: string) {
-  const digits = value.replace(/\D/g, "");
-  return digits
-    .replace(/^(\d{2})(\d)/, "$1.$2")
-    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/\.(\d{3})(\d)/, ".$1/$2")
-    .replace(/(\d{4})(\d)/, "$1-$2")
-    .slice(0, 18);
-}
 
 function validateCNPJ(cnpj: string): boolean {
   const digits = cnpj.replace(/\D/g, "");
@@ -174,7 +165,7 @@ export function ClinicForm({
   });
 
   const handleCnpjChange = (value: string) => {
-    const formatted = formatCNPJ(value);
+    const formatted = applyMask("cnpj", value);
     setCnpjRaw(formatted);
     form.setValue("cnpj", formatted);
     setLookupError(null);
@@ -271,12 +262,12 @@ export function ClinicForm({
                   <FormItem className="flex-1">
                     <FormLabel>CNPJ</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="00.000.000/0000-00"
+                      <MaskedInput
+                        mask="cnpj"
                         value={cnpjRaw}
-                        onChange={(e) => handleCnpjChange(e.target.value)}
+                        onChange={handleCnpjChange}
                         data-testid="input-cnpj"
-                        {...{ ref: field.ref }}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormMessage />
@@ -465,7 +456,14 @@ export function ClinicForm({
                 <FormItem>
                   <FormLabel>WhatsApp</FormLabel>
                   <FormControl>
-                    <Input placeholder="(00) 00000-0000" {...field} />
+                    <MaskedInput
+                      mask="phone"
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
