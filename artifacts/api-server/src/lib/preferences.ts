@@ -1,5 +1,5 @@
 import { db, teamTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, sql } from "drizzle-orm";
 
 export interface NotificationPrefs {
   emailEnabled: boolean;
@@ -8,12 +8,20 @@ export interface NotificationPrefs {
 
 const DEFAULT_PREFS: NotificationPrefs = { emailEnabled: true, whatsappEnabled: true };
 
-export async function getRecipientPrefs(email: string): Promise<NotificationPrefs> {
+export async function getRecipientPrefs(
+  email: string,
+  clinicId?: string,
+): Promise<NotificationPrefs> {
   try {
+    const emailMatch = sql`lower(${teamTable.email}) = lower(${email})`;
+    const where = clinicId
+      ? and(emailMatch, sql`${teamTable.clinicId} = ${clinicId}`)
+      : emailMatch;
+
     const [member] = await db
       .select({ notificationPreferences: teamTable.notificationPreferences })
       .from(teamTable)
-      .where(eq(teamTable.email, email))
+      .where(where)
       .limit(1);
 
     if (!member) return { ...DEFAULT_PREFS };

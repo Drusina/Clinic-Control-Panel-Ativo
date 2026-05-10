@@ -1,10 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, and, count } from "drizzle-orm";
-import { db, delegacoesTable, clinicsTable, risksTable, actionsTable } from "@workspace/db";
+import { eq, and, count, sql } from "drizzle-orm";
+import { db, delegacoesTable, clinicsTable, risksTable, actionsTable, teamTable } from "@workspace/db";
 import { assertClinicAccess } from "../middleware/auth";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { z } from "zod";
-import { sendEmail, buildDelegationEmail, resolveAppUrl } from "../lib/email.js";
+import { sendEmail, buildDelegationEmail, describeDelegationScope, resolveAppUrl } from "../lib/email.js";
 import { sendDelegationWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
 import { sendPushToClinic, sendPushToEmail } from "../lib/push.js";
@@ -37,12 +37,14 @@ const CreateDelegacaoBody = z.object({
   nivel: z.number().int().min(1).max(2).optional().default(1),
   responsavelNome: z.string().optional(),
   responsavelEmail: z.string().email().optional(),
+  responsavelWhatsapp: z.string().optional(),
   prazo: z.string().optional(),
   status: z.enum(["nao_delegado", "pendente", "andamento", "concluido", "atrasado"]).optional().default("pendente"),
   questaoInicio: z.number().int().optional(),
   questaoFim: z.number().int().optional(),
   parentId: z.string().uuid().optional(),
   observacoes: z.string().optional(),
+  diagnosticoId: z.string().uuid().optional(),
 });
 
 const UpdateDelegacaoBody = z.object({
@@ -96,7 +98,21 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     return;
   }
 
-  const { pilarSlug, pilarNome, nivel, responsavelNome, responsavelEmail, prazo, status, questaoInicio, questaoFim, parentId, observacoes } = parsed.data;
+  const {
+    pilarSlug,
+    pilarNome,
+    nivel,
+    responsavelNome,
+    responsavelEmail,
+    responsavelWhatsapp,
+    prazo,
+    status,
+    questaoInicio,
+    questaoFim,
+    parentId,
+    observacoes,
+    diagnosticoId,
+  } = parsed.data;
 
   const [delegacao] = await db
     .insert(delegacoesTable)
@@ -116,10 +132,12 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     })
     .returning();
 
+  const escopoLabel = describeDelegationScope({ nivel, questaoInicio, questaoFim });
+
   const delegationPushPayload = {
     title: "Nova delegação criada",
-    body: `${responsavelNome ?? "Responsável"} — pilar "${pilarNome}".`,
-    url: `/delegacao/select`,
+    body: `${responsavelNome ?? "Responsável"} — ${pilarNome} (${escopoLabel}).`,
+    url: `/delegacao/${clinicId}${diagnosticoId ? `?diagnostico=${diagnosticoId}` : ""}`,
     tag: `delegacao-${pilarSlug}`,
   };
 
@@ -128,44 +146,72 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
   if (responsavelEmail) {
     sendPushToEmail(responsavelEmail, clinicId, {
       title: "Nova delegação para você",
-      body: `Você é responsável pelo pilar "${pilarNome}".`,
+      body: `${pilarNome} — ${escopoLabel}.`,
+      url: `/delegacao/${clinicId}${diagnosticoId ? `?diagnostico=${diagnosticoId}` : ""}`,
       tag: `delegacao-${pilarSlug}`,
     }).catch(() => {});
   }
 
   if (responsavelEmail) {
-    const recipientPrefs = await getRecipientPrefs(responsavelEmail);
+    const recipientPrefs = await getRecipientPrefs(responsavelEmail, clinicId);
 
     if (recipientPrefs.whatsappEnabled || recipientPrefs.emailEnabled) {
+      const [clinicRow] = await db
+        .select({ nome: clinicsTable.nome })
+        .from(clinicsTable)
+        .where(eq(clinicsTable.id, clinicId))
+        .limit(1);
+
+      let whatsappPhone = responsavelWhatsapp;
+      if (!whatsappPhone) {
+        const [member] = await db
+          .select({ whatsapp: teamTable.whatsapp })
+          .from(teamTable)
+          .where(
+            and(
+              eq(teamTable.clinicId, clinicId),
+              sql`lower(${teamTable.email}) = lower(${responsavelEmail})`
+            )
+          )
+          .limit(1);
+        whatsappPhone = member?.whatsapp ?? undefined;
+      }
+
       const emailAppUrl = await resolveAppUrl(req);
       const emailHtml = buildDelegationEmail({
         responsavelNome: responsavelNome ?? "Responsável",
         responsavelEmail,
         pilarNome,
         pilarSlug,
+        clinicId,
+        clinicName: clinicRow?.nome ?? undefined,
+        diagnosticoId,
+        nivel,
+        questaoInicio,
+        questaoFim,
         prazo: prazo ?? undefined,
         observacoes: observacoes ?? undefined,
         appUrl: emailAppUrl,
       });
 
-      const whatsappPhone = req.body?.responsavelWhatsapp as string | undefined;
       let notifiedViaWhatsApp = false;
-
       if (whatsappPhone && isWhatsAppConfigured() && recipientPrefs.whatsappEnabled) {
         notifiedViaWhatsApp = await sendDelegationWhatsApp({
           phone: whatsappPhone,
           responsavelNome: responsavelNome ?? "Responsável",
-          pilarNome,
+          pilarNome: `${pilarNome} (${escopoLabel})`,
           prazo: prazo ?? undefined,
         });
       }
 
-      if (!notifiedViaWhatsApp && recipientPrefs.emailEnabled) {
+      if (recipientPrefs.emailEnabled) {
         sendEmail({
           to: responsavelEmail,
-          subject: `[IONEX360] Delegação — você é responsável pelo pilar ${pilarNome}`,
+          subject: `[IONEX360] Delegação — ${pilarNome} (${escopoLabel})`,
           html: emailHtml,
         }).catch(() => {});
+      } else if (!notifiedViaWhatsApp) {
+        // Recipient opted out of both channels — nothing to send.
       }
     }
   }

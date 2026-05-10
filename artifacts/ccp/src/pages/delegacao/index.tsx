@@ -495,6 +495,7 @@ interface TeamMember {
   nome: string;
   email: string | null;
   funcao: string | null;
+  whatsapp?: string | null;
 }
 
 function PilaresTable({
@@ -626,6 +627,7 @@ function PilaresTable({
       {delegateContext && (
         <DelegacaoDialog
           clinicId={clinicId}
+          diagnosticoId={diagnosticoId}
           context={delegateContext}
           team={team}
           parentDelegacao={
@@ -1105,6 +1107,7 @@ function AnswerInput({
 
 function DelegacaoDialog({
   clinicId,
+  diagnosticoId,
   context,
   team,
   parentDelegacao,
@@ -1112,6 +1115,7 @@ function DelegacaoDialog({
   onClose,
 }: {
   clinicId: string;
+  diagnosticoId: string;
   context: {
     pilar: PilarSummary;
     nivel: 1 | 2;
@@ -1198,17 +1202,20 @@ function DelegacaoDialog({
       });
       return;
     }
+    const member = team.find((m) => m.email === form.responsavelEmail);
     createMut.mutate({
       pilarSlug: context.pilar.slug,
       pilarNome: context.pilar.nome,
       nivel: context.nivel,
       responsavelNome: form.responsavelNome || undefined,
       responsavelEmail: form.responsavelEmail || undefined,
+      responsavelWhatsapp: member?.whatsapp ?? undefined,
       prazo: form.prazo || undefined,
       status: "pendente",
       questaoInicio: form.questaoInicio ? parseInt(form.questaoInicio) : undefined,
       questaoFim: form.questaoFim ? parseInt(form.questaoFim) : undefined,
       observacoes: form.observacoes || undefined,
+      diagnosticoId,
       // Link sub-delegations to their parent N1 when one exists.
       parentId: context.nivel === 2 ? parentDelegacao?.id ?? undefined : undefined,
     });

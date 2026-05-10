@@ -186,17 +186,54 @@ export function buildInviteEmail(params: { email: string; role: string; magicLin
   return baseTemplate("Convite IONEX360", body);
 }
 
+export function describeDelegationScope(params: {
+  nivel?: number | null;
+  questaoInicio?: number | null;
+  questaoFim?: number | null;
+}): string {
+  const inicio = params.questaoInicio ?? null;
+  const fim = params.questaoFim ?? null;
+  if (inicio != null && fim != null && inicio === fim) {
+    return `Pergunta única Q${inicio}`;
+  }
+  if (inicio != null && fim != null) {
+    return `Perguntas Q${inicio}–Q${fim}`;
+  }
+  if (params.nivel === 2) {
+    return "Módulo de perguntas";
+  }
+  return "Pilar inteiro";
+}
+
 export function buildDelegationEmail(params: {
   responsavelNome: string;
   responsavelEmail: string;
   pilarNome: string;
   pilarSlug: string;
+  clinicId?: string;
   clinicName?: string;
+  diagnosticoId?: string;
+  nivel?: number;
+  questaoInicio?: number | null;
+  questaoFim?: number | null;
   prazo?: string;
   observacoes?: string;
   appUrl: string;
 }): string {
-  const link = `${params.appUrl}/diagnostico/select?pilar=${encodeURIComponent(params.pilarSlug)}`;
+  const link = params.clinicId
+    ? `${params.appUrl}/delegacao/${params.clinicId}${
+        params.diagnosticoId ? `?diagnostico=${encodeURIComponent(params.diagnosticoId)}` : ""
+      }`
+    : `${params.appUrl}/diagnostico/select?pilar=${encodeURIComponent(params.pilarSlug)}`;
+  const escopoLabel = describeDelegationScope({
+    nivel: params.nivel,
+    questaoInicio: params.questaoInicio ?? null,
+    questaoFim: params.questaoFim ?? null,
+  });
+  const escopoLine = `<tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Escopo</p>
+        <p style="margin:0;color:#e2e8f0;font-weight:600;">${escopoLabel}</p>
+      </td></tr>`;
   const prazoLine = params.prazo
     ? `<tr><td style="padding-top:16px;">
         <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Prazo</p>
@@ -222,6 +259,7 @@ export function buildDelegationEmail(params: {
         <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Clínica</p>
         <p style="margin:0;color:#e2e8f0;font-weight:600;">${params.clinicName}</p>
       </td></tr>` : ""}
+      ${escopoLine}
       ${prazoLine}
     </table>
 
