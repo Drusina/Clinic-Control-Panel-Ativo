@@ -1,19 +1,37 @@
-import { useState, useEffect, useRef } from "react";
-import { useParams, useLocation, Link } from "wouter";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getStoredToken } from "@/hooks/use-auth";
+import { getStoredToken, useCurrentRole } from "@/hooks/use-auth";
 import { useListClinics, useListTeam } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
-import { Loader2, ChevronDown, ChevronRight, Plus, RefreshCw, AlertTriangle, CheckCircle2, Clock, UserX, UserCheck, ArrowLeft, Search } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  UserX,
+  UserCheck,
+  ArrowLeft,
+  Search,
+  Pencil,
+  Trash2,
+  FilePlus,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -26,18 +44,76 @@ import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const PILARES = [
-  { slug: "estrategia", nome: "Estratégia e Governança", ordem: 1, questaoTotal: 15 },
-  { slug: "financeiro", nome: "Financeiro e Fluxo de Caixa", ordem: 2, questaoTotal: 12 },
-  { slug: "contabil", nome: "Contabilidade e Fiscal", ordem: 3, questaoTotal: 10 },
-  { slug: "marketing", nome: "Vendas, Marketing e Captação", ordem: 4, questaoTotal: 13 },
-  { slug: "operacoes", nome: "Processos Operacionais", ordem: 5, questaoTotal: 14 },
-  { slug: "pessoas", nome: "Gestão de Pessoas e Cultura", ordem: 6, questaoTotal: 11 },
-  { slug: "tecnologia", nome: "Tecnologia e Sistemas", ordem: 7, questaoTotal: 10 },
-  { slug: "compliance", nome: "Compliance e Regulamentação", ordem: 8, questaoTotal: 8 },
-];
+function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined),
+    Authorization: `Bearer ${token}`,
+  };
+  if (init.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  return fetch(`${BASE}${path}`, { ...init, headers });
+}
 
-type Delegacao = {
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+type DiagnosticoStatus = "em_andamento" | "concluido" | "arquivado";
+
+interface DiagnosticoSummary {
+  id: string;
+  versao: number;
+  status: DiagnosticoStatus;
+  iniciadoEm: string;
+  concluidoEm: string | null;
+  scoreGlobal: number | null;
+}
+
+interface PerguntaTipo {
+  id: string;
+  pilarSlug: string;
+  pilarNome: string;
+  pilarOrdem: number;
+  texto: string;
+  tipo: "sim_nao" | "escala_1_5" | "numerico" | "texto_livre";
+  peso: number;
+  ordem: number;
+  dica: string | null;
+  valorMin: number | null;
+  valorMax: number | null;
+  inverso: boolean;
+}
+
+interface RespostaTipo {
+  id: string;
+  perguntaId: string;
+  valor: string;
+  respondidoEm: string;
+}
+
+interface PilarSummary {
+  slug: string;
+  nome: string;
+  ordem: number;
+  questionCount: number;
+  answeredCount: number;
+}
+
+interface HydratedDiagnostic {
+  diagnostic: {
+    id: string;
+    clinicId: string;
+    versao: number;
+    status: DiagnosticoStatus;
+    iniciadoEm: string;
+    concluidoEm: string | null;
+    scoreGlobal: number | null;
+    scoresPilares: Record<string, number> | null;
+  };
+  pillars: PilarSummary[];
+  questions: PerguntaTipo[];
+  respostas: RespostaTipo[];
+}
+
+interface Delegacao {
   id: string;
   clinicId: string;
   pilarSlug: string;
@@ -51,48 +127,14 @@ type Delegacao = {
   questaoFim: number | null;
   parentId: string | null;
   observacoes: string | null;
-};
-
-async function fetchDelegacoes(clinicId: string): Promise<Delegacao[]> {
-  const token = getStoredToken();
-  const res = await fetch(`${BASE}/api/clinics/${clinicId}/delegacoes`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Failed to fetch");
-  return res.json();
 }
 
-async function createDelegacao(clinicId: string, data: object): Promise<Delegacao> {
-  const token = getStoredToken();
-  const res = await fetch(`${BASE}/api/clinics/${clinicId}/delegacoes`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error("Failed to create");
-  return res.json();
-}
+// ─── Status visuals ─────────────────────────────────────────────────────────
 
-async function updateDelegacao(id: string, data: object): Promise<Delegacao> {
-  const token = getStoredToken();
-  const res = await fetch(`${BASE}/api/delegacoes/${id}`, {
-    method: "PATCH",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error("Failed to update");
-  return res.json();
-}
-
-async function deleteDelegacao(id: string): Promise<void> {
-  const token = getStoredToken();
-  await fetch(`${BASE}/api/delegacoes/${id}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
-const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }
+> = {
   nao_delegado: { label: "Não delegado", variant: "outline", icon: <UserX className="h-3 w-3" /> },
   pendente: { label: "Pendente", variant: "secondary", icon: <Clock className="h-3 w-3" /> },
   andamento: { label: "Em andamento", variant: "default", icon: <RefreshCw className="h-3 w-3" /> },
@@ -100,515 +142,1429 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   atrasado: { label: "Atrasado", variant: "destructive", icon: <AlertTriangle className="h-3 w-3" /> },
 };
 
-const PROGRESS_MAP: Record<string, number> = {
-  nao_delegado: 0,
-  pendente: 10,
-  andamento: 55,
-  concluido: 100,
-  atrasado: 40,
-};
+// ─── Data hooks ─────────────────────────────────────────────────────────────
+
+async function fetchDiagnosticsList(clinicId: string): Promise<DiagnosticoSummary[]> {
+  const res = await authFetch(`/api/clinics/${clinicId}/diagnostics`);
+  if (!res.ok) throw new Error("Failed to fetch diagnostics");
+  const data = await res.json();
+  return data.map(
+    (d: {
+      id: string;
+      versao: number;
+      status: DiagnosticoStatus;
+      iniciadoEm: string;
+      concluidoEm: string | null;
+      scoreGlobal: number | null;
+    }) => ({
+      id: d.id,
+      versao: d.versao,
+      status: d.status,
+      iniciadoEm: d.iniciadoEm,
+      concluidoEm: d.concluidoEm,
+      scoreGlobal: d.scoreGlobal,
+    })
+  );
+}
+
+async function fetchHydrated(clinicId: string, diagnosticoId: string): Promise<HydratedDiagnostic> {
+  const res = await authFetch(`/api/clinics/${clinicId}/diagnostics/${diagnosticoId}/hydrated`);
+  if (!res.ok) throw new Error("Failed to fetch hydrated diagnostic");
+  return res.json();
+}
+
+async function fetchDelegacoes(clinicId: string): Promise<Delegacao[]> {
+  const res = await authFetch(`/api/clinics/${clinicId}/delegacoes`);
+  if (!res.ok) throw new Error("Failed to fetch delegacoes");
+  return res.json();
+}
+
+// ─── Page entry ─────────────────────────────────────────────────────────────
 
 export default function DelegacaoPage() {
   const params = useParams<{ clinicId: string }>();
   const clinicId = params.clinicId;
-  const [, navigate] = useLocation();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogMode, setDialogMode] = useState<"delegate" | "subdelegate" | "reatribuir">("delegate");
-  const [selectedPilar, setSelectedPilar] = useState<typeof PILARES[0] | null>(null);
-  const [parentDelegacao, setParentDelegacao] = useState<Delegacao | null>(null);
-  const [reatribuirId, setReatribuirId] = useState<string | null>(null);
-
-  const [form, setForm] = useState({
-    responsavelNome: "",
-    responsavelEmail: "",
-    prazo: "",
-    status: "",
-    questaoInicio: "",
-    questaoFim: "",
-    observacoes: "",
-  });
-
-  const { data: clinicData } = useListClinics({ pageSize: 1 });
-
-  const { data: delegacoes = [], isLoading } = useQuery({
-    queryKey: ["delegacoes", clinicId],
-    queryFn: () => fetchDelegacoes(clinicId!),
-    enabled: !!clinicId,
-  });
-
-  const { data: teamData } = useListTeam(clinicId!, {
-    query: { enabled: !!clinicId, queryKey: ["team", clinicId] },
-  });
-  const team = teamData ?? [];
-
-  const createMut = useMutation({
-    mutationFn: (data: object) => createDelegacao(clinicId!, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] });
-      setDialogOpen(false);
-      toast({ title: dialogMode === "delegate" ? "Pilar delegado com sucesso" : "Sub-delegação criada" });
-    },
-    onError: () => toast({ variant: "destructive", title: "Erro ao salvar delegação" }),
-  });
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: object }) => updateDelegacao(id, data),
-    onSuccess: (updated) => {
-      queryClient.setQueryData<Delegacao[]>(["delegacoes", clinicId], (old) => {
-        if (!old) return old;
-        return old.map(d => d.id === updated.id ? updated : d);
-      });
-    },
-    onError: () => toast({ variant: "destructive", title: "Erro ao atualizar" }),
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => deleteDelegacao(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] }),
-  });
-
-  const seedMut = useMutation({
-    mutationFn: async () => {
-      const token = getStoredToken();
-      const res = await fetch(`${BASE}/api/clinics/${clinicId}/delegacoes/seed`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      });
-      if (!res.ok) throw new Error("Seed failed");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] });
-      if (data.created > 0) toast({ title: `${data.created} pilares ICS inicializados automaticamente` });
-    },
-    onError: () => toast({ variant: "destructive", title: "Erro ao inicializar pilares" }),
-  });
-
-  const autoSeeded = useRef(false);
-  useEffect(() => {
-    if (!isLoading && delegacoes.length === 0 && clinicId && !autoSeeded.current) {
-      autoSeeded.current = true;
-      seedMut.mutate();
-    }
-  }, [isLoading, delegacoes.length, clinicId]);
 
   if (!clinicId) {
     return <ClinicSelector />;
   }
+  return <DelegacaoBoard clinicId={clinicId} />;
+}
 
-  const toggleRow = (slug: string) => {
-    setExpandedRows(prev => {
+// ─── Main board ─────────────────────────────────────────────────────────────
+
+function DelegacaoBoard({ clinicId }: { clinicId: string }) {
+  const [, navigate] = useLocation();
+  const search = useSearch();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: currentUser } = useCurrentRole();
+  const isSuperAdmin = currentUser?.role === "super_admin";
+
+  // ─ Diagnostic selector ──
+  const { data: diagnostics = [], isLoading: isLoadingDiags } = useQuery({
+    queryKey: ["diagnostics", clinicId],
+    queryFn: () => fetchDiagnosticsList(clinicId),
+    enabled: !!clinicId,
+  });
+
+  const queryDiagnosticoId = useMemo(() => {
+    const sp = new URLSearchParams(search);
+    return sp.get("diagnostico");
+  }, [search]);
+
+  const localStorageKey = `ccp_delegacao_diag_${clinicId}`;
+
+  const defaultDiagnosticoId = useMemo(() => {
+    if (queryDiagnosticoId) return queryDiagnosticoId;
+    const stored = typeof window !== "undefined" ? localStorage.getItem(localStorageKey) : null;
+    if (stored && diagnostics.some((d) => d.id === stored)) return stored;
+    const inProgress = diagnostics.find((d) => d.status === "em_andamento");
+    if (inProgress) return inProgress.id;
+    const concluded = diagnostics.filter((d) => d.status === "concluido");
+    if (concluded.length > 0) {
+      // most recent concluido (by iniciadoEm desc)
+      return [...concluded].sort((a, b) => b.iniciadoEm.localeCompare(a.iniciadoEm))[0].id;
+    }
+    return diagnostics[0]?.id ?? null;
+  }, [queryDiagnosticoId, diagnostics, localStorageKey]);
+
+  const [selectedDiagId, setSelectedDiagId] = useState<string | null>(null);
+  useEffect(() => {
+    if (defaultDiagnosticoId && selectedDiagId !== defaultDiagnosticoId) {
+      setSelectedDiagId(defaultDiagnosticoId);
+    }
+  }, [defaultDiagnosticoId]);
+
+  useEffect(() => {
+    if (selectedDiagId) localStorage.setItem(localStorageKey, selectedDiagId);
+  }, [selectedDiagId, localStorageKey]);
+
+  const createDiagMut = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch(`/api/clinics/${clinicId}/diagnostics`, { method: "POST" });
+      if (!res.ok) throw new Error("Falha ao criar diagnóstico");
+      return res.json() as Promise<DiagnosticoSummary>;
+    },
+    onSuccess: (created) => {
+      queryClient.invalidateQueries({ queryKey: ["diagnostics", clinicId] });
+      setSelectedDiagId(created.id);
+      toast({ title: "Diagnóstico criado", description: `Versão ${created.versao} iniciada.` });
+    },
+    onError: () => toast({ variant: "destructive", title: "Erro ao criar diagnóstico" }),
+  });
+
+  // ─ Hydrated load ──
+  const {
+    data: hydrated,
+    isLoading: isLoadingHydrated,
+    isFetching: isFetchingHydrated,
+  } = useQuery({
+    queryKey: ["delegacao-hydrated", clinicId, selectedDiagId],
+    queryFn: () => fetchHydrated(clinicId, selectedDiagId!),
+    enabled: !!clinicId && !!selectedDiagId,
+  });
+
+  const { data: delegacoes = [] } = useQuery({
+    queryKey: ["delegacoes", clinicId],
+    queryFn: () => fetchDelegacoes(clinicId),
+    enabled: !!clinicId,
+  });
+
+  const { data: teamData } = useListTeam(clinicId, {
+    query: { enabled: !!clinicId, queryKey: ["team", clinicId] },
+  });
+  const team = teamData ?? [];
+
+  const isLoading = isLoadingDiags || (!!selectedDiagId && isLoadingHydrated);
+
+  // Auto-create a first diagnostic if none exists
+  const autoCreated = useRef(false);
+  useEffect(() => {
+    if (
+      !autoCreated.current &&
+      !isLoadingDiags &&
+      diagnostics.length === 0 &&
+      isSuperAdmin &&
+      !createDiagMut.isPending
+    ) {
+      autoCreated.current = true;
+      createDiagMut.mutate();
+    }
+  }, [isLoadingDiags, diagnostics.length, isSuperAdmin]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/me/clinicas")}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold">Delegação do Diagnóstico</h1>
+          <p className="text-sm text-muted-foreground">
+            Responda às perguntas, delegue por pilar, módulo ou pergunta individual.
+          </p>
+        </div>
+        <DiagnosticPicker
+          diagnostics={diagnostics}
+          value={selectedDiagId}
+          onChange={(id) => setSelectedDiagId(id)}
+          onCreate={() => createDiagMut.mutate()}
+          creating={createDiagMut.isPending}
+          canCreate={isSuperAdmin}
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : !selectedDiagId ? (
+        <EmptyDiagnosticState
+          canCreate={isSuperAdmin}
+          onCreate={() => createDiagMut.mutate()}
+          creating={createDiagMut.isPending}
+        />
+      ) : hydrated ? (
+        <>
+          {isFetchingHydrated && (
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" /> Atualizando…
+            </div>
+          )}
+          <DiagnosticHeader hydrated={hydrated} />
+          <PilaresTable
+            clinicId={clinicId}
+            hydrated={hydrated}
+            delegacoes={delegacoes}
+            team={team.map((m) => ({ id: m.id, nome: m.nome, email: m.email ?? null, funcao: m.funcao ?? null }))}
+            isSuperAdmin={isSuperAdmin}
+            diagnosticoId={selectedDiagId}
+          />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+// ─── Diagnostic picker ──────────────────────────────────────────────────────
+
+function DiagnosticPicker({
+  diagnostics,
+  value,
+  onChange,
+  onCreate,
+  creating,
+  canCreate,
+}: {
+  diagnostics: DiagnosticoSummary[];
+  value: string | null;
+  onChange: (id: string) => void;
+  onCreate: () => void;
+  creating: boolean;
+  canCreate: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      {diagnostics.length > 0 && (
+        <Select value={value ?? undefined} onValueChange={onChange}>
+          <SelectTrigger className="w-[260px]">
+            <SelectValue placeholder="Selecionar diagnóstico" />
+          </SelectTrigger>
+          <SelectContent>
+            {diagnostics.map((d) => (
+              <SelectItem key={d.id} value={d.id}>
+                v{d.versao} — {d.status === "em_andamento" ? "Em andamento" : d.status === "concluido" ? "Concluído" : "Arquivado"}
+                {d.iniciadoEm && (
+                  <span className="text-muted-foreground ml-1">
+                    ({new Date(d.iniciadoEm).toLocaleDateString("pt-BR")})
+                  </span>
+                )}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {canCreate && (
+        <Button size="sm" variant="outline" onClick={onCreate} disabled={creating}>
+          {creating ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+          Novo
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function EmptyDiagnosticState({
+  canCreate,
+  onCreate,
+  creating,
+}: {
+  canCreate: boolean;
+  onCreate: () => void;
+  creating: boolean;
+}) {
+  return (
+    <div className="border rounded-lg p-8 bg-muted/30 flex flex-col items-center gap-3 text-center">
+      <AlertTriangle className="h-8 w-8 text-amber-500" />
+      <div>
+        <p className="font-semibold">Nenhum diagnóstico ativo</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {canCreate
+            ? "Inicie um diagnóstico para começar a responder e delegar pilares."
+            : "Solicite ao super admin que inicie um diagnóstico para esta clínica."}
+        </p>
+      </div>
+      {canCreate && (
+        <Button onClick={onCreate} disabled={creating}>
+          {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+          Iniciar diagnóstico
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function DiagnosticHeader({ hydrated }: { hydrated: HydratedDiagnostic }) {
+  const totalQuestions = hydrated.pillars.reduce((s, p) => s + p.questionCount, 0);
+  const totalAnswered = hydrated.pillars.reduce((s, p) => s + p.answeredCount, 0);
+  const pct = totalQuestions === 0 ? 0 : Math.round((totalAnswered / totalQuestions) * 100);
+
+  return (
+    <div className="border rounded-lg p-4 bg-card flex flex-wrap items-center gap-6">
+      <div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">Diagnóstico</div>
+        <div className="font-semibold">v{hydrated.diagnostic.versao}</div>
+      </div>
+      <div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">Status</div>
+        <Badge variant={hydrated.diagnostic.status === "em_andamento" ? "secondary" : "default"}>
+          {hydrated.diagnostic.status === "em_andamento"
+            ? "Em andamento"
+            : hydrated.diagnostic.status === "concluido"
+            ? "Concluído"
+            : "Arquivado"}
+        </Badge>
+      </div>
+      <div className="flex-1 min-w-[200px]">
+        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+          <span>Progresso global</span>
+          <span>
+            {totalAnswered}/{totalQuestions} ({pct}%)
+          </span>
+        </div>
+        <Progress value={pct} className="h-2" />
+      </div>
+      {hydrated.diagnostic.scoreGlobal != null && (
+        <div className="text-right">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">Score global</div>
+          <div className="text-xl font-bold text-primary">
+            {hydrated.diagnostic.scoreGlobal.toFixed(1)}
+            <span className="text-sm text-muted-foreground">/5.0</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Pilares table ──────────────────────────────────────────────────────────
+
+interface TeamMember {
+  id: string;
+  nome: string;
+  email: string | null;
+  funcao: string | null;
+}
+
+function PilaresTable({
+  clinicId,
+  hydrated,
+  delegacoes,
+  team,
+  isSuperAdmin,
+  diagnosticoId,
+}: {
+  clinicId: string;
+  hydrated: HydratedDiagnostic;
+  delegacoes: Delegacao[];
+  team: TeamMember[];
+  isSuperAdmin: boolean;
+  diagnosticoId: string;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [editingPergunta, setEditingPergunta] = useState<PerguntaTipo | null>(null);
+  const [creatingPerguntaForPilar, setCreatingPerguntaForPilar] = useState<PilarSummary | null>(null);
+  const [delegateContext, setDelegateContext] = useState<{
+    pilar: PilarSummary;
+    nivel: 1 | 2;
+    questaoInicio?: number;
+    questaoFim?: number;
+    existing?: Delegacao;
+  } | null>(null);
+
+  const respByPergunta = useMemo(() => {
+    const m = new Map<string, RespostaTipo>();
+    for (const r of hydrated.respostas) m.set(r.perguntaId, r);
+    return m;
+  }, [hydrated.respostas]);
+
+  const questionsByPilar = useMemo(() => {
+    const m = new Map<string, PerguntaTipo[]>();
+    for (const q of hydrated.questions) {
+      if (!m.has(q.pilarSlug)) m.set(q.pilarSlug, []);
+      m.get(q.pilarSlug)!.push(q);
+    }
+    return m;
+  }, [hydrated.questions]);
+
+  const delegacoesByPilar = useMemo(() => {
+    const m = new Map<string, { n1?: Delegacao; n2s: Delegacao[] }>();
+    for (const d of delegacoes) {
+      let bucket = m.get(d.pilarSlug);
+      if (!bucket) {
+        bucket = { n2s: [] };
+        m.set(d.pilarSlug, bucket);
+      }
+      if (d.nivel === 1) bucket.n1 = d;
+      else bucket.n2s.push(d);
+    }
+    return m;
+  }, [delegacoes]);
+
+  const toggleRow = (slug: string) =>
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(slug)) next.delete(slug);
       else next.add(slug);
       return next;
     });
+
+  return (
+    <>
+      <div className="rounded-lg border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground w-8"></th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Pilar</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">
+                Responsável
+              </th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">
+                Progresso
+              </th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Score</th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {hydrated.pillars.map((pilar) => {
+              const isExpanded = expanded.has(pilar.slug);
+              const bucket = delegacoesByPilar.get(pilar.slug);
+              const n1 = bucket?.n1;
+              const n2s = bucket?.n2s ?? [];
+              const status = n1?.status ?? "nao_delegado";
+              const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.nao_delegado;
+              const pct =
+                pilar.questionCount === 0 ? 0 : Math.round((pilar.answeredCount / pilar.questionCount) * 100);
+              const score = hydrated.diagnostic.scoresPilares?.[pilar.slug];
+              const questions = questionsByPilar.get(pilar.slug) ?? [];
+
+              return (
+                <PilarRow
+                  key={pilar.slug}
+                  pilar={pilar}
+                  questions={questions}
+                  respByPergunta={respByPergunta}
+                  n1={n1}
+                  n2s={n2s}
+                  statusCfg={statusCfg}
+                  pct={pct}
+                  score={score}
+                  isExpanded={isExpanded}
+                  toggleRow={toggleRow}
+                  isSuperAdmin={isSuperAdmin}
+                  clinicId={clinicId}
+                  diagnosticoId={diagnosticoId}
+                  onDelegatePilar={() => setDelegateContext({ pilar, nivel: 1 })}
+                  onReatribuirPilar={() => setDelegateContext({ pilar, nivel: 1, existing: n1 })}
+                  onSubdelegate={() => setDelegateContext({ pilar, nivel: 2 })}
+                  onDelegateQuestion={(ordem) =>
+                    setDelegateContext({ pilar, nivel: 2, questaoInicio: ordem, questaoFim: ordem })
+                  }
+                  onEditPergunta={(p) => setEditingPergunta(p)}
+                  onCreatePergunta={() => setCreatingPerguntaForPilar(pilar)}
+                />
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {delegateContext && (
+        <DelegacaoDialog
+          clinicId={clinicId}
+          context={delegateContext}
+          team={team}
+          onClose={() => setDelegateContext(null)}
+        />
+      )}
+
+      {(editingPergunta || creatingPerguntaForPilar) && (
+        <PerguntaDialog
+          pergunta={editingPergunta ?? null}
+          pilar={creatingPerguntaForPilar ?? null}
+          existingPilarOrdens={
+            creatingPerguntaForPilar
+              ? (questionsByPilar.get(creatingPerguntaForPilar.slug) ?? []).map((p) => p.ordem)
+              : []
+          }
+          onClose={() => {
+            setEditingPergunta(null);
+            setCreatingPerguntaForPilar(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Pilar row + expanded details ───────────────────────────────────────────
+
+interface PilarRowProps {
+  pilar: PilarSummary;
+  questions: PerguntaTipo[];
+  respByPergunta: Map<string, RespostaTipo>;
+  n1: Delegacao | undefined;
+  n2s: Delegacao[];
+  statusCfg: typeof STATUS_CONFIG[string];
+  pct: number;
+  score: number | undefined;
+  isExpanded: boolean;
+  toggleRow: (slug: string) => void;
+  isSuperAdmin: boolean;
+  clinicId: string;
+  diagnosticoId: string;
+  onDelegatePilar: () => void;
+  onReatribuirPilar: () => void;
+  onSubdelegate: () => void;
+  onDelegateQuestion: (ordem: number) => void;
+  onEditPergunta: (p: PerguntaTipo) => void;
+  onCreatePergunta: () => void;
+}
+
+function PilarRow(props: PilarRowProps) {
+  const {
+    pilar,
+    questions,
+    respByPergunta,
+    n1,
+    n2s,
+    statusCfg,
+    pct,
+    score,
+    isExpanded,
+    toggleRow,
+    isSuperAdmin,
+    clinicId,
+    diagnosticoId,
+    onDelegatePilar,
+    onReatribuirPilar,
+    onSubdelegate,
+    onDelegateQuestion,
+    onEditPergunta,
+    onCreatePergunta,
+  } = props;
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const updateDelegMut = useMutation({
+    mutationFn: async (vars: { id: string; data: Partial<Delegacao> }) => {
+      const res = await authFetch(`/api/delegacoes/${vars.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(vars.data),
+      });
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] }),
+    onError: () => toast({ variant: "destructive", title: "Erro ao atualizar delegação" }),
+  });
+
+  const deleteDelegMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await authFetch(`/api/delegacoes/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] }),
+  });
+
+  return (
+    <>
+      <tr className="hover:bg-muted/30 transition-colors">
+        <td className="px-4 py-3">
+          <button
+            onClick={() => toggleRow(pilar.slug)}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={isExpanded ? "Recolher" : "Expandir"}
+          >
+            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+        </td>
+        <td className="px-4 py-3">
+          <div className="font-medium">{pilar.nome}</div>
+          <div className="text-xs text-muted-foreground">
+            {pilar.answeredCount}/{pilar.questionCount} respondidas
+            {n2s.length > 0 ? ` · ${n2s.length} sub-delegações` : ""}
+          </div>
+        </td>
+        <td className="px-4 py-3 hidden md:table-cell">
+          {n1?.responsavelNome ? (
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
+                {n1.responsavelNome.charAt(0).toUpperCase()}
+              </div>
+              <div className="text-xs">
+                <div>{n1.responsavelNome}</div>
+                {n1.responsavelEmail && (
+                  <div className="text-muted-foreground">{n1.responsavelEmail}</div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <span className="text-muted-foreground italic text-xs">Não delegado</span>
+          )}
+        </td>
+        <td className="px-4 py-3 hidden lg:table-cell">
+          <div className="flex items-center gap-2">
+            <Progress value={pct} className="h-2 w-24" />
+            <span className="text-xs text-muted-foreground">{pct}%</span>
+          </div>
+        </td>
+        <td className="px-4 py-3 hidden md:table-cell">
+          <Badge variant={statusCfg.variant} className="gap-1 text-xs">
+            {statusCfg.icon}
+            {statusCfg.label}
+          </Badge>
+        </td>
+        <td className="px-4 py-3 hidden lg:table-cell">
+          {score != null ? (
+            <span className="text-sm font-semibold">{score.toFixed(1)}/5.0</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-right">
+          <div className="flex items-center justify-end gap-1 flex-wrap">
+            {!n1 ? (
+              <Button size="sm" variant="outline" onClick={onDelegatePilar}>
+                <UserCheck className="h-3 w-3 mr-1" /> Delegar pilar
+              </Button>
+            ) : (
+              <>
+                <Button size="sm" variant="ghost" onClick={onReatribuirPilar}>
+                  <UserCheck className="h-3 w-3 mr-1" /> Reatribuir
+                </Button>
+                <Button size="sm" variant="ghost" onClick={onSubdelegate}>
+                  <Plus className="h-3 w-3 mr-1" /> Sub-delegar
+                </Button>
+                <Select
+                  value={n1.status}
+                  onValueChange={(val) => updateDelegMut.mutate({ id: n1.id, data: { status: val } })}
+                >
+                  <SelectTrigger className="h-7 w-[110px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="andamento">Em andamento</SelectItem>
+                    <SelectItem value="concluido">Concluído</SelectItem>
+                    <SelectItem value="atrasado">Atrasado</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    if (confirm("Remover delegação deste pilar?")) deleteDelegMut.mutate(n1.id);
+                  }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </>
+            )}
+          </div>
+        </td>
+      </tr>
+
+      {isExpanded && (
+        <tr className="bg-muted/10">
+          <td></td>
+          <td colSpan={6} className="px-4 py-3">
+            <ExpandedPilar
+              pilar={pilar}
+              questions={questions}
+              respByPergunta={respByPergunta}
+              n2s={n2s}
+              isSuperAdmin={isSuperAdmin}
+              clinicId={clinicId}
+              diagnosticoId={diagnosticoId}
+              onDelegateQuestion={onDelegateQuestion}
+              onEditPergunta={onEditPergunta}
+              onCreatePergunta={onCreatePergunta}
+              onDeleteDelegacao={(id) => deleteDelegMut.mutate(id)}
+            />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// ─── Expanded pilar (questions + answers + per-question delegate) ───────────
+
+function ExpandedPilar({
+  pilar,
+  questions,
+  respByPergunta,
+  n2s,
+  isSuperAdmin,
+  clinicId,
+  diagnosticoId,
+  onDelegateQuestion,
+  onEditPergunta,
+  onCreatePergunta,
+  onDeleteDelegacao,
+}: {
+  pilar: PilarSummary;
+  questions: PerguntaTipo[];
+  respByPergunta: Map<string, RespostaTipo>;
+  n2s: Delegacao[];
+  isSuperAdmin: boolean;
+  clinicId: string;
+  diagnosticoId: string;
+  onDelegateQuestion: (ordem: number) => void;
+  onEditPergunta: (p: PerguntaTipo) => void;
+  onCreatePergunta: () => void;
+  onDeleteDelegacao: (id: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Local pending state per question for snappy input + debounced save
+  const [pending, setPending] = useState<Record<string, string>>({});
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const saveAnswerMut = useMutation({
+    mutationFn: async (vars: { perguntaId: string; valor: string }) => {
+      const res = await authFetch(
+        `/api/diagnostics/${diagnosticoId}/respostas/${vars.perguntaId}`,
+        { method: "PUT", body: JSON.stringify({ valor: vars.valor }) }
+      );
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId, diagnosticoId] });
+    },
+    onError: () => toast({ variant: "destructive", title: "Erro ao salvar resposta" }),
+  });
+
+  const handleAnswerChange = (perguntaId: string, valor: string) => {
+    setPending((prev) => ({ ...prev, [perguntaId]: valor }));
+    const existing = saveTimers.current[perguntaId];
+    if (existing) clearTimeout(existing);
+    saveTimers.current[perguntaId] = setTimeout(() => {
+      if (valor === "" || valor == null) return;
+      saveAnswerMut.mutate({ perguntaId, valor });
+    }, 600);
   };
 
-  const openDelegate = (pilar: typeof PILARES[0]) => {
-    setSelectedPilar(pilar);
-    setParentDelegacao(null);
-    setDialogMode("delegate");
-    setForm({ responsavelNome: "", responsavelEmail: "", prazo: "", status: "", questaoInicio: "", questaoFim: "", observacoes: "" });
-    setDialogOpen(true);
-  };
+  // ranges of n2 sub-delegations (questaoInicio..questaoFim)
+  const findN2ForOrdem = (ordem: number): Delegacao | undefined =>
+    n2s.find(
+      (d) =>
+        d.questaoInicio != null &&
+        d.questaoFim != null &&
+        ordem >= d.questaoInicio &&
+        ordem <= d.questaoFim
+    );
 
-  const openReatribuir = (pilar: typeof PILARES[0], existing: Delegacao) => {
-    setSelectedPilar(pilar);
-    setParentDelegacao(null);
-    setReatribuirId(existing.id);
-    setDialogMode("reatribuir");
-    setForm({
-      responsavelNome: existing.responsavelNome ?? "",
-      responsavelEmail: existing.responsavelEmail ?? "",
-      prazo: existing.prazo ?? "",
-      status: existing.status,
-      observacoes: existing.observacoes ?? "",
-      questaoInicio: existing.questaoInicio != null ? String(existing.questaoInicio) : "",
-      questaoFim: existing.questaoFim != null ? String(existing.questaoFim) : "",
-    });
-    setDialogOpen(true);
-  };
+  return (
+    <div className="space-y-3">
+      {n2s.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="text-muted-foreground self-center">Sub-delegações:</span>
+          {n2s.map((d) => (
+            <div
+              key={d.id}
+              className="inline-flex items-center gap-1.5 border border-border rounded px-2 py-1 bg-card"
+            >
+              <span className="font-medium">{d.responsavelNome ?? "—"}</span>
+              {d.questaoInicio != null && d.questaoFim != null && (
+                <span className="text-muted-foreground">
+                  {d.questaoInicio === d.questaoFim
+                    ? `Q${d.questaoInicio}`
+                    : `Q${d.questaoInicio}–Q${d.questaoFim}`}
+                </span>
+              )}
+              <Badge variant={STATUS_CONFIG[d.status]?.variant ?? "outline"} className="text-[10px]">
+                {STATUS_CONFIG[d.status]?.label ?? d.status}
+              </Badge>
+              <button
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => {
+                  if (confirm("Remover esta sub-delegação?")) onDeleteDelegacao(d.id);
+                }}
+                aria-label="Remover sub-delegação"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
-  const openSubdelegate = (pilar: typeof PILARES[0], parent: Delegacao) => {
-    setSelectedPilar(pilar);
-    setParentDelegacao(parent);
-    setDialogMode("subdelegate");
-    setForm({ responsavelNome: "", responsavelEmail: "", prazo: "", status: "", questaoInicio: "", questaoFim: "", observacoes: "" });
-    setDialogOpen(true);
+      <div className="space-y-2">
+        {questions.length === 0 && (
+          <div className="text-sm text-muted-foreground italic">
+            Nenhuma pergunta cadastrada para este pilar.
+          </div>
+        )}
+        {questions.map((q) => {
+          const resp = respByPergunta.get(q.id);
+          const value = pending[q.id] ?? resp?.valor ?? "";
+          const ownerN2 = findN2ForOrdem(q.ordem);
+          return (
+            <div key={q.id} className="border rounded-lg p-3 bg-card">
+              <div className="flex items-start gap-3">
+                <span className="text-xs text-muted-foreground font-mono mt-0.5 w-8">Q{q.ordem}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm">{q.texto}</div>
+                  {q.dica && (
+                    <div className="text-xs text-muted-foreground italic mt-0.5">{q.dica}</div>
+                  )}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <AnswerInput
+                      pergunta={q}
+                      value={value}
+                      onChange={(v) => handleAnswerChange(q.id, v)}
+                    />
+                    {resp && (
+                      <span className="text-[10px] text-muted-foreground">
+                        ✓ {new Date(resp.respondidoEm).toLocaleString("pt-BR")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  {ownerN2 ? (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {ownerN2.responsavelNome ?? "—"}
+                    </Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => onDelegateQuestion(q.ordem)}
+                    >
+                      <UserCheck className="h-3 w-3 mr-1" /> Delegar
+                    </Button>
+                  )}
+                  {isSuperAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs text-muted-foreground"
+                      onClick={() => onEditPergunta(q)}
+                      title="Editar pergunta"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {isSuperAdmin && (
+          <Button size="sm" variant="outline" className="text-xs" onClick={onCreatePergunta}>
+            <FilePlus className="h-3 w-3 mr-1" /> Adicionar pergunta a {pilar.nome}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Answer input by tipo ───────────────────────────────────────────────────
+
+function AnswerInput({
+  pergunta,
+  value,
+  onChange,
+}: {
+  pergunta: PerguntaTipo;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  if (pergunta.tipo === "sim_nao") {
+    return (
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-8 w-[120px] text-xs">
+          <SelectValue placeholder="Selecionar" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="sim">Sim</SelectItem>
+          <SelectItem value="nao">Não</SelectItem>
+        </SelectContent>
+      </Select>
+    );
+  }
+  if (pergunta.tipo === "escala_1_5") {
+    return (
+      <div className="inline-flex gap-1">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(String(n))}
+            className={`h-8 w-8 rounded text-xs font-medium border transition-colors ${
+              value === String(n)
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card hover:bg-muted"
+            }`}
+            aria-label={`Nota ${n}`}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  if (pergunta.tipo === "numerico") {
+    return (
+      <Input
+        type="number"
+        min={pergunta.valorMin ?? undefined}
+        max={pergunta.valorMax ?? undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 w-[120px] text-xs"
+        placeholder={
+          pergunta.valorMin != null && pergunta.valorMax != null
+            ? `${pergunta.valorMin}–${pergunta.valorMax}`
+            : "Valor"
+        }
+      />
+    );
+  }
+  return (
+    <Input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-8 text-xs flex-1 min-w-[200px]"
+      placeholder="Resposta"
+    />
+  );
+}
+
+// ─── Delegação dialog ───────────────────────────────────────────────────────
+
+function DelegacaoDialog({
+  clinicId,
+  context,
+  team,
+  onClose,
+}: {
+  clinicId: string;
+  context: {
+    pilar: PilarSummary;
+    nivel: 1 | 2;
+    questaoInicio?: number;
+    questaoFim?: number;
+    existing?: Delegacao;
   };
+  team: TeamMember[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const isReatribuir = !!context.existing;
+
+  const [form, setForm] = useState({
+    responsavelNome: context.existing?.responsavelNome ?? "",
+    responsavelEmail: context.existing?.responsavelEmail ?? "",
+    prazo: context.existing?.prazo ?? "",
+    questaoInicio:
+      context.existing?.questaoInicio != null
+        ? String(context.existing.questaoInicio)
+        : context.questaoInicio != null
+        ? String(context.questaoInicio)
+        : "",
+    questaoFim:
+      context.existing?.questaoFim != null
+        ? String(context.existing.questaoFim)
+        : context.questaoFim != null
+        ? String(context.questaoFim)
+        : "",
+    observacoes: context.existing?.observacoes ?? "",
+  });
+
+  const createMut = useMutation({
+    mutationFn: async (data: object) => {
+      const res = await authFetch(`/api/clinics/${clinicId}/delegacoes`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] });
+      toast({
+        title:
+          context.nivel === 1
+            ? "Pilar delegado"
+            : context.questaoInicio === context.questaoFim
+            ? "Pergunta delegada"
+            : "Sub-delegação criada",
+      });
+      onClose();
+    },
+    onError: () => toast({ variant: "destructive", title: "Erro ao salvar" }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: async (data: object) => {
+      const res = await authFetch(`/api/delegacoes/${context.existing!.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error();
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] });
+      toast({ title: "Responsável reatribuído" });
+      onClose();
+    },
+    onError: () => toast({ variant: "destructive", title: "Erro ao atualizar" }),
+  });
 
   const handleSubmit = () => {
-    if (!selectedPilar) return;
-
-    if (dialogMode === "reatribuir" && reatribuirId) {
-      updateMut.mutate(
-        {
-          id: reatribuirId,
-          data: {
-            responsavelNome: form.responsavelNome || undefined,
-            responsavelEmail: form.responsavelEmail || undefined,
-            prazo: form.prazo || undefined,
-            observacoes: form.observacoes || undefined,
-          },
-        },
-        {
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] });
-            setDialogOpen(false);
-            toast({ title: "Responsável reatribuído com sucesso" });
-          },
-        }
-      );
+    if (isReatribuir) {
+      updateMut.mutate({
+        responsavelNome: form.responsavelNome || undefined,
+        responsavelEmail: form.responsavelEmail || undefined,
+        prazo: form.prazo || undefined,
+        observacoes: form.observacoes || undefined,
+      });
       return;
     }
-
-    const payload: Record<string, unknown> = {
-      pilarSlug: selectedPilar.slug,
-      pilarNome: selectedPilar.nome,
-      nivel: dialogMode === "delegate" ? 1 : 2,
+    createMut.mutate({
+      pilarSlug: context.pilar.slug,
+      pilarNome: context.pilar.nome,
+      nivel: context.nivel,
       responsavelNome: form.responsavelNome || undefined,
       responsavelEmail: form.responsavelEmail || undefined,
       prazo: form.prazo || undefined,
       status: "pendente",
       questaoInicio: form.questaoInicio ? parseInt(form.questaoInicio) : undefined,
       questaoFim: form.questaoFim ? parseInt(form.questaoFim) : undefined,
-      parentId: parentDelegacao?.id ?? undefined,
       observacoes: form.observacoes || undefined,
-    };
-    createMut.mutate(payload);
+    });
   };
 
-  const pilaresWithDelegacoes = PILARES.map(pilar => {
-    const n1 = delegacoes.find(d => d.pilarSlug === pilar.slug && d.nivel === 1);
-    const n2s = delegacoes.filter(d => d.pilarSlug === pilar.slug && d.nivel === 2);
-    return { ...pilar, n1, n2s };
+  const title =
+    isReatribuir
+      ? `Reatribuir — ${context.pilar.nome}`
+      : context.nivel === 1
+      ? `Delegar pilar — ${context.pilar.nome}`
+      : context.questaoInicio === context.questaoFim
+      ? `Delegar pergunta Q${context.questaoInicio} — ${context.pilar.nome}`
+      : `Sub-delegar módulo — ${context.pilar.nome}`;
+
+  const pending = createMut.isPending || updateMut.isPending;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-sm font-medium mb-1 block">Responsável</label>
+            {team.length > 0 ? (
+              <Select
+                value={form.responsavelNome}
+                onValueChange={(v) => {
+                  const member = team.find((m) => m.nome === v);
+                  setForm((f) => ({
+                    ...f,
+                    responsavelNome: v,
+                    responsavelEmail: member?.email ?? f.responsavelEmail,
+                  }));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um membro da equipe" />
+                </SelectTrigger>
+                <SelectContent>
+                  {team.map((m) => (
+                    <SelectItem key={m.id} value={m.nome}>
+                      {m.nome} {m.funcao ? `— ${m.funcao}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                placeholder="Nome do responsável"
+                value={form.responsavelNome}
+                onChange={(e) => setForm((f) => ({ ...f, responsavelNome: e.target.value }))}
+              />
+            )}
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">E-mail</label>
+            <Input
+              type="email"
+              placeholder="email@clinica.com.br"
+              value={form.responsavelEmail}
+              onChange={(e) => setForm((f) => ({ ...f, responsavelEmail: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">Prazo</label>
+            <Input
+              type="date"
+              value={form.prazo}
+              onChange={(e) => setForm((f) => ({ ...f, prazo: e.target.value }))}
+            />
+          </div>
+          {context.nivel === 2 && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Q inicial</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={context.pilar.questionCount}
+                  value={form.questaoInicio}
+                  onChange={(e) => setForm((f) => ({ ...f, questaoInicio: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Q final</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={context.pilar.questionCount}
+                  value={form.questaoFim}
+                  onChange={(e) => setForm((f) => ({ ...f, questaoFim: e.target.value }))}
+                />
+              </div>
+            </div>
+          )}
+          <div>
+            <label className="text-sm font-medium mb-1 block">Observações</label>
+            <Textarea
+              rows={2}
+              placeholder="Instruções adicionais…"
+              value={form.observacoes}
+              onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSubmit} disabled={pending || !form.responsavelNome}>
+            {pending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {isReatribuir ? "Reatribuir" : "Confirmar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Pergunta CRUD dialog (super_admin) ─────────────────────────────────────
+
+function PerguntaDialog({
+  pergunta,
+  pilar,
+  existingPilarOrdens,
+  onClose,
+}: {
+  pergunta: PerguntaTipo | null;
+  pilar: PilarSummary | null;
+  existingPilarOrdens: number[];
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const isEdit = !!pergunta;
+  const targetPilarSlug = pergunta?.pilarSlug ?? pilar?.slug ?? "";
+  const targetPilarNome = pergunta?.pilarNome ?? pilar?.nome ?? "";
+  const targetPilarOrdem = pergunta?.pilarOrdem ?? pilar?.ordem ?? 1;
+
+  const nextOrdem = useMemo(() => {
+    if (existingPilarOrdens.length === 0) return 1;
+    return Math.max(...existingPilarOrdens) + 1;
+  }, [existingPilarOrdens]);
+
+  const [form, setForm] = useState({
+    texto: pergunta?.texto ?? "",
+    tipo: pergunta?.tipo ?? "escala_1_5",
+    peso: pergunta?.peso ?? 1,
+    ordem: pergunta?.ordem ?? nextOrdem,
+    dica: pergunta?.dica ?? "",
+    valorMin: pergunta?.valorMin ?? 0,
+    valorMax: pergunta?.valorMax ?? 100,
+    inverso: pergunta?.inverso ?? false,
+  });
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const body = {
+        pilarSlug: targetPilarSlug,
+        pilarNome: targetPilarNome,
+        pilarOrdem: targetPilarOrdem,
+        texto: form.texto,
+        tipo: form.tipo,
+        peso: Number(form.peso),
+        ordem: Number(form.ordem),
+        dica: form.dica || null,
+        valorMin: form.tipo === "numerico" ? Number(form.valorMin) : null,
+        valorMax: form.tipo === "numerico" ? Number(form.valorMax) : null,
+        inverso: form.inverso,
+      };
+      const res = await authFetch(
+        isEdit ? `/api/perguntas/${pergunta!.id}` : `/api/perguntas`,
+        { method: isEdit ? "PATCH" : "POST", body: JSON.stringify(body) }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Falha ao salvar");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated"] });
+      queryClient.invalidateQueries({ queryKey: ["perguntas"] });
+      toast({ title: isEdit ? "Pergunta atualizada" : "Pergunta criada" });
+      onClose();
+    },
+    onError: (e: Error) =>
+      toast({ variant: "destructive", title: "Erro", description: e.message }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (force: boolean): Promise<void> => {
+      const res = await authFetch(
+        `/api/perguntas/${pergunta!.id}${force ? "?force=true" : ""}`,
+        { method: "DELETE" }
+      );
+      if (res.status === 409) {
+        const data = await res.json();
+        if (
+          confirm(
+            `${data.respostasCount} resposta(s) já foram registradas para esta pergunta. Apagar mesmo assim?`
+          )
+        ) {
+          await deleteMut.mutateAsync(true);
+          return;
+        }
+        throw new Error("cancelled");
+      }
+      if (!res.ok) throw new Error("Falha ao apagar");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated"] });
+      queryClient.invalidateQueries({ queryKey: ["perguntas"] });
+      toast({ title: "Pergunta apagada" });
+      onClose();
+    },
+    onError: (e: Error) => {
+      if (e.message !== "cancelled") {
+        toast({ variant: "destructive", title: "Erro", description: e.message });
+      }
+    },
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/delegacao/select")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Delegação de Pilares</h1>
-          <p className="text-sm text-muted-foreground">Gerencie os responsáveis por cada pilar do diagnóstico ICS.</p>
-        </div>
-      </div>
-
-      {!isLoading && delegacoes.length === 0 && !seedMut.isPending && !seedMut.isSuccess && (
-        <div className="border rounded-lg p-6 bg-muted/30 flex flex-col items-center gap-3 text-center">
-          <AlertTriangle className="h-8 w-8 text-amber-500" />
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Editar pergunta" : "Nova pergunta"}</DialogTitle>
+          <DialogDescription>
+            {targetPilarNome} (ordem do pilar: {targetPilarOrdem})
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
           <div>
-            <p className="font-semibold">Nenhuma delegação configurada</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Inicialize os 7 pilares ICS para começar a delegar responsabilidades (o pilar Compliance pode ser delegado separadamente).
-            </p>
+            <label className="text-sm font-medium mb-1 block">Texto</label>
+            <Textarea
+              rows={3}
+              value={form.texto}
+              onChange={(e) => setForm((f) => ({ ...f, texto: e.target.value }))}
+            />
           </div>
-          <Button onClick={() => seedMut.mutate()} disabled={seedMut.isPending}>
-            {seedMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Inicializar Pilares ICS
-          </Button>
-        </div>
-      )}
-      {seedMut.isPending && (
-        <div className="flex justify-center py-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Inicializando pilares ICS...
+          <div>
+            <label className="text-sm font-medium mb-1 block">Dica (opcional)</label>
+            <Input
+              value={form.dica}
+              onChange={(e) => setForm((f) => ({ ...f, dica: e.target.value }))}
+            />
           </div>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-      ) : (
-        <div className="rounded-lg border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground w-8"></th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Pilar</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Responsável (N1)</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Progresso</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Prazo</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {pilaresWithDelegacoes.map(pilar => {
-                const isExpanded = expandedRows.has(pilar.slug);
-                const status = pilar.n1?.status ?? "nao_delegado";
-                const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.nao_delegado;
-                const progress = PROGRESS_MAP[status] ?? 0;
-
-                return (
-                  <>
-                    <tr key={pilar.slug} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3">
-                        {pilar.n2s.length > 0 ? (
-                          <button
-                            onClick={() => toggleRow(pilar.slug)}
-                            className="text-muted-foreground hover:text-foreground"
-                          >
-                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                          </button>
-                        ) : <span className="w-4 h-4 inline-block" />}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{pilar.nome}</div>
-                        <div className="text-xs text-muted-foreground">{pilar.questaoTotal} perguntas</div>
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        {pilar.n1?.responsavelNome ? (
-                          <div className="flex items-center gap-2">
-                            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
-                              {pilar.n1.responsavelNome.charAt(0)}
-                            </div>
-                            <span>{pilar.n1.responsavelNome}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground italic text-xs">Não delegado</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        <div className="flex items-center gap-2">
-                          <Progress value={progress} className="h-2 w-24" />
-                          <span className="text-xs text-muted-foreground">{progress}%</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <Badge variant={statusCfg.variant} className="gap-1 text-xs">
-                          {statusCfg.icon}
-                          {statusCfg.label}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground">
-                        {pilar.n1?.prazo
-                          ? new Date(pilar.n1.prazo).toLocaleDateString("pt-BR")
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {!pilar.n1 ? (
-                            <Button size="sm" variant="outline" onClick={() => openDelegate(pilar)}>
-                              <UserCheck className="h-3 w-3 mr-1" /> Delegar
-                            </Button>
-                          ) : (
-                            <>
-                              <Button size="sm" variant="ghost" onClick={() => openReatribuir(pilar, pilar.n1!)}>
-                                <UserCheck className="h-3 w-3 mr-1" /> Reatribuir
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => openSubdelegate(pilar, pilar.n1!)}>
-                                <Plus className="h-3 w-3 mr-1" /> Sub-delegar
-                              </Button>
-                              <Select
-                                value={pilar.n1.status}
-                                onValueChange={(val) => updateMut.mutate({ id: pilar.n1!.id, data: { status: val } })}
-                              >
-                                <SelectTrigger className="h-7 w-[110px] text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="pendente">Pendente</SelectItem>
-                                  <SelectItem value="andamento">Em andamento</SelectItem>
-                                  <SelectItem value="concluido">Concluído</SelectItem>
-                                  <SelectItem value="atrasado">Atrasado</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  if (confirm("Remover delegação?")) deleteMut.mutate(pilar.n1!.id);
-                                }}
-                              >
-                                Remover
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-
-                    {isExpanded && pilar.n2s.map(n2 => (
-                      <tr key={n2.id} className="bg-muted/20">
-                        <td className="px-4 py-2"></td>
-                        <td className="px-4 py-2 pl-10 text-xs text-muted-foreground" colSpan={2}>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-foreground">{n2.responsavelNome ?? "—"}</span>
-                            {n2.questaoInicio && n2.questaoFim && (
-                              <span className="text-muted-foreground">Perguntas {n2.questaoInicio}–{n2.questaoFim}</span>
-                            )}
-                          </div>
-                          {n2.responsavelEmail && <div className="text-muted-foreground">{n2.responsavelEmail}</div>}
-                        </td>
-                        <td className="px-4 py-2 hidden lg:table-cell"></td>
-                        <td className="px-4 py-2 hidden md:table-cell">
-                          <Badge variant={STATUS_CONFIG[n2.status]?.variant ?? "outline"} className="text-[10px] gap-1">
-                            {STATUS_CONFIG[n2.status]?.icon}
-                            {STATUS_CONFIG[n2.status]?.label}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2 hidden lg:table-cell text-xs text-muted-foreground">
-                          {n2.prazo ? new Date(n2.prazo).toLocaleDateString("pt-BR") : "—"}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive text-xs"
-                            onClick={() => deleteMut.mutate(n2.id)}
-                          >
-                            Remover
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle>
-              {dialogMode === "delegate"
-                ? `Delegar — ${selectedPilar?.nome}`
-                : dialogMode === "reatribuir"
-                ? `Reatribuir — ${selectedPilar?.nome}`
-                : `Sub-delegar — ${selectedPilar?.nome}`}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-sm font-medium mb-1 block">Responsável</label>
-              {team.length > 0 && dialogMode !== "reatribuir" ? (
-                <Select value={form.responsavelNome} onValueChange={v => {
-                  const member = team.find(m => m.nome === v);
-                  setForm(f => ({ ...f, responsavelNome: v, responsavelEmail: member?.email ?? f.responsavelEmail }));
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um membro da equipe" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {team.map(m => (
-                      <SelectItem key={m.id} value={m.nome}>{m.nome} {m.funcao ? `— ${m.funcao}` : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
+              <label className="text-sm font-medium mb-1 block">Tipo</label>
+              <Select
+                value={form.tipo}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, tipo: v as PerguntaTipo["tipo"] }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sim_nao">Sim/Não</SelectItem>
+                  <SelectItem value="escala_1_5">Escala 1–5</SelectItem>
+                  <SelectItem value="numerico">Numérico</SelectItem>
+                  <SelectItem value="texto_livre">Texto livre</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Peso</label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0.1"
+                value={form.peso}
+                onChange={(e) => setForm((f) => ({ ...f, peso: Number(e.target.value) }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">Ordem</label>
+              <Input
+                type="number"
+                min="1"
+                value={form.ordem}
+                onChange={(e) => setForm((f) => ({ ...f, ordem: Number(e.target.value) }))}
+              />
+            </div>
+          </div>
+          {form.tipo === "numerico" && (
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Valor mín.</label>
                 <Input
-                  placeholder="Nome do novo responsável"
-                  value={form.responsavelNome}
-                  onChange={e => setForm(f => ({ ...f, responsavelNome: e.target.value }))}
+                  type="number"
+                  value={form.valorMin}
+                  onChange={(e) => setForm((f) => ({ ...f, valorMin: Number(e.target.value) }))}
                 />
-              )}
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">E-mail</label>
-              <Input
-                type="email"
-                placeholder="email@clinica.com.br"
-                value={form.responsavelEmail}
-                onChange={e => setForm(f => ({ ...f, responsavelEmail: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Prazo</label>
-              <Input
-                type="date"
-                value={form.prazo}
-                onChange={e => setForm(f => ({ ...f, prazo: e.target.value }))}
-              />
-            </div>
-            {dialogMode === "subdelegate" && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Questão inicial</label>
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="1"
-                    value={form.questaoInicio}
-                    onChange={e => setForm(f => ({ ...f, questaoInicio: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">Questão final</label>
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder={String(selectedPilar?.questaoTotal ?? 10)}
-                    value={form.questaoFim}
-                    onChange={e => setForm(f => ({ ...f, questaoFim: e.target.value }))}
-                  />
-                </div>
               </div>
-            )}
-            <div>
-              <label className="text-sm font-medium mb-1 block">Observações</label>
-              <Input
-                placeholder="Instruções adicionais..."
-                value={form.observacoes}
-                onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
-              />
+              <div>
+                <label className="text-sm font-medium mb-1 block">Valor máx.</label>
+                <Input
+                  type="number"
+                  value={form.valorMax}
+                  onChange={(e) => setForm((f) => ({ ...f, valorMax: Number(e.target.value) }))}
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <input
+                  type="checkbox"
+                  id="inverso"
+                  checked={form.inverso}
+                  onChange={(e) => setForm((f) => ({ ...f, inverso: e.target.checked }))}
+                />
+                <label htmlFor="inverso" className="text-sm">
+                  Inverso (menor é melhor)
+                </label>
+              </div>
             </div>
+          )}
+        </div>
+        <DialogFooter className="flex-col sm:flex-row sm:justify-between gap-2">
+          <div>
+            {isEdit && (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => deleteMut.mutate(false)}
+                disabled={deleteMut.isPending}
+              >
+                <Trash2 className="h-4 w-4 mr-1" /> Apagar
+              </Button>
+            )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSubmit} disabled={createMut.isPending || updateMut.isPending || !form.responsavelNome}>
-              {(createMut.isPending || updateMut.isPending) ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {dialogMode === "reatribuir" ? "Reatribuir" : "Confirmar"}
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <Button
+              onClick={() => saveMut.mutate()}
+              disabled={saveMut.isPending || !form.texto.trim()}
+            >
+              {saveMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
+
+// ─── Clinic selector (no clinicId in URL) ───────────────────────────────────
 
 function ClinicSelector() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const { data, isLoading } = useListClinics({ pageSize: 100 });
   const clinics = data?.data ?? [];
-  const filtered = clinics.filter(c =>
-    c.nome.toLowerCase().includes(search.toLowerCase()) ||
-    (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
+  const filtered = clinics.filter(
+    (c) =>
+      c.nome.toLowerCase().includes(search.toLowerCase()) ||
+      (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Delegação de Pilares</h1>
-        <p className="text-sm text-muted-foreground">Selecione uma clínica para gerenciar delegações.</p>
+        <h1 className="text-2xl font-bold">Delegação do Diagnóstico</h1>
+        <p className="text-sm text-muted-foreground">Selecione uma clínica para começar.</p>
       </div>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar clínica..."
           className="pl-9"
         />
       </div>
       {isLoading ? (
-        <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+        <div className="py-12 flex justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(c => (
+          {filtered.map((c) => (
             <button
               key={c.id}
               onClick={() => navigate(`/delegacao/${c.id}`)}
@@ -616,7 +1572,10 @@ function ClinicSelector() {
             >
               <div>
                 <div className="font-medium">{c.nome}</div>
-                <div className="text-sm text-muted-foreground">{c.cidade}{c.uf ? `, ${c.uf}` : ""}</div>
+                <div className="text-sm text-muted-foreground">
+                  {c.cidade}
+                  {c.uf ? `, ${c.uf}` : ""}
+                </div>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>

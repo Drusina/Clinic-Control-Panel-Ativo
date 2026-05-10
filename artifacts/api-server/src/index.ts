@@ -4,6 +4,7 @@ import { initVapid, isPushConfigured } from "./lib/push.js";
 import { startScheduler, stopScheduler } from "./lib/scheduler.js";
 import { initTokenSigningSecret } from "./lib/token-secret.js";
 import { bootstrapContratadaDefaults } from "./lib/config.js";
+import { seedPerguntasIfEmpty } from "./lib/perguntas-seed.js";
 
 if (!process.env.SUPER_ADMIN_SECRET || process.env.SUPER_ADMIN_SECRET.length === 0) {
   throw new Error(
@@ -77,6 +78,14 @@ async function main(): Promise<void> {
   // Idempotent (ON CONFLICT DO NOTHING) — operator overrides are preserved.
   await bootstrapContratadaDefaults().catch((e) =>
     logger.error({ err: e }, "Failed to bootstrap contratada defaults — admin will need to fill them manually"),
+  );
+
+  // Seed the diagnostic question bank (8 ICS pilares, ~93 perguntas) on a
+  // fresh database. Idempotent — existing rows are kept untouched so a
+  // super-admin can edit/import perguntas via the CRUD endpoints without
+  // having edits overwritten on next boot.
+  await seedPerguntasIfEmpty().catch((e) =>
+    logger.error({ err: e }, "Failed to seed perguntas — diagnostic page will start empty"),
   );
 
   app.listen(port, async (err) => {

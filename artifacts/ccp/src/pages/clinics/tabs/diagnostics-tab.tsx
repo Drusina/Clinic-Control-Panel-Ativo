@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Plus, PlayCircle, CheckCircle } from "lucide-react";
+import { Loader2, Plus, PlayCircle, CheckCircle, ListChecks } from "lucide-react";
+import { Link } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -91,8 +92,14 @@ export default function DiagnosticsTab({ clinicId }: { clinicId: string }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="bg-muted/50 p-4 rounded-md text-sm text-muted-foreground text-center">
-              Preenchimento do diagnóstico ocorre via formulário externo (integração Typeform/Jotform).
+            <div className="bg-muted/50 p-4 rounded-md text-sm text-muted-foreground text-center space-y-3">
+              <p>Responda às perguntas e delegue pilares, módulos ou perguntas individuais na tela de Delegação.</p>
+              <Link href={`/delegacao/${clinicId}?diagnostico=${inProgress.id}`}>
+                <Button size="sm" variant="default">
+                  <ListChecks className="h-4 w-4 mr-2" />
+                  Abrir delegação e responder
+                </Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
@@ -132,8 +139,15 @@ export default function DiagnosticsTab({ clinicId }: { clinicId: string }) {
                 ) : (
                   <p className="text-sm text-muted-foreground italic">Nenhum score registrado para este diagnóstico.</p>
                 )}
-                <div className="text-xs text-muted-foreground mt-4">
-                  Concluído em: {diag.concluidoEm ? format(new Date(diag.concluidoEm), "dd/MM/yyyy", { locale: ptBR }) : "-"}
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-xs text-muted-foreground">
+                    Concluído em: {diag.concluidoEm ? format(new Date(diag.concluidoEm), "dd/MM/yyyy", { locale: ptBR }) : "-"}
+                  </div>
+                  <Link href={`/delegacao/${clinicId}?diagnostico=${diag.id}`}>
+                    <Button size="sm" variant="ghost" className="text-xs">
+                      <ListChecks className="h-3 w-3 mr-1" /> Ver respostas
+                    </Button>
+                  </Link>
                 </div>
               </CardContent>
             </Card>
