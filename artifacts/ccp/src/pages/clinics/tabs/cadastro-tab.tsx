@@ -14,6 +14,7 @@ import type { Clinic, Socio, UpdateClinicBody, UpdateSocioBody } from "@workspac
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { PercentageInput } from "@/components/ui/percentage-input";
 import { MaskedInput } from "@/components/ui/masked-input";
 import {
   Select,
@@ -577,7 +578,7 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                           <div><span className="font-medium text-foreground">CPF:</span> {maskCpf(socio.cpf)}</div>
                         )}
                         {socio.percentual != null && (
-                          <div><span className="font-medium text-foreground">Quotas:</span> {socio.percentual}%</div>
+                          <div><span className="font-medium text-foreground">Quotas:</span> {Number(socio.percentual).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %</div>
                         )}
                         {socio.valorQuotas != null && (
                           <div><span className="font-medium text-foreground">Valor:</span> {brl(socio.valorQuotas)}</div>
@@ -666,7 +667,20 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>% de Quotas</FormLabel>
-                      <FormControl><Input type="number" step="0.01" placeholder="50.00" {...field} /></FormControl>
+                      <FormControl>
+                        <PercentageInput
+                          allowNull
+                          value={
+                            field.value == null || field.value === ""
+                              ? null
+                              : Number(String(field.value).replace(",", "."))
+                          }
+                          onChange={(v) => field.onChange(v == null ? "" : String(v))}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
