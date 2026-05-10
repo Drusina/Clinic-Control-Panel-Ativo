@@ -298,6 +298,13 @@ export default function AcaoPage() {
     queryKey: ["acoes", clinicId],
     queryFn: () => fetchAcoes(clinicId!),
     enabled: !!clinicId,
+    refetchInterval: (query) => {
+      if (query.state.status === "error") return false;
+      if (activeId) return false;
+      return 7000;
+    },
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const createMut = useMutation({

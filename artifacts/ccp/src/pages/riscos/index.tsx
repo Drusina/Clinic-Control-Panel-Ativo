@@ -140,6 +140,12 @@ export default function RiscosPage() {
     queryKey: ["riscos", clinicId],
     queryFn: () => fetchRiscos(clinicId!),
     enabled: !!clinicId,
+    refetchInterval: (query) => {
+      if (query.state.status === "error") return false;
+      return 7000;
+    },
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const createMut = useMutation({

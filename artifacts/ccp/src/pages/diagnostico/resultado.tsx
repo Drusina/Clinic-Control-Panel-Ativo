@@ -141,6 +141,12 @@ export default function DiagnosticoResultado() {
     queryKey: ["diagnostic", diagnosticoId],
     queryFn: () => apiFetch(`/diagnostics/${diagnosticoId}`),
     enabled: !!diagnosticoId,
+    refetchInterval: (query) => {
+      if (query.state.status === "error") return false;
+      return 7000;
+    },
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: clinic } = useQuery<ClinicData>({
