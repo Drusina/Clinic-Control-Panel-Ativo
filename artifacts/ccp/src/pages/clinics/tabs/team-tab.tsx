@@ -319,6 +319,25 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
     inviteCandidateIds.length > 0 && inviteCandidateIds.every((id) => selectedIds.has(id));
   const someCandidatesSelected = inviteCandidateIds.some((id) => selectedIds.has(id));
 
+  const visibleCandidateIds = tableData.items
+    .filter((m) => inviteCandidateIds.includes(m.id))
+    .map((m) => m.id);
+  const allVisibleCandidatesSelected =
+    visibleCandidateIds.length > 0 && visibleCandidateIds.every((id) => selectedIds.has(id));
+  const someVisibleCandidatesSelected = visibleCandidateIds.some((id) => selectedIds.has(id));
+
+  const toggleSelectVisibleCandidates = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleCandidatesSelected) {
+        for (const id of visibleCandidateIds) next.delete(id);
+      } else {
+        for (const id of visibleCandidateIds) next.add(id);
+      }
+      return next;
+    });
+  };
+
   const toggleSelected = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -501,6 +520,21 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[40px]">
+                    {visibleCandidateIds.length > 0 ? (
+                      <Checkbox
+                        checked={
+                          allVisibleCandidatesSelected
+                            ? true
+                            : someVisibleCandidatesSelected
+                              ? "indeterminate"
+                              : false
+                        }
+                        onCheckedChange={() => toggleSelectVisibleCandidates()}
+                        aria-label="Selecionar todos os candidatos visíveis"
+                      />
+                    ) : null}
+                  </TableHead>
                   <SortableTh sortKey="nome" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Nome</SortableTh>
                   <SortableTh sortKey="funcao" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Cargo</SortableTh>
                   <SortableTh sortKey="email" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>E-mail</SortableTh>
@@ -513,7 +547,7 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
               <TableBody>
                 {tableData.items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       {teamCount === 0 ? "Nenhum membro cadastrado." : "Nenhum membro encontrado."}
                     </TableCell>
                   </TableRow>
@@ -522,19 +556,17 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
                     const isCandidate = inviteCandidateIds.includes(member.id);
                     return (
                       <TableRow key={member.id}>
+                        <TableCell className="w-[40px]">
+                          {isCandidate ? (
+                            <Checkbox
+                              checked={selectedIds.has(member.id)}
+                              onCheckedChange={() => toggleSelected(member.id)}
+                              aria-label={`Selecionar ${member.nome}`}
+                            />
+                          ) : null}
+                        </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            {isCandidate ? (
-                              <Checkbox
-                                checked={selectedIds.has(member.id)}
-                                onCheckedChange={() => toggleSelected(member.id)}
-                                aria-label={`Selecionar ${member.nome}`}
-                              />
-                            ) : (
-                              <div className="h-4 w-4" aria-hidden />
-                            )}
-                            <span className="font-medium">{member.nome}</span>
-                          </div>
+                          <span className="font-medium">{member.nome}</span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{member.funcao || "—"}</TableCell>
                         <TableCell className="text-muted-foreground">{member.email || "—"}</TableCell>
