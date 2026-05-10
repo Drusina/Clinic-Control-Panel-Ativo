@@ -81,8 +81,10 @@ function normApiDisponivel(raw: unknown): string | null {
   return s;
 }
 
+const foldKey = (s: string | null) =>
+  (s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ");
 const composedKey = (nome: string | null, fornecedor: string | null, tipo: string | null) =>
-  `${(nome ?? "").toLowerCase().trim()}|${(fornecedor ?? "").toLowerCase().trim()}|${(tipo ?? "").toLowerCase().trim()}`;
+  `${foldKey(nome)}|${foldKey(fornecedor)}|${foldKey(tipo)}`;
 
 // ─── CRUD ───────────────────────────────────────────────────────────────────
 

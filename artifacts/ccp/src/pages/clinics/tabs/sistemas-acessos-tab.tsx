@@ -365,12 +365,24 @@ export default function SistemasAcessosTab({ clinicId }: { clinicId: string }) {
                     Suporte externo: <span className="text-foreground">{s.suporteExterno}</span>
                   </div>
                 )}
-                {s.quemTemAcesso && (
-                  <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                    <Users className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    <span className="text-foreground line-clamp-2" title={s.quemTemAcesso}>{s.quemTemAcesso}</span>
-                  </div>
-                )}
+                {s.quemTemAcesso && (() => {
+                  const tokens = s.quemTemAcesso.split(/[,;\n]+/).map(t => t.trim()).filter(Boolean);
+                  return (
+                    <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <Users className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-foreground font-medium">
+                            {tokens.length} {tokens.length === 1 ? "acesso" : "acessos"}
+                          </span>
+                        </div>
+                        <span className="text-foreground line-clamp-2 block" title={s.quemTemAcesso}>
+                          {s.quemTemAcesso}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {s.observacoes && (
                   <div className="text-xs text-muted-foreground line-clamp-2" title={s.observacoes}>
                     Obs.: <span className="text-foreground">{s.observacoes}</span>
