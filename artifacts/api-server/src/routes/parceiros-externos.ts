@@ -715,8 +715,16 @@ router.post(
           };
 
           try {
+            // Match precedence: when the row provides a CNPJ/CPF, ONLY look
+            // it up by document (never silently merge into a same-name row
+            // with a different/empty document). Fallback by
+            // (nomeEmpresa + responsavel) is reserved for rows where the
+            // document is absent, per the task contract.
             const cnpjMatch = cnpjCpf ? byCnpjCpf.get(cnpjCpf) : undefined;
-            const fbMatch = !cnpjMatch ? byNomeResp.get(fallbackKey(nomeEmpresa, responsavel)) : undefined;
+            const fbMatch =
+              !cnpjCpf && nomeEmpresa
+                ? byNomeResp.get(fallbackKey(nomeEmpresa, responsavel))
+                : undefined;
             const match = cnpjMatch ?? fbMatch;
 
             if (match) {
