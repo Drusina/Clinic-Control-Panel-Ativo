@@ -10,8 +10,12 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Plus, Loader2, MoreHorizontal, Server, Mail, Phone, Globe, Users, ShieldAlert,
-  Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2,
+  Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Search,
 } from "lucide-react";
+import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from "@/components/ui/table";
+import { ViewToggle, useViewMode } from "@/components/view-toggle";
+import { SortableTh } from "@/components/sortable-th";
+import { useTableSortFilter } from "@/hooks/use-table-sort-filter";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -101,6 +105,30 @@ export default function SistemasAcessosTab({ clinicId }: { clinicId: string }) {
   const createMut = useCreateSistemaUso();
   const updateMut = useUpdateSistemaUso();
   const deleteMut = useDeleteSistemaUso();
+
+  const sistemasCount = sistemas?.length ?? 0;
+  const { mode: viewMode, setMode: setViewMode } = useViewMode("ccp_view_sistemas", sistemasCount);
+
+  type SistemaSortKey = "nome" | "tipo" | "fornecedor" | "responsavelInterno" | "criticidade" | "apiDisponivel" | "integrado" | "acessosCount";
+  const tableData = useTableSortFilter<SistemaUso, SistemaSortKey>(sistemas ?? [], {
+    initialSort: { key: "nome", dir: "asc" },
+    searchFields: (s) => [s.nome, s.tipo, s.fornecedor, s.responsavelInterno, s.emailResponsavel, s.suporteExterno, s.quemTemAcesso],
+    getSortValue: (s, k) => {
+      if (k === "integrado") return !!s.integrado;
+      if (k === "acessosCount") {
+        const txt = s.quemTemAcesso ?? "";
+        return txt ? txt.split(/[,;\n]+/).map(t => t.trim()).filter(Boolean).length : 0;
+      }
+      if (k === "criticidade") {
+        const c = (s.criticidade ?? "").toLowerCase();
+        if (c.startsWith("alta")) return 3;
+        if (c.startsWith("med") || c.startsWith("méd")) return 2;
+        if (c.startsWith("baix")) return 1;
+        return 0;
+      }
+      return (s as unknown as Record<string, unknown>)[k] as string | null | undefined;
+    },
+  });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -289,7 +317,8 @@ export default function SistemasAcessosTab({ clinicId }: { clinicId: string }) {
             Mapeie sistemas em uso (prontuário, agenda, ERP, faturamento, comunicação, mídia social, e-mail, contábil, pagamento, site, planilhas críticas) e quem tem acesso.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <ViewToggle mode={viewMode} onChange={setViewMode} className="mr-1" />
           <Button variant="outline" onClick={() => downloadXlsx("template")} disabled={downloading}>
             {downloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Baixar modelo
@@ -312,6 +341,82 @@ export default function SistemasAcessosTab({ clinicId }: { clinicId: string }) {
         </div>
       </div>
 
+      {viewMode === "table" && (
+        <div className="space-y-3">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Buscar por nome, fornecedor, responsável…"
+              value={tableData.search}
+              onChange={(e) => tableData.setSearch(e.target.value)}
+              className="pl-8 h-9"
+            />
+          </div>
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableTh sortKey="nome" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Nome</SortableTh>
+                  <SortableTh sortKey="tipo" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Tipo</SortableTh>
+                  <SortableTh sortKey="fornecedor" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Fornecedor</SortableTh>
+                  <SortableTh sortKey="responsavelInterno" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Responsável</SortableTh>
+                  <SortableTh sortKey="criticidade" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Criticidade</SortableTh>
+                  <SortableTh sortKey="apiDisponivel" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>API</SortableTh>
+                  <SortableTh sortKey="integrado" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Integrado</SortableTh>
+                  <SortableTh sortKey="acessosCount" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Acessos</SortableTh>
+                  <TableHead className="w-[60px] text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableData.items.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      {sistemasCount === 0 ? "Nenhum sistema cadastrado." : "Nenhum sistema encontrado."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  tableData.items.map((s) => {
+                    const acessos = (s.quemTemAcesso ?? "").split(/[,;\n]+/).map(t => t.trim()).filter(Boolean).length;
+                    return (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium">{s.nome}</TableCell>
+                        <TableCell className="text-muted-foreground">{s.tipo || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{s.fornecedor || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{s.responsavelInterno || "—"}</TableCell>
+                        <TableCell>
+                          {s.criticidade
+                            ? <Badge variant={criticidadeBadgeVariant(s.criticidade)}>{s.criticidade}</Badge>
+                            : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{s.apiDisponivel || "—"}</TableCell>
+                        <TableCell>
+                          {s.integrado
+                            ? <Badge variant="secondary">Sim</Badge>
+                            : <span className="text-muted-foreground text-xs">Não</span>}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground tabular-nums">{acessos || "—"}</TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openDialog(s)}>Editar</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDelete(s.id)} className="text-destructive">Excluir</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      {viewMode === "cards" && (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {sistemas && sistemas.length > 0 ? (
           sistemas.map((s) => (
@@ -407,6 +512,7 @@ export default function SistemasAcessosTab({ clinicId }: { clinicId: string }) {
           </div>
         )}
       </div>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">

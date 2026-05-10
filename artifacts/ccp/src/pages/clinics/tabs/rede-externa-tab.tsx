@@ -10,8 +10,12 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Plus, Loader2, MoreHorizontal, Building2, Mail, Phone, Globe, FileText,
-  Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2,
+  Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Search,
 } from "lucide-react";
+import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from "@/components/ui/table";
+import { ViewToggle, useViewMode } from "@/components/view-toggle";
+import { SortableTh } from "@/components/sortable-th";
+import { useTableSortFilter } from "@/hooks/use-table-sort-filter";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -98,6 +102,16 @@ export default function RedeExternaTab({ clinicId }: { clinicId: string }) {
   const createMut = useCreateParceiroExterno();
   const updateMut = useUpdateParceiroExterno();
   const deleteMut = useDeleteParceiroExterno();
+
+  const partnersCount = partners?.length ?? 0;
+  const { mode: viewMode, setMode: setViewMode } = useViewMode("ccp_view_rede_externa", partnersCount);
+
+  type ParceiroSortKey = "nomeEmpresa" | "tipo" | "responsavel" | "email" | "telefone" | "frequenciaContato";
+  const tableData = useTableSortFilter<ParceiroExterno, ParceiroSortKey>(partners ?? [], {
+    initialSort: { key: "nomeEmpresa", dir: "asc" },
+    searchFields: (p) => [p.nomeEmpresa, p.tipo, p.responsavel, p.email, p.telefone, p.cnpjCpf, p.site],
+    getSortValue: (p, k) => (p as unknown as Record<string, unknown>)[k] as string | null | undefined,
+  });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -282,7 +296,8 @@ export default function RedeExternaTab({ clinicId }: { clinicId: string }) {
             Cadastre fornecedores e parceiros externos (contador, jurídico, marketing, TI, manutenção, PGRSS, vigilância, seguros, bancos…).
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <ViewToggle mode={viewMode} onChange={setViewMode} className="mr-1" />
           <Button variant="outline" onClick={() => downloadXlsx("template")} disabled={downloading}>
             {downloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Baixar modelo
@@ -305,6 +320,73 @@ export default function RedeExternaTab({ clinicId }: { clinicId: string }) {
         </div>
       </div>
 
+      {viewMode === "table" && (
+        <div className="space-y-3">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Buscar por nome, categoria, contato…"
+              value={tableData.search}
+              onChange={(e) => tableData.setSearch(e.target.value)}
+              className="pl-8 h-9"
+            />
+          </div>
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableTh sortKey="nomeEmpresa" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Nome / Empresa</SortableTh>
+                  <SortableTh sortKey="tipo" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Categoria</SortableTh>
+                  <SortableTh sortKey="responsavel" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Contato</SortableTh>
+                  <SortableTh sortKey="email" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>E-mail</SortableTh>
+                  <SortableTh sortKey="telefone" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Telefone</SortableTh>
+                  <SortableTh sortKey="frequenciaContato" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Frequência</SortableTh>
+                  <TableHead>Contrato</TableHead>
+                  <TableHead className="w-[60px] text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableData.items.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      {partnersCount === 0 ? "Nenhum parceiro cadastrado." : "Nenhum parceiro encontrado."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  tableData.items.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.nomeEmpresa || "(sem nome)"}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.tipo}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.responsavel || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.email || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.telefone || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.frequenciaContato || "—"}</TableCell>
+                      <TableCell>
+                        {p.temContratoFormal === true && <Badge variant="secondary">Formal</Badge>}
+                        {p.temContratoFormal === false && <Badge variant="outline">Sem contrato</Badge>}
+                        {p.temContratoFormal == null && <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openDialog(p)}>Editar</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDelete(p.id)} className="text-destructive">Excluir</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      {viewMode === "cards" && (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {partners && partners.length > 0 ? (
           partners.map((p) => (
@@ -387,6 +469,7 @@ export default function RedeExternaTab({ clinicId }: { clinicId: string }) {
           </div>
         )}
       </div>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">

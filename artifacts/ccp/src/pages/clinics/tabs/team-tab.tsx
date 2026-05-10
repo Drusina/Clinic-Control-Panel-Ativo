@@ -7,7 +7,11 @@ import {
   useDeleteTeamMember 
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, MoreHorizontal, User, Mail, Phone, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Send } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, User, Mail, Phone, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Send, Search } from "lucide-react";
+import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from "@/components/ui/table";
+import { ViewToggle, useViewMode } from "@/components/view-toggle";
+import { SortableTh } from "@/components/sortable-th";
+import { useTableSortFilter } from "@/hooks/use-table-sort-filter";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -298,6 +302,19 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
     (m) => !!m.email && EMAIL_RE.test(m.email) && !(m.temAcessoPlataforma && m.lastAccessAt),
   );
   const inviteCandidateIds = inviteCandidates.map((m) => m.id);
+
+  const teamCount = team?.length ?? 0;
+  const { mode: viewMode, setMode: setViewMode } = useViewMode("ccp_view_equipe", teamCount);
+
+  type TeamSortKey = "nome" | "funcao" | "email" | "whatsapp" | "temAcessoPlataforma" | "vinculo";
+  const tableData = useTableSortFilter<NonNullable<typeof team>[number], TeamSortKey>(team ?? [], {
+    initialSort: { key: "nome", dir: "asc" },
+    searchFields: (m) => [m.nome, m.funcao, m.email, m.whatsapp, m.area, m.vinculo, m.cpf],
+    getSortValue: (m, k) => {
+      if (k === "temAcessoPlataforma") return !!m.temAcessoPlataforma;
+      return (m as unknown as Record<string, unknown>)[k] as string | null | undefined;
+    },
+  });
   const allCandidatesSelected =
     inviteCandidateIds.length > 0 && inviteCandidateIds.every((id) => selectedIds.has(id));
   const someCandidatesSelected = inviteCandidateIds.some((id) => selectedIds.has(id));
@@ -416,7 +433,8 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
           <h3 className="text-lg font-medium">Equipe da Clínica</h3>
           <p className="text-sm text-muted-foreground">Gerencie os colaboradores e seus acessos.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <ViewToggle mode={viewMode} onChange={setViewMode} className="mr-1" />
           <Button variant="outline" onClick={downloadTemplate} disabled={downloading}>
             {downloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Baixar modelo
@@ -468,6 +486,93 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
         </div>
       )}
 
+      {viewMode === "table" && (
+        <div className="space-y-3">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Buscar por nome, função, e-mail…"
+              value={tableData.search}
+              onChange={(e) => tableData.setSearch(e.target.value)}
+              className="pl-8 h-9"
+            />
+          </div>
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableTh sortKey="nome" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Nome</SortableTh>
+                  <SortableTh sortKey="funcao" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Cargo</SortableTh>
+                  <SortableTh sortKey="email" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>E-mail</SortableTh>
+                  <SortableTh sortKey="whatsapp" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Telefone</SortableTh>
+                  <SortableTh sortKey="vinculo" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Vínculo</SortableTh>
+                  <SortableTh sortKey="temAcessoPlataforma" currentKey={tableData.sort.key} currentDir={tableData.sort.dir} onSort={tableData.toggleSort}>Acesso</SortableTh>
+                  <TableHead className="w-[60px] text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableData.items.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      {teamCount === 0 ? "Nenhum membro cadastrado." : "Nenhum membro encontrado."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  tableData.items.map((member) => {
+                    const isCandidate = inviteCandidateIds.includes(member.id);
+                    return (
+                      <TableRow key={member.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {isCandidate ? (
+                              <Checkbox
+                                checked={selectedIds.has(member.id)}
+                                onCheckedChange={() => toggleSelected(member.id)}
+                                aria-label={`Selecionar ${member.nome}`}
+                              />
+                            ) : (
+                              <div className="h-4 w-4" aria-hidden />
+                            )}
+                            <span className="font-medium">{member.nome}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{member.funcao || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{member.email || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{member.whatsapp || "—"}</TableCell>
+                        <TableCell>
+                          {member.vinculo ? <Badge variant="outline">{member.vinculo}</Badge> : <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          {member.temAcessoPlataforma
+                            ? <Badge variant="secondary">Com acesso</Badge>
+                            : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openDialog(member)}>Editar</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleDelete(member.id)} className="text-destructive">
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      {viewMode === "cards" && (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {team && team.length > 0 ? (
           team.map((member) => {
@@ -558,6 +663,7 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
           </div>
         )}
       </div>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
