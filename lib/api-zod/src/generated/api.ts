@@ -996,6 +996,15 @@ export const ImportPerguntasJsonResponse = zod.object({
 /**
  * @summary Bulk import perguntas via CSV/XLSX upload (super_admin only)
  */
+export const ImportPerguntasFileQueryParams = zod.object({
+  dryRun: zod.coerce
+    .boolean()
+    .optional()
+    .describe(
+      "When true, validates and computes the diff but does not write to the database.",
+    ),
+});
+
 export const ImportPerguntasFileBody = zod.object({
   file: zod.instanceof(File),
 });

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { BancoPerguntasDialog } from "@/components/banco-perguntas-dialog";
 import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStoredToken, useCurrentRole } from "@/hooks/use-auth";
@@ -25,7 +26,6 @@ import {
   Trash2,
   FilePlus,
   BookOpen,
-  Upload,
 } from "lucide-react";
 import {
   Dialog,
@@ -361,10 +361,7 @@ function DelegacaoBoard({ clinicId }: { clinicId: string }) {
       ) : null}
 
       {showBancoDialog && (
-        <BancoPerguntasDialog
-          onClose={() => setShowBancoDialog(false)}
-          clinicId={clinicId}
-        />
+        <BancoPerguntasDialog onClose={() => setShowBancoDialog(false)} />
       )}
     </div>
   );
@@ -1657,170 +1654,3 @@ function ClinicSelector() {
   );
 }
 
-// ─── Banco de perguntas dialog (super_admin) ────────────────────────────────
-
-function BancoPerguntasDialog({
-  onClose,
-  clinicId,
-}: {
-  onClose: () => void;
-  clinicId: string;
-}) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<
-    | { inserted: number; updated: number; invalid: { row: number; error: string }[] }
-    | null
-  >(null);
-
-  const handleFile = async (file: File) => {
-    setBusy(true);
-    setResult(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const token = getStoredToken();
-      const res = await fetch(`${BASE}/api/perguntas/import-file`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        toast({ variant: "destructive", title: "Falha ao importar", description: json.error ?? "" });
-      } else {
-        setResult(json);
-        toast({
-          title: "Importação concluída",
-          description: `${json.inserted} inseridas, ${json.updated} atualizadas, ${json.invalid?.length ?? 0} inválidas.`,
-        });
-        queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] });
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      toast({ variant: "destructive", title: "Falha ao importar", description: msg });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const resetMut = useMutation({
-    mutationFn: async () => {
-      const res = await authFetch("/api/perguntas/reset-to-seed", { method: "POST" });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json.error ?? "Falha");
-      }
-      return res.json();
-    },
-    onSuccess: (data: { inserted?: number; total?: number }) => {
-      toast({
-        title: "Banco restaurado",
-        description: `${data.inserted ?? 0} novas inseridas (total: ${data.total ?? "—"}).`,
-      });
-      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] });
-    },
-    onError: (err) =>
-      toast({ variant: "destructive", title: "Erro", description: err instanceof Error ? err.message : "" }),
-  });
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-[560px]">
-        <DialogHeader>
-          <DialogTitle>Banco de perguntas</DialogTitle>
-          <DialogDescription>
-            Importe perguntas via CSV/XLSX ou restaure o banco padrão. Mudanças aqui afetam todos os
-            diagnósticos futuros.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4 py-2">
-          <div className="border rounded-md p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <Upload className="h-4 w-4" />
-              <span className="font-medium text-sm">Importar planilha</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Cabeçalhos aceitos (qualquer caixa/acento): pilarSlug, pilarNome, pilarOrdem, texto,
-              tipo, peso, ordem, dica, valorMin, valorMax, inverso. Limite 2MB. Linhas com mesmo
-              (pilarSlug, ordem) são atualizadas.
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-                e.target.value = "";
-              }}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Selecionar arquivo
-            </Button>
-            {result && (
-              <div className="text-xs space-y-1 mt-2">
-                <div>
-                  ✓ Inseridas: {result.inserted} · Atualizadas: {result.updated} · Inválidas:{" "}
-                  {result.invalid.length}
-                </div>
-                {result.invalid.length > 0 && (
-                  <details className="text-destructive">
-                    <summary className="cursor-pointer">Ver erros</summary>
-                    <ul className="list-disc pl-4 max-h-32 overflow-y-auto">
-                      {result.invalid.slice(0, 50).map((i) => (
-                        <li key={i.row}>
-                          Linha {i.row}: {i.error}
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="border rounded-md p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <FilePlus className="h-4 w-4" />
-              <span className="font-medium text-sm">Restaurar banco padrão</span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Insere as perguntas do seed inicial que não existem (idempotente — não duplica). Não
-              remove perguntas customizadas.
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={resetMut.isPending}
-              onClick={() => resetMut.mutate()}
-            >
-              {resetMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Restaurar seed
-            </Button>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Para editar perguntas individuais, use os ícones de lápis/lixeira em cada pilar abaixo.
-          </p>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Fechar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

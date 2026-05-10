@@ -1254,6 +1254,13 @@ export type ImportPerguntasJsonBody = {
   upsert?: boolean;
 };
 
+export type ImportPerguntasFileParams = {
+  /**
+   * When true, validates and computes the diff but does not write to the database.
+   */
+  dryRun?: boolean;
+};
+
 export type ImportPerguntasFileBody = {
   file: Blob;
 };

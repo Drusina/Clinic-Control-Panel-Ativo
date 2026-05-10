@@ -673,6 +673,8 @@ router.post(
       return;
     }
 
+    const dryRun = req.query.dryRun === "true" || req.query.dryRun === "1";
+
     let inserted = 0;
     let updated = 0;
     for (const d of items) {
@@ -683,40 +685,44 @@ router.post(
         .limit(1);
 
       if (existing.length > 0) {
-        await db
-          .update(perguntasTable)
-          .set({
+        if (!dryRun) {
+          await db
+            .update(perguntasTable)
+            .set({
+              pilarNome: d.pilarNome,
+              pilarOrdem: d.pilarOrdem,
+              texto: d.texto,
+              tipo: d.tipo,
+              peso: d.peso.toFixed(2),
+              dica: d.dica ?? null,
+              valorMin: d.valorMin != null ? d.valorMin.toFixed(2) : null,
+              valorMax: d.valorMax != null ? d.valorMax.toFixed(2) : null,
+              inverso: d.inverso,
+            })
+            .where(eq(perguntasTable.id, existing[0].id));
+        }
+        updated++;
+      } else {
+        if (!dryRun) {
+          await db.insert(perguntasTable).values({
+            pilarSlug: d.pilarSlug,
             pilarNome: d.pilarNome,
             pilarOrdem: d.pilarOrdem,
             texto: d.texto,
             tipo: d.tipo,
             peso: d.peso.toFixed(2),
+            ordem: d.ordem,
             dica: d.dica ?? null,
             valorMin: d.valorMin != null ? d.valorMin.toFixed(2) : null,
             valorMax: d.valorMax != null ? d.valorMax.toFixed(2) : null,
             inverso: d.inverso,
-          })
-          .where(eq(perguntasTable.id, existing[0].id));
-        updated++;
-      } else {
-        await db.insert(perguntasTable).values({
-          pilarSlug: d.pilarSlug,
-          pilarNome: d.pilarNome,
-          pilarOrdem: d.pilarOrdem,
-          texto: d.texto,
-          tipo: d.tipo,
-          peso: d.peso.toFixed(2),
-          ordem: d.ordem,
-          dica: d.dica ?? null,
-          valorMin: d.valorMin != null ? d.valorMin.toFixed(2) : null,
-          valorMax: d.valorMax != null ? d.valorMax.toFixed(2) : null,
-          inverso: d.inverso,
-        });
+          });
+        }
         inserted++;
       }
     }
 
-    res.json({ inserted, updated, invalid });
+    res.json({ inserted, updated, invalid, dryRun });
   }
 );
 

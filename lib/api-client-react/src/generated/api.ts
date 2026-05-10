@@ -50,6 +50,7 @@ import type {
   ImportParceirosExternosSpreadsheet200,
   ImportParceirosExternosSpreadsheetBody,
   ImportPerguntasFileBody,
+  ImportPerguntasFileParams,
   ImportPerguntasJsonBody,
   ImportSistemasUsoSpreadsheet200,
   ImportSistemasUsoSpreadsheetBody,
@@ -3219,18 +3220,33 @@ export const useImportPerguntasJson = <
 /**
  * @summary Bulk import perguntas via CSV/XLSX upload (super_admin only)
  */
-export const getImportPerguntasFileUrl = () => {
-  return `/api/perguntas/import-file`;
+export const getImportPerguntasFileUrl = (
+  params?: ImportPerguntasFileParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/perguntas/import-file?${stringifiedParams}`
+    : `/api/perguntas/import-file`;
 };
 
 export const importPerguntasFile = async (
   importPerguntasFileBody: ImportPerguntasFileBody,
+  params?: ImportPerguntasFileParams,
   options?: RequestInit,
 ): Promise<PerguntasImportResult> => {
   const formData = new FormData();
   formData.append(`file`, importPerguntasFileBody.file);
 
-  return customFetch<PerguntasImportResult>(getImportPerguntasFileUrl(), {
+  return customFetch<PerguntasImportResult>(getImportPerguntasFileUrl(params), {
     ...options,
     method: "POST",
     body: formData,
@@ -3244,14 +3260,20 @@ export const getImportPerguntasFileMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof importPerguntasFile>>,
     TError,
-    { data: BodyType<ImportPerguntasFileBody> },
+    {
+      data: BodyType<ImportPerguntasFileBody>;
+      params?: ImportPerguntasFileParams;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof importPerguntasFile>>,
   TError,
-  { data: BodyType<ImportPerguntasFileBody> },
+  {
+    data: BodyType<ImportPerguntasFileBody>;
+    params?: ImportPerguntasFileParams;
+  },
   TContext
 > => {
   const mutationKey = ["importPerguntasFile"];
@@ -3265,11 +3287,14 @@ export const getImportPerguntasFileMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof importPerguntasFile>>,
-    { data: BodyType<ImportPerguntasFileBody> }
+    {
+      data: BodyType<ImportPerguntasFileBody>;
+      params?: ImportPerguntasFileParams;
+    }
   > = (props) => {
-    const { data } = props ?? {};
+    const { data, params } = props ?? {};
 
-    return importPerguntasFile(data, requestOptions);
+    return importPerguntasFile(data, params, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -3291,14 +3316,20 @@ export const useImportPerguntasFile = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof importPerguntasFile>>,
     TError,
-    { data: BodyType<ImportPerguntasFileBody> },
+    {
+      data: BodyType<ImportPerguntasFileBody>;
+      params?: ImportPerguntasFileParams;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof importPerguntasFile>>,
   TError,
-  { data: BodyType<ImportPerguntasFileBody> },
+  {
+    data: BodyType<ImportPerguntasFileBody>;
+    params?: ImportPerguntasFileParams;
+  },
   TContext
 > => {
   return useMutation(getImportPerguntasFileMutationOptions(options));

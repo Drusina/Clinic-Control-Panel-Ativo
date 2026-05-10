@@ -777,6 +777,12 @@ paths:
       operationId: importPerguntasFile
       tags: [diagnostics]
       summary: Bulk import perguntas via CSV/XLSX upload (super_admin only)
+      parameters:
+        - name: dryRun
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: When true, validates and computes the diff but does not write to the database.
       requestBody:
         required: true
         content:

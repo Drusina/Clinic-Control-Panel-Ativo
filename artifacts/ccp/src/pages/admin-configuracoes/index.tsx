@@ -54,6 +54,8 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { BancoPerguntasDialog } from "@/components/banco-perguntas-dialog";
+import { ListChecks } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -927,6 +929,34 @@ function TemplateEditDialog({
   );
 }
 
+function BancoPerguntasCard() {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <ListChecks className="h-4 w-4 text-primary" /> Banco de Perguntas do Diagnóstico
+        </CardTitle>
+        <CardDescription className="text-sm">
+          Importe perguntas em massa via planilha CSV/XLSX (com pré-visualização do diff antes de
+          confirmar) ou restaure o seed padrão.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+          data-testid="btn-open-banco-perguntas"
+        >
+          <FileDown className="h-4 w-4 mr-2 rotate-180" /> Importar perguntas / Restaurar seed
+        </Button>
+        {open && <BancoPerguntasDialog onClose={() => setOpen(false)} />}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminConfiguracoesPage() {
   const { toast: _toast } = useToast();
   const qc = useQueryClient();
@@ -1033,6 +1063,8 @@ export default function AdminConfiguracoesPage() {
           />
 
           <LgpdTemplatesCard />
+
+          <BancoPerguntasCard />
         </>
       )}
 
