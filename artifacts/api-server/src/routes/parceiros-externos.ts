@@ -40,6 +40,50 @@ function normCnpjCpf(raw: unknown): string | null {
   return d;
 }
 
+function isValidCpfDigits(d: string): boolean {
+  if (d.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(d)) return false;
+  let s = 0;
+  for (let i = 0; i < 9; i++) s += parseInt(d[i], 10) * (10 - i);
+  let c1 = (s * 10) % 11;
+  if (c1 === 10) c1 = 0;
+  if (c1 !== parseInt(d[9], 10)) return false;
+  s = 0;
+  for (let i = 0; i < 10; i++) s += parseInt(d[i], 10) * (11 - i);
+  let c2 = (s * 10) % 11;
+  if (c2 === 10) c2 = 0;
+  return c2 === parseInt(d[10], 10);
+}
+
+function isValidCnpjDigits(d: string): boolean {
+  if (d.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(d)) return false;
+  const w1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const w2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let s = 0;
+  for (let i = 0; i < 12; i++) s += parseInt(d[i], 10) * w1[i];
+  let c1 = s % 11;
+  c1 = c1 < 2 ? 0 : 11 - c1;
+  if (c1 !== parseInt(d[12], 10)) return false;
+  s = 0;
+  for (let i = 0; i < 13; i++) s += parseInt(d[i], 10) * w2[i];
+  let c2 = s % 11;
+  c2 = c2 < 2 ? 0 : 11 - c2;
+  return c2 === parseInt(d[13], 10);
+}
+
+/**
+ * Validates a normalized CNPJ/CPF (digits only). Returns:
+ * - "ok" → valid CPF (11 d) or CNPJ (14 d)
+ * - "invalid_length" → length is not 11 or 14
+ * - "invalid_dv" → length ok but check digit fails
+ */
+function validateCnpjCpf(d: string): "ok" | "invalid_length" | "invalid_dv" {
+  if (d.length !== 11 && d.length !== 14) return "invalid_length";
+  if (d.length === 11) return isValidCpfDigits(d) ? "ok" : "invalid_dv";
+  return isValidCnpjDigits(d) ? "ok" : "invalid_dv";
+}
+
 function normText(raw: unknown): string | null {
   if (raw == null) return null;
   const s = String(raw).trim();
@@ -107,15 +151,33 @@ router.post("/clinics/:clinicId/parceiros-externos", async (req, res): Promise<v
   }
   const d = parsed.data;
 
+  const tipoTrim = d.tipo.trim();
+  if (!tipoTrim) {
+    res.status(400).json({ error: "Categoria (tipo) é obrigatória." });
+    return;
+  }
+  const cnpjCpfNorm = normCnpjCpf(d.cnpjCpf);
+  if (cnpjCpfNorm) {
+    const v = validateCnpjCpf(cnpjCpfNorm);
+    if (v !== "ok") {
+      res.status(400).json({
+        error: v === "invalid_length"
+          ? "CNPJ/CPF deve ter 11 dígitos (CPF) ou 14 (CNPJ)."
+          : "CNPJ/CPF inválido (dígito verificador não confere).",
+      });
+      return;
+    }
+  }
+
   try {
     const [parceiro] = await db
       .insert(parceirosExternosTable)
       .values({
         clinicId,
-        tipo: d.tipo,
+        tipo: tipoTrim,
         nomeEmpresa: d.nomeEmpresa ?? null,
         responsavel: d.responsavel ?? null,
-        cnpjCpf: normCnpjCpf(d.cnpjCpf),
+        cnpjCpf: cnpjCpfNorm,
         registroProfissional: d.registroProfissional ?? null,
         email: d.email ? d.email.trim().toLowerCase() || null : null,
         telefone: d.telefone ?? null,
@@ -147,10 +209,31 @@ router.patch("/clinics/:clinicId/parceiros-externos/:parceiroId", async (req, re
   const d = parsed.data;
 
   const updates: Partial<typeof parceirosExternosTable.$inferInsert> = {};
-  if (d.tipo != null) updates.tipo = d.tipo;
+  if (d.tipo != null) {
+    const t = d.tipo.trim();
+    if (!t) {
+      res.status(400).json({ error: "Categoria (tipo) não pode ser vazia." });
+      return;
+    }
+    updates.tipo = t;
+  }
   if (d.nomeEmpresa !== undefined) updates.nomeEmpresa = d.nomeEmpresa;
   if (d.responsavel !== undefined) updates.responsavel = d.responsavel;
-  if (d.cnpjCpf !== undefined) updates.cnpjCpf = normCnpjCpf(d.cnpjCpf);
+  if (d.cnpjCpf !== undefined) {
+    const norm = normCnpjCpf(d.cnpjCpf);
+    if (norm) {
+      const v = validateCnpjCpf(norm);
+      if (v !== "ok") {
+        res.status(400).json({
+          error: v === "invalid_length"
+            ? "CNPJ/CPF deve ter 11 dígitos (CPF) ou 14 (CNPJ)."
+            : "CNPJ/CPF inválido (dígito verificador não confere).",
+        });
+        return;
+      }
+    }
+    updates.cnpjCpf = norm;
+  }
   if (d.registroProfissional !== undefined) updates.registroProfissional = d.registroProfissional;
   if (d.email !== undefined) updates.email = d.email ? d.email.trim().toLowerCase() || null : null;
   if (d.telefone !== undefined) updates.telefone = d.telefone;
@@ -274,8 +357,13 @@ router.get("/clinics/:clinicId/parceiros-externos/template", async (req, res): P
     [],
     HEADERS,
   ];
-  for (let n = 1; n <= 3; n++) {
-    aoa.push([n, "", "", "", "", "", "", "", "", "", "", "", ""]);
+  // Pre-fill one row per common category so the operator only has to
+  // complete the remaining columns. Extra blank rows allow custom entries.
+  COMMON_CATEGORIES.forEach((cat, idx) => {
+    aoa.push([idx + 1, cat, "", "", "", "", "", "", "", "", "", "", ""]);
+  });
+  for (let n = 1; n <= 5; n++) {
+    aoa.push([COMMON_CATEGORIES.length + n, "", "", "", "", "", "", "", "", "", "", "", ""]);
   }
 
   const ws = buildSheet(aoa);
@@ -567,14 +655,26 @@ router.post(
           }
 
           const cnpjCpf = normCnpjCpf(get("cnpjCpf"));
-          if (cnpjCpf && cnpjCpf.length !== 11 && cnpjCpf.length !== 14) {
-            summary.errors.push({
-              row: xlsxRow,
-              field: "cnpjCpf",
-              message: `CNPJ/CPF inválido (use 11 dígitos para CPF ou 14 para CNPJ)`,
-            });
-            summary.skipped++;
-            continue;
+          if (cnpjCpf) {
+            const v = validateCnpjCpf(cnpjCpf);
+            if (v === "invalid_length") {
+              summary.errors.push({
+                row: xlsxRow,
+                field: "cnpjCpf",
+                message: `CNPJ/CPF inválido (use 11 dígitos para CPF ou 14 para CNPJ)`,
+              });
+              summary.skipped++;
+              continue;
+            }
+            if (v === "invalid_dv") {
+              summary.errors.push({
+                row: xlsxRow,
+                field: "cnpjCpf",
+                message: `CNPJ/CPF inválido (dígito verificador não confere): ${cnpjCpf}`,
+              });
+              summary.skipped++;
+              continue;
+            }
           }
 
           const email = normEmail(get("email"));
