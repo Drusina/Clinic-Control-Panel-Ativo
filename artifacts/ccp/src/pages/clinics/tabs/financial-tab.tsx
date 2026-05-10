@@ -22,6 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -368,7 +369,13 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
                       <FormItem>
                         <FormLabel>Implantação (R$)</FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.01" {...field} />
+                          <CurrencyInput
+                            value={typeof field.value === "number" ? field.value : null}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -381,7 +388,13 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
                       <FormItem>
                         <FormLabel>Recorrência / MRR (R$)</FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.01" {...field} />
+                          <CurrencyInput
+                            value={typeof field.value === "number" ? field.value : null}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -739,7 +752,13 @@ export default function FinancialTab({ clinicId, clinic }: { clinicId: string; c
                     <FormItem>
                       <FormLabel>Valor (R$)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" {...field} />
+                        <CurrencyInput
+                          value={typeof field.value === "number" ? field.value : null}
+                          onChange={(v) => field.onChange(v ?? 0)}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

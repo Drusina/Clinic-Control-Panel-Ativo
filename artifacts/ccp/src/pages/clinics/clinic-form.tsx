@@ -12,6 +12,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Select,
   SelectContent,
@@ -411,7 +412,13 @@ export function ClinicForm({
                 <FormItem>
                   <FormLabel>Capital Social (R$)</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.01" {...field} />
+                    <CurrencyInput
+                      value={typeof field.value === "number" ? field.value : null}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -568,7 +575,13 @@ export function ClinicForm({
                 <FormItem>
                   <FormLabel>Valor de Implantação (R$)</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.01" {...field} />
+                    <CurrencyInput
+                      value={typeof field.value === "number" ? field.value : null}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -581,7 +594,13 @@ export function ClinicForm({
                 <FormItem>
                   <FormLabel>Valor Recorrente / MRR (R$)</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.01" {...field} />
+                    <CurrencyInput
+                      value={typeof field.value === "number" ? field.value : null}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

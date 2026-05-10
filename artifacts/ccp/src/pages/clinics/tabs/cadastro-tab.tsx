@@ -13,6 +13,7 @@ import {
 import type { Clinic, Socio, UpdateClinicBody, UpdateSocioBody } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Select,
   SelectContent,
@@ -352,7 +353,15 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Capital Social (R$)</FormLabel>
-                    <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                    <FormControl>
+                      <CurrencyInput
+                        value={typeof field.value === "number" ? field.value : null}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -640,7 +649,20 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Valor das Quotas (R$)</FormLabel>
-                      <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                      <FormControl>
+                        <CurrencyInput
+                          allowNull
+                          value={
+                            field.value == null || field.value === ""
+                              ? null
+                              : Number(String(field.value).replace(",", "."))
+                          }
+                          onChange={(v) => field.onChange(v == null ? "" : String(v))}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
