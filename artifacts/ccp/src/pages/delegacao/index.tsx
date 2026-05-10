@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStoredToken, useCurrentRole } from "@/hooks/use-auth";
-import { useListClinics, useListTeam } from "@workspace/api-client-react";
+import { useListClinics } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -24,6 +24,8 @@ import {
   Pencil,
   Trash2,
   FilePlus,
+  BookOpen,
+  Upload,
 } from "lucide-react";
 import {
   Dialog,
@@ -97,6 +99,14 @@ interface PilarSummary {
   answeredCount: number;
 }
 
+interface TeamMember {
+  id: string;
+  nome: string;
+  email: string | null;
+  funcao: string | null;
+  whatsapp?: string | null;
+}
+
 interface HydratedDiagnostic {
   diagnostic: {
     id: string;
@@ -111,6 +121,8 @@ interface HydratedDiagnostic {
   pillars: PilarSummary[];
   questions: PerguntaTipo[];
   respostas: RespostaTipo[];
+  delegacoes: Delegacao[];
+  team: TeamMember[];
 }
 
 interface Delegacao {
@@ -173,12 +185,6 @@ async function fetchHydrated(clinicId: string, diagnosticoId: string): Promise<H
   return res.json();
 }
 
-async function fetchDelegacoes(clinicId: string): Promise<Delegacao[]> {
-  const res = await authFetch(`/api/clinics/${clinicId}/delegacoes`);
-  if (!res.ok) throw new Error("Failed to fetch delegacoes");
-  return res.json();
-}
-
 // ─── Page entry ─────────────────────────────────────────────────────────────
 
 export default function DelegacaoPage() {
@@ -219,13 +225,15 @@ function DelegacaoBoard({ clinicId }: { clinicId: string }) {
     if (queryDiagnosticoId) return queryDiagnosticoId;
     const stored = typeof window !== "undefined" ? localStorage.getItem(localStorageKey) : null;
     if (stored && diagnostics.some((d) => d.id === stored)) return stored;
-    const inProgress = diagnostics.find((d) => d.status === "em_andamento");
-    if (inProgress) return inProgress.id;
-    const concluded = diagnostics.filter((d) => d.status === "concluido");
-    if (concluded.length > 0) {
-      // most recent concluido (by iniciadoEm desc)
-      return [...concluded].sort((a, b) => b.iniciadoEm.localeCompare(a.iniciadoEm))[0].id;
-    }
+    // Prefer the LATEST em_andamento (sort iniciadoEm desc), then latest concluido.
+    const inProgress = [...diagnostics]
+      .filter((d) => d.status === "em_andamento")
+      .sort((a, b) => b.iniciadoEm.localeCompare(a.iniciadoEm));
+    if (inProgress.length > 0) return inProgress[0].id;
+    const concluded = [...diagnostics]
+      .filter((d) => d.status === "concluido")
+      .sort((a, b) => b.iniciadoEm.localeCompare(a.iniciadoEm));
+    if (concluded.length > 0) return concluded[0].id;
     return diagnostics[0]?.id ?? null;
   }, [queryDiagnosticoId, diagnostics, localStorageKey]);
 
@@ -265,18 +273,13 @@ function DelegacaoBoard({ clinicId }: { clinicId: string }) {
     enabled: !!clinicId && !!selectedDiagId,
   });
 
-  const { data: delegacoes = [] } = useQuery({
-    queryKey: ["delegacoes", clinicId],
-    queryFn: () => fetchDelegacoes(clinicId),
-    enabled: !!clinicId,
-  });
-
-  const { data: teamData } = useListTeam(clinicId, {
-    query: { enabled: !!clinicId, queryKey: ["team", clinicId] },
-  });
-  const team = teamData ?? [];
+  // Delegacoes & team now come from the hydrated payload — no extra round-trip.
+  const delegacoes = hydrated?.delegacoes ?? [];
+  const team = hydrated?.team ?? [];
 
   const isLoading = isLoadingDiags || (!!selectedDiagId && isLoadingHydrated);
+
+  const [showBancoDialog, setShowBancoDialog] = useState(false);
 
   // Auto-create a first diagnostic if none exists
   const autoCreated = useRef(false);
@@ -313,6 +316,11 @@ function DelegacaoBoard({ clinicId }: { clinicId: string }) {
           creating={createDiagMut.isPending}
           canCreate={isSuperAdmin}
         />
+        {isSuperAdmin && (
+          <Button variant="outline" size="sm" onClick={() => setShowBancoDialog(true)}>
+            <BookOpen className="h-4 w-4 mr-1" /> Banco de perguntas
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -337,12 +345,19 @@ function DelegacaoBoard({ clinicId }: { clinicId: string }) {
             clinicId={clinicId}
             hydrated={hydrated}
             delegacoes={delegacoes}
-            team={team.map((m) => ({ id: m.id, nome: m.nome, email: m.email ?? null, funcao: m.funcao ?? null }))}
+            team={team}
             isSuperAdmin={isSuperAdmin}
             diagnosticoId={selectedDiagId}
           />
         </>
       ) : null}
+
+      {showBancoDialog && (
+        <BancoPerguntasDialog
+          onClose={() => setShowBancoDialog(false)}
+          clinicId={clinicId}
+        />
+      )}
     </div>
   );
 }
@@ -690,7 +705,7 @@ function PilarRow(props: PilarRowProps) {
       if (!res.ok) throw new Error();
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] }),
     onError: () => toast({ variant: "destructive", title: "Erro ao atualizar delegação" }),
   });
 
@@ -699,7 +714,7 @@ function PilarRow(props: PilarRowProps) {
       const res = await authFetch(`/api/delegacoes/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] }),
   });
 
   return (
@@ -1127,7 +1142,7 @@ function DelegacaoDialog({
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] });
+      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] });
       toast({
         title:
           context.nivel === 1
@@ -1151,7 +1166,7 @@ function DelegacaoDialog({
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["delegacoes", clinicId] });
+      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] });
       toast({ title: "Responsável reatribuído" });
       onClose();
     },
@@ -1251,26 +1266,56 @@ function DelegacaoDialog({
             />
           </div>
           {context.nivel === 2 && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium mb-1 block">Q inicial</label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={context.pilar.questionCount}
-                  value={form.questaoInicio}
-                  onChange={(e) => setForm((f) => ({ ...f, questaoInicio: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">Q final</label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={context.pilar.questionCount}
-                  value={form.questaoFim}
-                  onChange={(e) => setForm((f) => ({ ...f, questaoFim: e.target.value }))}
-                />
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                Faixa de perguntas
+                {form.questaoInicio && form.questaoFim && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">
+                    Q{form.questaoInicio}–Q{form.questaoFim} (
+                    {parseInt(form.questaoFim) - parseInt(form.questaoInicio) + 1} perguntas)
+                  </span>
+                )}
+              </label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Clique em uma pergunta para definir o início, depois em outra para o fim.
+                Clique novamente para reiniciar a seleção.
+              </p>
+              <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto p-2 border rounded-md">
+                {Array.from({ length: context.pilar.questionCount }, (_, i) => i + 1).map((n) => {
+                  const ini = form.questaoInicio ? parseInt(form.questaoInicio) : null;
+                  const fim = form.questaoFim ? parseInt(form.questaoFim) : null;
+                  const inRange = ini != null && fim != null && n >= ini && n <= fim;
+                  const isEdge = n === ini || n === fim;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => {
+                        setForm((f) => {
+                          const a = f.questaoInicio ? parseInt(f.questaoInicio) : null;
+                          const b = f.questaoFim ? parseInt(f.questaoFim) : null;
+                          if (a == null) return { ...f, questaoInicio: String(n), questaoFim: String(n) };
+                          if (b == null || a === b) {
+                            const lo = Math.min(a, n);
+                            const hi = Math.max(a, n);
+                            return { ...f, questaoInicio: String(lo), questaoFim: String(hi) };
+                          }
+                          return { ...f, questaoInicio: String(n), questaoFim: String(n) };
+                        });
+                      }}
+                      className={
+                        "px-2 py-1 text-xs rounded border transition-colors " +
+                        (isEdge
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : inRange
+                          ? "bg-primary/20 border-primary/40"
+                          : "bg-background hover:bg-muted")
+                      }
+                    >
+                      Q{n}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1586,5 +1631,173 @@ function ClinicSelector() {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Banco de perguntas dialog (super_admin) ────────────────────────────────
+
+function BancoPerguntasDialog({
+  onClose,
+  clinicId,
+}: {
+  onClose: () => void;
+  clinicId: string;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<
+    | { inserted: number; updated: number; invalid: { row: number; error: string }[] }
+    | null
+  >(null);
+
+  const handleFile = async (file: File) => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const token = getStoredToken();
+      const res = await fetch("/api/perguntas/import-file", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast({ variant: "destructive", title: "Falha ao importar", description: json.error ?? "" });
+      } else {
+        setResult(json);
+        toast({
+          title: "Importação concluída",
+          description: `${json.inserted} inseridas, ${json.updated} atualizadas, ${json.invalid?.length ?? 0} inválidas.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      toast({ variant: "destructive", title: "Falha ao importar", description: msg });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resetMut = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch("/api/perguntas/reset-to-seed", { method: "POST" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? "Falha");
+      }
+      return res.json();
+    },
+    onSuccess: (data: { inserted?: number; total?: number }) => {
+      toast({
+        title: "Banco restaurado",
+        description: `${data.inserted ?? 0} novas inseridas (total: ${data.total ?? "—"}).`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] });
+    },
+    onError: (err) =>
+      toast({ variant: "destructive", title: "Erro", description: err instanceof Error ? err.message : "" }),
+  });
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>Banco de perguntas</DialogTitle>
+          <DialogDescription>
+            Importe perguntas via CSV/XLSX ou restaure o banco padrão. Mudanças aqui afetam todos os
+            diagnósticos futuros.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="border rounded-md p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              <span className="font-medium text-sm">Importar planilha</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Cabeçalhos aceitos (qualquer caixa/acento): pilarSlug, pilarNome, pilarOrdem, texto,
+              tipo, peso, ordem, dica, valorMin, valorMax, inverso. Limite 2MB. Linhas com mesmo
+              (pilarSlug, ordem) são atualizadas.
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Selecionar arquivo
+            </Button>
+            {result && (
+              <div className="text-xs space-y-1 mt-2">
+                <div>
+                  ✓ Inseridas: {result.inserted} · Atualizadas: {result.updated} · Inválidas:{" "}
+                  {result.invalid.length}
+                </div>
+                {result.invalid.length > 0 && (
+                  <details className="text-destructive">
+                    <summary className="cursor-pointer">Ver erros</summary>
+                    <ul className="list-disc pl-4 max-h-32 overflow-y-auto">
+                      {result.invalid.slice(0, 50).map((i) => (
+                        <li key={i.row}>
+                          Linha {i.row}: {i.error}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="border rounded-md p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <FilePlus className="h-4 w-4" />
+              <span className="font-medium text-sm">Restaurar banco padrão</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Insere as perguntas do seed inicial que não existem (idempotente — não duplica). Não
+              remove perguntas customizadas.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={resetMut.isPending}
+              onClick={() => resetMut.mutate()}
+            >
+              {resetMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Restaurar seed
+            </Button>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Para editar perguntas individuais, use os ícones de lápis/lixeira em cada pilar abaixo.
+          </p>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, perguntasTable } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -250,5 +250,3 @@ export function listSeedPilares(): { slug: string; nome: string; ordem: number; 
   }));
 }
 
-// Silence unused-import warning when `and` is removed by tree-shaking.
-void and;

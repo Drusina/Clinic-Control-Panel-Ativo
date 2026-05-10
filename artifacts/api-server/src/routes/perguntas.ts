@@ -1,7 +1,9 @@
-import { Router, type IRouter } from "express";
-import { db, perguntasTable, respostasTable, diagnosticsTable } from "@workspace/db";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { db, perguntasTable, respostasTable, diagnosticsTable, delegacoesTable, teamTable } from "@workspace/db";
 import { eq, and, count } from "drizzle-orm";
 import { z } from "zod";
+import multer, { MulterError } from "multer";
+import * as XLSX from "xlsx";
 import { recalculateScores } from "../lib/score-calculator";
 import { assertClinicAccess, type AuthenticatedRequest } from "../middleware/auth";
 import { PERGUNTAS_SEED } from "../lib/perguntas-seed.js";
@@ -451,7 +453,7 @@ router.get("/clinics/:clinicId/diagnostics/:diagnosticoId/hydrated", async (req,
     return;
   }
 
-  const [perguntas, respostas] = await Promise.all([
+  const [perguntas, respostas, delegacoes, teamMembers] = await Promise.all([
     db
       .select()
       .from(perguntasTable)
@@ -460,6 +462,21 @@ router.get("/clinics/:clinicId/diagnostics/:diagnosticoId/hydrated", async (req,
       .select()
       .from(respostasTable)
       .where(eq(respostasTable.diagnosticoId, diagnosticoId)),
+    db
+      .select()
+      .from(delegacoesTable)
+      .where(eq(delegacoesTable.clinicId, clinicId))
+      .orderBy(delegacoesTable.nivel, delegacoesTable.createdAt),
+    db
+      .select({
+        id: teamTable.id,
+        nome: teamTable.nome,
+        email: teamTable.email,
+        funcao: teamTable.funcao,
+        whatsapp: teamTable.whatsapp,
+      })
+      .from(teamTable)
+      .where(eq(teamTable.clinicId, clinicId)),
   ]);
 
   // Build pillar summary (questionCount, answeredCount per pilar)
@@ -497,7 +514,209 @@ router.get("/clinics/:clinicId/diagnostics/:diagnosticoId/hydrated", async (req,
       valor: r.valor,
       respondidoEm: r.respondidoEm.toISOString(),
     })),
+    delegacoes: delegacoes.map((d) => ({
+      id: d.id,
+      clinicId: d.clinicId,
+      pilarSlug: d.pilarSlug,
+      pilarNome: d.pilarNome,
+      nivel: d.nivel,
+      responsavelNome: d.responsavelNome,
+      responsavelEmail: d.responsavelEmail,
+      prazo: d.prazo,
+      status: d.status,
+      questaoInicio: d.questaoInicio,
+      questaoFim: d.questaoFim,
+      parentId: d.parentId,
+      observacoes: d.observacoes,
+    })),
+    team: teamMembers.map((m) => ({
+      id: m.id,
+      nome: m.nome,
+      email: m.email,
+      funcao: m.funcao,
+      whatsapp: m.whatsapp,
+    })),
   });
 });
+
+// ─── CSV/XLSX import (super_admin) ──────────────────────────────────────────
+
+const MAX_PERGUNTAS_IMPORT_BYTES = 2 * 1024 * 1024;
+const perguntasUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_PERGUNTAS_IMPORT_BYTES, files: 1 },
+});
+
+function perguntasUploadHandler(req: Request, res: Response, next: NextFunction): void {
+  perguntasUpload.single("file")(req, res, (err: unknown) => {
+    if (err) {
+      if (err instanceof MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+          error: `Planilha excede o limite de ${Math.round(MAX_PERGUNTAS_IMPORT_BYTES / 1024 / 1024)}MB`,
+        });
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Falha ao processar upload";
+      res.status(400).json({ error: message });
+      return;
+    }
+    next();
+  });
+}
+
+const PERG_HEADER_ALIASES: Record<string, string> = {
+  pilarslug: "pilarSlug",
+  slug: "pilarSlug",
+  pilarnome: "pilarNome",
+  pilar: "pilarNome",
+  pilarordem: "pilarOrdem",
+  ordempilar: "pilarOrdem",
+  texto: "texto",
+  pergunta: "texto",
+  enunciado: "texto",
+  tipo: "tipo",
+  formato: "tipo",
+  peso: "peso",
+  ordem: "ordem",
+  numero: "ordem",
+  dica: "dica",
+  ajuda: "dica",
+  valormin: "valorMin",
+  min: "valorMin",
+  valormax: "valorMax",
+  max: "valorMax",
+  inverso: "inverso",
+};
+
+function normalizeHeader(h: string): string {
+  return h
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function parseBoolean(v: unknown): boolean {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "1" || s === "true" || s === "sim" || s === "yes" || s === "x";
+  }
+  return false;
+}
+
+router.post(
+  "/perguntas/import-file",
+  perguntasUploadHandler,
+  async (req, res): Promise<void> => {
+    if (ensureSuperAdmin(req, res)) return;
+
+    if (!req.file) {
+      res.status(400).json({ error: "Arquivo não enviado (campo 'file' obrigatório)" });
+      return;
+    }
+
+    let rows: Record<string, unknown>[];
+    try {
+      const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      if (!sheet) {
+        res.status(400).json({ error: "Planilha vazia" });
+        return;
+      }
+      rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null, raw: false });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao ler planilha";
+      res.status(400).json({ error: `Falha ao parsear planilha: ${message}` });
+      return;
+    }
+
+    const items: z.infer<typeof InsertPerguntaBody>[] = [];
+    const invalid: { row: number; error: string }[] = [];
+
+    rows.forEach((raw, idx) => {
+      const remapped: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        const key = PERG_HEADER_ALIASES[normalizeHeader(k)] ?? k;
+        remapped[key] = v;
+      }
+      const candidate = {
+        pilarSlug: typeof remapped.pilarSlug === "string" ? remapped.pilarSlug.trim() : remapped.pilarSlug,
+        pilarNome: typeof remapped.pilarNome === "string" ? remapped.pilarNome.trim() : remapped.pilarNome,
+        pilarOrdem: remapped.pilarOrdem != null ? Number(remapped.pilarOrdem) : undefined,
+        texto: typeof remapped.texto === "string" ? remapped.texto.trim() : remapped.texto,
+        tipo: typeof remapped.tipo === "string" ? remapped.tipo.trim().toLowerCase() : remapped.tipo,
+        peso: remapped.peso != null && remapped.peso !== "" ? Number(remapped.peso) : 1,
+        ordem: remapped.ordem != null ? Number(remapped.ordem) : undefined,
+        dica: remapped.dica == null || remapped.dica === "" ? null : String(remapped.dica),
+        valorMin:
+          remapped.valorMin == null || remapped.valorMin === "" ? null : Number(remapped.valorMin),
+        valorMax:
+          remapped.valorMax == null || remapped.valorMax === "" ? null : Number(remapped.valorMax),
+        inverso: parseBoolean(remapped.inverso),
+      };
+      const parsed = InsertPerguntaBody.safeParse(candidate);
+      if (!parsed.success) {
+        invalid.push({
+          row: idx + 2,
+          error: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+        });
+      } else {
+        items.push(parsed.data);
+      }
+    });
+
+    if (items.length === 0) {
+      res.status(400).json({ error: "Nenhuma linha válida encontrada", invalid });
+      return;
+    }
+
+    let inserted = 0;
+    let updated = 0;
+    for (const d of items) {
+      const existing = await db
+        .select({ id: perguntasTable.id })
+        .from(perguntasTable)
+        .where(and(eq(perguntasTable.pilarSlug, d.pilarSlug), eq(perguntasTable.ordem, d.ordem)))
+        .limit(1);
+
+      if (existing.length > 0) {
+        await db
+          .update(perguntasTable)
+          .set({
+            pilarNome: d.pilarNome,
+            pilarOrdem: d.pilarOrdem,
+            texto: d.texto,
+            tipo: d.tipo,
+            peso: d.peso.toFixed(2),
+            dica: d.dica ?? null,
+            valorMin: d.valorMin != null ? d.valorMin.toFixed(2) : null,
+            valorMax: d.valorMax != null ? d.valorMax.toFixed(2) : null,
+            inverso: d.inverso,
+          })
+          .where(eq(perguntasTable.id, existing[0].id));
+        updated++;
+      } else {
+        await db.insert(perguntasTable).values({
+          pilarSlug: d.pilarSlug,
+          pilarNome: d.pilarNome,
+          pilarOrdem: d.pilarOrdem,
+          texto: d.texto,
+          tipo: d.tipo,
+          peso: d.peso.toFixed(2),
+          ordem: d.ordem,
+          dica: d.dica ?? null,
+          valorMin: d.valorMin != null ? d.valorMin.toFixed(2) : null,
+          valorMax: d.valorMax != null ? d.valorMax.toFixed(2) : null,
+          inverso: d.inverso,
+        });
+        inserted++;
+      }
+    }
+
+    res.json({ inserted, updated, invalid });
+  }
+);
 
 export default router;
