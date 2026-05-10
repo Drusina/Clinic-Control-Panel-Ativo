@@ -129,8 +129,8 @@ router.post("/clinics/:clinicId/sistemas-uso", async (req, res): Promise<void> =
       emailResponsavel: email,
       telefoneResponsavel: d.telefoneResponsavel ?? null,
       suporteExterno: d.suporteExterno ?? null,
-      criticidade: d.criticidade ?? null,
-      apiDisponivel: d.apiDisponivel ?? null,
+      criticidade: normCriticidade(d.criticidade),
+      apiDisponivel: normApiDisponivel(d.apiDisponivel),
       integrado: d.integrado ?? false,
       quemTemAcesso: d.quemTemAcesso ?? null,
       observacoes: d.observacoes ?? null,
@@ -173,8 +173,8 @@ router.patch("/clinics/:clinicId/sistemas-uso/:sistemaId", async (req, res): Pro
   }
   if (d.telefoneResponsavel !== undefined) updates.telefoneResponsavel = d.telefoneResponsavel;
   if (d.suporteExterno !== undefined) updates.suporteExterno = d.suporteExterno;
-  if (d.criticidade !== undefined) updates.criticidade = d.criticidade;
-  if (d.apiDisponivel !== undefined) updates.apiDisponivel = d.apiDisponivel;
+  if (d.criticidade !== undefined) updates.criticidade = normCriticidade(d.criticidade);
+  if (d.apiDisponivel !== undefined) updates.apiDisponivel = normApiDisponivel(d.apiDisponivel);
   if (d.integrado !== undefined) updates.integrado = d.integrado ?? false;
   if (d.quemTemAcesso !== undefined) updates.quemTemAcesso = d.quemTemAcesso;
   if (d.observacoes !== undefined) updates.observacoes = d.observacoes;
@@ -323,11 +323,26 @@ router.get("/clinics/:clinicId/sistemas-uso/export", async (req, res): Promise<v
     return;
   }
 
-  const sistemas = await db
+  const sistemasRaw = await db
     .select()
     .from(sistemasUsoTable)
-    .where(eq(sistemasUsoTable.clinicId, clinicId))
-    .orderBy(sistemasUsoTable.tipo, sistemasUsoTable.nome);
+    .where(eq(sistemasUsoTable.clinicId, clinicId));
+
+  // Required order: criticidade (Alta → Média → Baixa → outras) then nome.
+  const critRank = (c: string | null): number => {
+    if (!c) return 4;
+    const k = c.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (k.startsWith("alta")) return 0;
+    if (k.startsWith("med")) return 1;
+    if (k.startsWith("baix")) return 2;
+    return 3;
+  };
+  const sistemas = sistemasRaw.slice().sort((a, b) => {
+    const ra = critRank(a.criticidade);
+    const rb = critRank(b.criticidade);
+    if (ra !== rb) return ra - rb;
+    return (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR");
+  });
 
   const localPart = [clinic.cidade, clinic.uf].filter(Boolean).join("/");
   const titleLine = `SISTEMAS E ACESSOS — ${clinic.nome}`;
@@ -561,10 +576,6 @@ router.post(
           byKey.set(composedKey(s.nome, s.fornecedor, s.tipo), s);
         }
 
-        // In-memory dedup of rows seen within the same import (so two
-        // identical rows in the file don't both create new records).
-        const seenInImport = new Set<string>();
-
         for (let i = headerRowIdx + 1; i < rows.length; i++) {
           const xlsxRow = i + 1;
           const row = rows[i] ?? [];
@@ -626,15 +637,10 @@ router.post(
           };
 
           const key = composedKey(nome, fornecedor, tipo);
-          if (seenInImport.has(key)) {
-            summary.errors.push({
-              row: xlsxRow,
-              message: `Linha duplicada na própria planilha (Nome+Fornecedor+Tipo já apareceu acima).`,
-            });
-            summary.skipped++;
-            continue;
-          }
-          seenInImport.add(key);
+          // Duplicates within the same spreadsheet (same nome+fornecedor+tipo)
+          // are merged/updated against the in-memory `byKey` map — last
+          // non-null value wins, matching the upsert behavior used for
+          // existing database matches.
 
           try {
             const match = byKey.get(key);
