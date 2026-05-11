@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStoredToken } from "@/hooks/use-auth";
-import { useListClinics } from "@workspace/api-client-react";
+import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -432,8 +432,7 @@ export default function RiscosPage() {
 function ClinicSelector() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
-  const { data, isLoading } = useListClinics({ pageSize: 100 });
-  const clinics = data?.data ?? [];
+  const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
   const filtered = clinics.filter(c =>
     c.nome.toLowerCase().includes(search.toLowerCase()) ||
     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())

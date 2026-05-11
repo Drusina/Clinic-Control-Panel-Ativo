@@ -5,15 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Rocket, Search, ArrowRight } from "lucide-react";
-import { useListClinics } from "@workspace/api-client-react";
+import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 
 export default function KickoffSelectPage() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
 
-  const { data, isLoading } = useListClinics({ status: "kickoff", pageSize: 100 });
+  const { clinics, isLoading } = useClinicsForCurrentUser({ status: "kickoff", pageSize: 100 });
 
-  const clinics = data?.data ?? [];
   const filtered = clinics.filter(c =>
     c.nome.toLowerCase().includes(search.toLowerCase()) ||
     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())

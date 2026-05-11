@@ -2,7 +2,7 @@ import { useState, type ReactElement } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { getStoredToken } from "@/hooks/use-auth";
-import { useListClinics } from "@workspace/api-client-react";
+import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, ArrowLeft, Search, ChevronRight, Download, FileText, AlertTriangle, KanbanSquare, Users, Building2, ClipboardList } from "lucide-react";
@@ -106,8 +106,7 @@ export default function RelatoriosPage() {
   const { toast } = useToast();
   const [generating, setGenerating] = useState<string | null>(null);
 
-  const { data: clinicsData } = useListClinics({ pageSize: 200 });
-  const clinics = clinicsData?.data ?? [];
+  const { clinics } = useClinicsForCurrentUser({ pageSize: 200 });
   const clinic = clinics.find(c => c.id === clinicId);
 
   if (!clinicId) return <ClinicSelector />;
@@ -248,8 +247,7 @@ export default function RelatoriosPage() {
 function ClinicSelector() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
-  const { data, isLoading } = useListClinics({ pageSize: 100 });
-  const clinics = data?.data ?? [];
+  const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
   const filtered = clinics.filter(c =>
     c.nome.toLowerCase().includes(search.toLowerCase()) ||
     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
