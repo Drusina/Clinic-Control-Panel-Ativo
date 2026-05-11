@@ -12,22 +12,38 @@ import { useCurrentRole } from "@/hooks/use-auth";
 function mapLegacyPathToPortal(location: string): string {
   if (location.startsWith("/portal")) return location;
 
-  // 1:1 module-prefix passthroughs — these all have `/portal/<slug>` routes.
-  const passthroughPrefixes = [
-    "/diagnostico",
+  // Diagnóstico has its own `/select` chooser route under the portal,
+  // so we pass through everything (including `/diagnostico/select`).
+  if (location === "/diagnostico" || location.startsWith("/diagnostico/")) {
+    return `/portal${location}`;
+  }
+
+  // Other operational modules don't have a `/select` page — they expect
+  // either the module root (which `PortalActiveRedirect` resolves to the
+  // active clinic) or a clinicId. Normalize legacy `/foo/select` URLs to
+  // the portal module root instead of producing a 404 at `/portal/foo/select`.
+  const moduleRoots = [
     "/delegacao",
     "/riscos",
     "/acao",
     "/processos",
     "/evidencias",
     "/documentos",
-    "/relatorios",
     "/kickoff",
   ];
-  for (const prefix of passthroughPrefixes) {
-    if (location === prefix || location.startsWith(prefix + "/")) {
+  for (const prefix of moduleRoots) {
+    if (location === prefix || location === `${prefix}/select`) {
+      return `/portal${prefix}`;
+    }
+    if (location.startsWith(prefix + "/")) {
       return `/portal${location}`;
     }
+  }
+
+  // `/relatorios` is not part of the manager nav contract; route exists
+  // for backward compat but legacy hits should land on portal home.
+  if (location === "/relatorios" || location.startsWith("/relatorios/")) {
+    return "/portal";
   }
 
   if (location === "/notifications") return "/portal/notificacoes";
