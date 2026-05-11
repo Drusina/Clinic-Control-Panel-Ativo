@@ -14,7 +14,6 @@ import {
   GitFork,
   Image,
   FileText,
-  BarChart3,
   LogOut,
   Check,
   ChevronsUpDown,
@@ -97,7 +96,6 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
 
   const navigation: NavItem[] = [
     { name: "Visão Geral", href: "/portal", icon: LayoutDashboard },
-    { name: "Minha Clínica", href: "/portal/clinica", icon: Stethoscope },
     { name: "Kickoff", href: "/portal/kickoff", icon: Activity },
     {
       name: "Diagnóstico 360°",
@@ -119,9 +117,6 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       href: scopedHref("/portal/acao"),
       icon: KanbanSquare,
     },
-  ];
-
-  const complementarNav: NavItem[] = [
     {
       name: "Processos",
       href: scopedHref("/portal/processos"),
@@ -137,10 +132,18 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       href: scopedHref("/portal/documentos"),
       icon: FileText,
     },
+  ];
+
+  const complementarNav: NavItem[] = [
     {
-      name: "Relatórios",
-      href: scopedHref("/portal/relatorios"),
-      icon: BarChart3,
+      name: "Equipe Interna",
+      href: scopedHref("/portal/equipe"),
+      icon: Stethoscope,
+    },
+    {
+      name: "Rede Externa",
+      href: scopedHref("/portal/rede-externa"),
+      icon: GitFork,
     },
   ];
 

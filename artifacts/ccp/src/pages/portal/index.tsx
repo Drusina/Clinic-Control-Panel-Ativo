@@ -91,10 +91,16 @@ const MODULE_TILES: Array<{
     href: (id) => `/portal/documentos/${id}`,
   },
   {
-    name: "Relatórios",
-    description: "Resumos consolidados e exportações.",
+    name: "Equipe Interna",
+    description: "Membros da equipe da clínica.",
+    icon: Users,
+    href: (id) => `/portal/equipe/${id}`,
+  },
+  {
+    name: "Rede Externa",
+    description: "Parceiros, fornecedores e contatos externos.",
     icon: BarChart3,
-    href: (id) => `/portal/relatorios/${id}`,
+    href: (id) => `/portal/rede-externa/${id}`,
   },
 ];
 

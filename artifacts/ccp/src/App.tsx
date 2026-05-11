@@ -38,6 +38,8 @@ import ClinicDocumentsPage from "@/pages/clinic-documents/index";
 import AssinarPage from "@/pages/assinar/index";
 import MeClinicasPage from "@/pages/me/clinicas";
 import PortalHome from "@/pages/portal/index";
+import PortalEquipePage from "@/pages/portal/equipe";
+import PortalRedeExternaPage from "@/pages/portal/rede-externa";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Loader2 } from "lucide-react";
 
@@ -168,6 +170,34 @@ function Router() {
           <PortalLayout>
             <ClinicAccessGuard>
               <Notifications />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      {/* Alias: spec lists `/portal/notifications` (en); we accept both. */}
+      <Route path="/portal/notifications">
+        {() => <Redirect to="/portal/notificacoes" />}
+      </Route>
+      <Route path="/portal/equipe">
+        {() => <PortalActiveRedirect basePath="/portal/equipe" />}
+      </Route>
+      <Route path="/portal/equipe/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <PortalEquipePage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/rede-externa">
+        {() => <PortalActiveRedirect basePath="/portal/rede-externa" />}
+      </Route>
+      <Route path="/portal/rede-externa/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <PortalRedeExternaPage />
             </ClinicAccessGuard>
           </PortalLayout>
         )}
