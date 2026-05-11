@@ -49,7 +49,12 @@ function resolveActiveClinicId(
   location: string,
   myClinicIds: string[],
 ): string | null {
-  const urlMatch = location.match(/\/[a-z]+\/([a-f0-9-]{8,})/i);
+  // Extract any UUID-shaped segment in the URL (e.g. /portal/rede-externa/:id).
+  // Match by UUID shape directly so hyphenated module names like
+  // "rede-externa" don't break the lookup.
+  const urlMatch = location.match(
+    /\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i,
+  );
   if (urlMatch && myClinicIds.includes(urlMatch[1])) return urlMatch[1];
   const stored = getActiveClinicId();
   if (stored && myClinicIds.includes(stored)) return stored;
