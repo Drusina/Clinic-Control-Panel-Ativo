@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AppLayout } from "@/components/layout";
+import { PortalLayout } from "@/components/portal-layout";
 import Dashboard from "@/pages/dashboard";
 import Clinics from "@/pages/clinics/index";
 import NewClinic from "@/pages/clinics/new";
@@ -16,8 +17,9 @@ import KickoffPage from "@/pages/kickoff/index";
 import KickoffSelectPage from "@/pages/kickoff/select";
 import { SuperAdminGuard } from "@/components/super-admin-guard";
 import { ClinicAccessGuard } from "@/components/clinic-access-guard";
+import { TeamMemberToPortal } from "@/components/role-redirect";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
-import { getStoredToken } from "@/hooks/use-auth";
+import { getStoredToken, getActiveClinicId, useMyClinics } from "@/hooks/use-auth";
 import DiagnosticoSelectPage from "@/pages/diagnostico/select";
 import DiagnosticoWizard from "@/pages/diagnostico/wizard";
 import DiagnosticoResultado from "@/pages/diagnostico/resultado";
@@ -35,7 +37,9 @@ import ConvitePage from "@/pages/convite/index";
 import ClinicDocumentsPage from "@/pages/clinic-documents/index";
 import AssinarPage from "@/pages/assinar/index";
 import MeClinicasPage from "@/pages/me/clinicas";
+import PortalHome from "@/pages/portal/index";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { Loader2 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -72,6 +76,30 @@ function DiagnosticoEntrypoint() {
   return null;
 }
 
+/**
+ * Resolves the active clinic and redirects to `${basePath}/${clinicId}`.
+ * Used by `/portal/<module>` shortcut routes so the manager doesn't have
+ * to type/keep a clinic id in the URL.
+ */
+function PortalActiveRedirect({ basePath }: { basePath: string }) {
+  const { data: my, isLoading } = useMyClinics();
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  const clinics = my?.clinics ?? [];
+  const stored = getActiveClinicId();
+  const id =
+    (stored && clinics.some((c) => c.id === stored) ? stored : null) ??
+    clinics[0]?.id ??
+    null;
+  if (!id) return <Redirect to="/portal" />;
+  return <Redirect to={`${basePath}/${id}`} />;
+}
+
 setAuthTokenGetter(getStoredToken);
 
 const queryClient = new QueryClient();
@@ -94,6 +122,187 @@ function Router() {
           </AppLayout>
         )}
       </Route>
+
+      {/* ─── Portal do Gestor (team_member dedicated namespace) ─── */}
+      <Route path="/portal">
+        {() => (
+          <PortalLayout>
+            <ClinicAccessGuard>
+              <PortalHome />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/clinica">
+        {() => <PortalActiveRedirect basePath="/portal/clinica" />}
+      </Route>
+      <Route path="/portal/clinica/:id">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.id}>
+              <ClinicDetail mode="portal" />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/kickoff">
+        {() => (
+          <PortalLayout>
+            <ClinicAccessGuard>
+              <KickoffSelectPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/kickoff/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <KickoffPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/notificacoes">
+        {() => (
+          <PortalLayout>
+            <ClinicAccessGuard>
+              <Notifications />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/diagnostico">
+        {() => (
+          <PortalLayout>
+            <ClinicAccessGuard>
+              <DiagnosticoEntrypoint />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/diagnostico/select">
+        {() => (
+          <PortalLayout>
+            <ClinicAccessGuard>
+              <DiagnosticoSelectPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/diagnostico/comparar">
+        {() => (
+          <PortalLayout>
+            <ClinicAccessGuard>
+              <DiagnosticoComparar />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/diagnostico/:id/resultado">
+        {() => (
+          <PortalLayout>
+            <ClinicAccessGuard>
+              <DiagnosticoResultado />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/diagnostico/:id">
+        {() => (
+          <PortalLayout>
+            <ClinicAccessGuard>
+              <DiagnosticoWizard />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/delegacao">
+        {() => <PortalActiveRedirect basePath="/portal/delegacao" />}
+      </Route>
+      <Route path="/portal/delegacao/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <DelegacaoPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/riscos">
+        {() => <PortalActiveRedirect basePath="/portal/riscos" />}
+      </Route>
+      <Route path="/portal/riscos/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <RiscosPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/acao">
+        {() => <PortalActiveRedirect basePath="/portal/acao" />}
+      </Route>
+      <Route path="/portal/acao/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <AcaoPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/processos">
+        {() => <PortalActiveRedirect basePath="/portal/processos" />}
+      </Route>
+      <Route path="/portal/processos/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <ProcessosPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/evidencias">
+        {() => <PortalActiveRedirect basePath="/portal/evidencias" />}
+      </Route>
+      <Route path="/portal/evidencias/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <EvidenciasPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/documentos">
+        {() => <PortalActiveRedirect basePath="/portal/documentos" />}
+      </Route>
+      <Route path="/portal/documentos/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <DocumentosPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+      <Route path="/portal/relatorios">
+        {() => <PortalActiveRedirect basePath="/portal/relatorios" />}
+      </Route>
+      <Route path="/portal/relatorios/:clinicId">
+        {(params) => (
+          <PortalLayout>
+            <ClinicAccessGuard clinicId={params.clinicId}>
+              <RelatoriosPage />
+            </ClinicAccessGuard>
+          </PortalLayout>
+        )}
+      </Route>
+
+      {/* ─── Super-admin namespace (team_member is bounced to /portal) ─── */}
 
       {/* Dashboard (super admin only). */}
       <Route path="/">
@@ -128,27 +337,33 @@ function Router() {
       <Route path="/admin/clinicas/:id/editar">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.id}>
-              <EditClinic />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.id}>
+                <EditClinic />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/admin/clinicas/:id/documentos">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.id}>
-              <ClinicDocumentsPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.id}>
+                <ClinicDocumentsPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/admin/clinicas/:id">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.id}>
-              <ClinicDetail />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.id}>
+                <ClinicDetail />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -163,13 +378,16 @@ function Router() {
         {(params) => <Redirect to={`/admin/clinicas/${params.id}`} />}
       </Route>
 
-      {/* Notifications: any authenticated session. */}
+      {/* Notifications: any authenticated session. Team_member is bounced to
+          the portal version (same component, different chrome). */}
       <Route path="/notifications">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <Notifications />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <Notifications />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -179,17 +397,21 @@ function Router() {
       </Route>
       <Route path="/kickoff/select">
         <AppLayout>
-          <ClinicAccessGuard>
-            <KickoffSelectPage />
-          </ClinicAccessGuard>
+          <TeamMemberToPortal>
+            <ClinicAccessGuard>
+              <KickoffSelectPage />
+            </ClinicAccessGuard>
+          </TeamMemberToPortal>
         </AppLayout>
       </Route>
       <Route path="/kickoff/:clinicId">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <KickoffPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.clinicId}>
+                <KickoffPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -200,45 +422,55 @@ function Router() {
       <Route path="/diagnostico">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <DiagnosticoEntrypoint />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <DiagnosticoEntrypoint />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/diagnostico/select">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <DiagnosticoSelectPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <DiagnosticoSelectPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/diagnostico/comparar">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <DiagnosticoComparar />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <DiagnosticoComparar />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/diagnostico/:id/resultado">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <DiagnosticoResultado />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <DiagnosticoResultado />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/diagnostico/:id">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <DiagnosticoWizard />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <DiagnosticoWizard />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -249,18 +481,22 @@ function Router() {
       <Route path="/delegacao/select">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <DelegacaoPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <DelegacaoPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/delegacao/:clinicId">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <DelegacaoPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.clinicId}>
+                <DelegacaoPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -271,18 +507,22 @@ function Router() {
       <Route path="/riscos/select">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <RiscosPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <RiscosPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/riscos/:clinicId">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <RiscosPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.clinicId}>
+                <RiscosPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -293,18 +533,22 @@ function Router() {
       <Route path="/acao/select">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <AcaoPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <AcaoPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/acao/:clinicId">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <AcaoPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.clinicId}>
+                <AcaoPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -315,18 +559,22 @@ function Router() {
       <Route path="/processos/select">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <ProcessosPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <ProcessosPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/processos/:clinicId">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <ProcessosPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.clinicId}>
+                <ProcessosPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -337,18 +585,22 @@ function Router() {
       <Route path="/evidencias/select">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <EvidenciasPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <EvidenciasPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/evidencias/:clinicId">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <EvidenciasPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.clinicId}>
+                <EvidenciasPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -359,18 +611,22 @@ function Router() {
       <Route path="/documentos/select">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <DocumentosPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <DocumentosPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/documentos/:clinicId">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <DocumentosPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.clinicId}>
+                <DocumentosPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
@@ -381,18 +637,22 @@ function Router() {
       <Route path="/relatorios/select">
         {() => (
           <AppLayout>
-            <ClinicAccessGuard>
-              <RelatoriosPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard>
+                <RelatoriosPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>
       <Route path="/relatorios/:clinicId">
         {(params) => (
           <AppLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <RelatoriosPage />
-            </ClinicAccessGuard>
+            <TeamMemberToPortal>
+              <ClinicAccessGuard clinicId={params.clinicId}>
+                <RelatoriosPage />
+              </ClinicAccessGuard>
+            </TeamMemberToPortal>
           </AppLayout>
         )}
       </Route>

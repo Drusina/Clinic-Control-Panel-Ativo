@@ -13,6 +13,10 @@ export function SuperAdminGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
+  if (data?.role === "team_member") {
+    return <Redirect to="/portal" />;
+  }
+
   if (data?.role !== "super_admin") {
     return <Redirect to="/admin/login" />;
   }

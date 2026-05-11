@@ -36,7 +36,7 @@ export default function MeClinicasPage() {
     if (clinics.length !== 1) return;
     const only = clinics[0];
     setActiveClinicId(only.id);
-    navigate(`/admin/clinicas/${only.id}`, { replace: true });
+    navigate("/portal", { replace: true });
   }, [isLoading, roleLoading, clinics, user?.role, navigate]);
 
   if (roleLoading || isLoading) {
@@ -91,7 +91,7 @@ export default function MeClinicasPage() {
         {clinics.map((c) => (
           <Link
             key={c.id}
-            href={`/admin/clinicas/${c.id}`}
+            href="/portal"
             onClick={() => setActiveClinicId(c.id)}
           >
             <Card className="cursor-pointer hover:border-primary/50 transition-colors h-full">

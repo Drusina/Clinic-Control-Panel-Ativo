@@ -207,7 +207,7 @@ export default function ConvitePage() {
             const list = me.clinics ?? [];
             if (list.length === 1) {
               setActiveClinicId(list[0].id);
-              navigate(`/admin/clinicas/${list[0].id}`, { replace: true });
+              navigate("/portal", { replace: true });
               return;
             }
             navigate("/me/clinicas", { replace: true });
@@ -309,8 +309,8 @@ export default function ConvitePage() {
           </p>
         </div>
 
-        <Button className="w-full" onClick={() => navigate("/me/clinicas")}>
-          Acessar minhas clínicas
+        <Button className="w-full" onClick={() => navigate("/portal")}>
+          Acessar o portal
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>
