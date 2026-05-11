@@ -116,21 +116,39 @@ function clearAllCaches(queryClient: ReturnType<typeof useQueryClient>): void {
 }
 
 async function revokePushEndpoint(token: string | null): Promise<void> {
+  // Nothing to revoke when there is no previous session — fast path for fresh
+  // sessions (e.g. a user landing on /convite in a brand-new tab).
+  if (!token) return;
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
-    if (!sub) return;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    await fetch("/api/push/subscribe", {
-      method: "DELETE",
-      headers,
-      body: JSON.stringify({ endpoint: sub.endpoint }),
-    }).catch(() => {});
-    await sub.unsubscribe().catch(() => {});
-  } catch {
-  }
+
+  // Bound the entire cleanup to 1.5s so a misbehaving service worker / push
+  // manager can never block the auth flow that awaits us.
+  const TIMEOUT_MS = 1500;
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, TIMEOUT_MS));
+
+  const work = (async () => {
+    try {
+      // `getRegistration()` resolves to `undefined` immediately when there is
+      // no SW registered for this scope. `ready` would hang forever in that
+      // case, blocking every caller that awaits switchSession().
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) return;
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) return;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      headers["Authorization"] = `Bearer ${token}`;
+      await fetch("/api/push/subscribe", {
+        method: "DELETE",
+        headers,
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      }).catch(() => {});
+      await sub.unsubscribe().catch(() => {});
+    } catch {
+      // best-effort cleanup
+    }
+  })();
+
+  await Promise.race([work, timeout]);
 }
 
 export function useSwitchSession() {
