@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, ClipboardList, BarChart3, GitCompare, CheckSquare, Square } from "lucide-react";
-import { getStoredToken, useCurrentRole, useMyClinics, getActiveClinicId } from "@/hooks/use-auth";
+import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
+import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -49,22 +50,14 @@ export default function DiagnosticoSelectPage() {
   const { data: user } = useCurrentRole();
   const isSuperAdmin = user?.role === "super_admin";
 
-  // Super admin → carrega lista global de clínicas (endpoint protegido por
-  // requireSuperAdmin). Team member → usa /api/me/clinics, que devolve só
-  // as clínicas autorizadas pelo equipe_interna.
-  const { data: superAdminClinics, isLoading: loadingSuperAdmin } = useQuery<{ data: Clinic[] }>({
-    queryKey: ["clinics-list"],
-    queryFn: () => apiFetch("/clinics?pageSize=200"),
-    enabled: isSuperAdmin,
-  });
-  const { data: myClinics, isLoading: loadingMyClinics } = useMyClinics();
-
-  const clinics: { data: Clinic[] } | undefined = isSuperAdmin
-    ? superAdminClinics
-    : myClinics
-      ? { data: myClinics.clinics.map((c) => ({ id: c.id, nome: c.nome, fantasia: c.fantasia ?? undefined })) }
-      : undefined;
-  const loadingClinics = isSuperAdmin ? loadingSuperAdmin : loadingMyClinics;
+  // Source of truth for both roles. The hook itself fans out to the
+  // correct endpoint (`/api/clinics` for super_admin, `/api/me/clinics`
+  // for team_member) and returns a normalized list — see
+  // `hooks/use-clinics-for-current-user.ts`.
+  const { clinics: clinicList, isLoading: loadingClinics } = useClinicsForCurrentUser({ pageSize: 200 });
+  const clinics: { data: Clinic[] } | undefined = clinicList.length || !loadingClinics
+    ? { data: clinicList.map((c) => ({ id: c.id, nome: c.nome, fantasia: c.fantasia ?? undefined })) }
+    : undefined;
 
   // Atalho UX: se o gestor já tem uma clínica ativa no header (ou só uma
   // clínica vinculada), pré-seleciona para evitar dois cliques.
