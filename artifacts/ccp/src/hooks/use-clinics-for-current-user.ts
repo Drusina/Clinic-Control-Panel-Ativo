@@ -63,6 +63,13 @@ async function fetchAdminClinics(
  *
  * Use this hook instead of the generated `useListClinics` whenever the
  * screen is reachable by team_member sessions.
+ *
+ * Guard rail: `artifacts/ccp/scripts/check-forbidden-imports.mjs` (run as
+ * part of `pnpm --filter @workspace/ccp run typecheck`) fails the build
+ * if `useListClinics` is imported or called outside of
+ * `src/pages/clinics/index.tsx`. If you are adding a new legitimate
+ * super-admin-only caller, update the allow-list in that script and add a
+ * `SuperAdminGuard` around the screen.
  */
 export function useClinicsForCurrentUser(
   opts: UseClinicsForCurrentUserOptions = {},
