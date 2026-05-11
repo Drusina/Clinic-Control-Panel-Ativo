@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getStoredToken, useCurrentRole, type MyClinicsResponse } from "@/hooks/use-auth";
+import { getStoredToken, useCurrentRole, useMyClinics } from "@/hooks/use-auth";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -85,12 +85,12 @@ export function useClinicsForCurrentUser(
     staleTime: 30_000,
   });
 
-  const teamQuery = useQuery({
-    queryKey: ["clinics-for-current-user", "team_member"],
-    queryFn: fetchMyClinicsForHook,
-    enabled: isTeamMember,
-    staleTime: 30_000,
-  });
+  // Reuse the shared `useMyClinics` cache so every team_member screen
+  // (header switcher, /me/clinicas, ClinicAccessGuard, etc.) hits the
+  // same React Query entry. The hook itself short-circuits when there
+  // is no token, so this is safe to call unconditionally.
+  const teamQuery = useMyClinics();
+  const teamEnabled = isTeamMember;
 
   if (roleLoading) {
     return { clinics: [], isLoading: true };
@@ -103,7 +103,7 @@ export function useClinicsForCurrentUser(
     };
   }
 
-  if (isTeamMember) {
+  if (teamEnabled) {
     const all = teamQuery.data?.clinics ?? [];
     const filtered = status ? all.filter((c) => c.status === status) : all;
     return {
@@ -120,14 +120,4 @@ export function useClinicsForCurrentUser(
   }
 
   return { clinics: [], isLoading: false };
-}
-
-async function fetchMyClinicsForHook(): Promise<MyClinicsResponse | null> {
-  const token = getStoredToken();
-  if (!token) return null;
-  const res = await fetch(`${BASE}/api/me/clinics`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) return null;
-  return res.json() as Promise<MyClinicsResponse>;
 }
