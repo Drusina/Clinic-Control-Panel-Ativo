@@ -319,18 +319,6 @@ function Router() {
           </PortalLayout>
         )}
       </Route>
-      <Route path="/portal/relatorios">
-        {() => <PortalActiveRedirect basePath="/portal/relatorios" />}
-      </Route>
-      <Route path="/portal/relatorios/:clinicId">
-        {(params) => (
-          <PortalLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <RelatoriosPage />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
-      </Route>
 
       {/* ─── Super-admin namespace (team_member is bounced to /portal) ─── */}
 
