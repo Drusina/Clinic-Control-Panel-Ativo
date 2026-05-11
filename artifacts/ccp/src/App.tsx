@@ -708,6 +708,15 @@ function Router() {
         )}
       </Route>
 
+      {/* Catch-all for any unknown /admin/* path: bounces team_member
+          sessions into /portal; super_admin falls through to NotFound. */}
+      <Route path="/admin/:rest*">
+        {() => (
+          <TeamMemberToPortal>
+            <NotFound />
+          </TeamMemberToPortal>
+        )}
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
