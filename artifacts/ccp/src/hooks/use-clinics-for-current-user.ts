@@ -87,10 +87,9 @@ export function useClinicsForCurrentUser(
 
   // Reuse the shared `useMyClinics` cache so every team_member screen
   // (header switcher, /me/clinicas, ClinicAccessGuard, etc.) hits the
-  // same React Query entry. The hook itself short-circuits when there
-  // is no token, so this is safe to call unconditionally.
-  const teamQuery = useMyClinics();
-  const teamEnabled = isTeamMember;
+  // same React Query entry. Gated by `enabled: isTeamMember` so
+  // super_admin sessions never request `/api/me/clinics`.
+  const teamQuery = useMyClinics({ enabled: isTeamMember });
 
   if (roleLoading) {
     return { clinics: [], isLoading: true };
@@ -103,7 +102,7 @@ export function useClinicsForCurrentUser(
     };
   }
 
-  if (teamEnabled) {
+  if (isTeamMember) {
     const all = teamQuery.data?.clinics ?? [];
     const filtered = status ? all.filter((c) => c.status === status) : all;
     return {

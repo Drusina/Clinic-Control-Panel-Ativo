@@ -87,13 +87,14 @@ async function fetchMyClinics(): Promise<MyClinicsResponse | null> {
  * table (mapped to a narrow card shape); for team members it is the subset
  * resolved from `equipe_interna` by email.
  */
-export function useMyClinics() {
+export function useMyClinics(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: MY_CLINICS_QUERY_KEY,
     queryFn: fetchMyClinics,
     retry: false,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
+    enabled: options?.enabled ?? true,
   });
 }
 
