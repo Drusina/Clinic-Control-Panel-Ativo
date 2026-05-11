@@ -183,7 +183,7 @@ export default function ConvitePage() {
           teamMemberId: string;
         };
 
-        switchSession(data.token);
+        await switchSession(data.token);
         setMemberInfo({
           nome: data.nome,
           funcao: data.funcao,

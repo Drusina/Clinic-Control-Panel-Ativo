@@ -136,11 +136,15 @@ async function revokePushEndpoint(token: string | null): Promise<void> {
 export function useSwitchSession() {
   const queryClient = useQueryClient();
   return async (token: string) => {
+    // Token / cache must be swapped BEFORE any await so that any caller that
+    // does not (or cannot) await this function still sees a consistent
+    // session on the very next render. Push cleanup is best-effort and runs
+    // afterwards with the previous token.
     const previousToken = getStoredToken();
-    await revokePushEndpoint(previousToken);
     storeToken(token);
     setActiveClinicId(null);
     clearAllCaches(queryClient);
+    await revokePushEndpoint(previousToken);
   };
 }
 
