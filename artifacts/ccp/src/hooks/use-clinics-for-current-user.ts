@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getStoredToken, useCurrentRole, useMyClinics } from "@/hooks/use-auth";
+import { getStoredToken, useCurrentRole, type MyClinicsResponse } from "@/hooks/use-auth";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -74,6 +74,10 @@ export function useClinicsForCurrentUser(
   const isSuperAdmin = user?.role === "super_admin";
   const isTeamMember = user?.role === "team_member";
 
+  // Each branch uses its own enabled query so super_admin sessions never
+  // hit `/api/me/clinics` and team_member sessions never hit `/api/clinics`
+  // (which would 403 anyway). Avoids a wasted request per render in both
+  // directions.
   const adminQuery = useQuery({
     queryKey: ["clinics-for-current-user", "super_admin", pageSize, status ?? null],
     queryFn: () => fetchAdminClinics(pageSize, status),
@@ -81,7 +85,12 @@ export function useClinicsForCurrentUser(
     staleTime: 30_000,
   });
 
-  const myClinics = useMyClinics();
+  const teamQuery = useQuery({
+    queryKey: ["clinics-for-current-user", "team_member"],
+    queryFn: fetchMyClinicsForHook,
+    enabled: isTeamMember,
+    staleTime: 30_000,
+  });
 
   if (roleLoading) {
     return { clinics: [], isLoading: true };
@@ -95,7 +104,7 @@ export function useClinicsForCurrentUser(
   }
 
   if (isTeamMember) {
-    const all = myClinics.data?.clinics ?? [];
+    const all = teamQuery.data?.clinics ?? [];
     const filtered = status ? all.filter((c) => c.status === status) : all;
     return {
       clinics: filtered.map((c) => ({
@@ -106,9 +115,19 @@ export function useClinicsForCurrentUser(
         uf: c.uf,
         status: c.status,
       })),
-      isLoading: myClinics.isLoading,
+      isLoading: teamQuery.isLoading,
     };
   }
 
   return { clinics: [], isLoading: false };
+}
+
+async function fetchMyClinicsForHook(): Promise<MyClinicsResponse | null> {
+  const token = getStoredToken();
+  if (!token) return null;
+  const res = await fetch(`${BASE}/api/me/clinics`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  return res.json() as Promise<MyClinicsResponse>;
 }
