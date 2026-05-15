@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, count, sql } from "drizzle-orm";
-import { db, delegacoesTable, clinicsTable, risksTable, actionsTable, teamTable } from "@workspace/db";
+import { db, delegacoesTable, clinicsTable, risksTable, actionsTable, teamTable, diagnosticsTable } from "@workspace/db";
 import { assertClinicAccess } from "../middleware/auth";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { z } from "zod";
@@ -49,8 +49,11 @@ function deriveInviteStatus(d: typeof delegacoesTable.$inferSelect):
   | "aceito"
   | "expirado" {
   if (!d.inviteCodeHash || !d.inviteSentAt) return "nao_enviado";
-  if (d.inviteCodeExpiresAt && d.inviteCodeExpiresAt < new Date()) return "expirado";
+  // Redemption wins over expiry — once accepted, the invite stays "aceito"
+  // even after the code's TTL has lapsed (the JWT keeps working until its
+  // own expiry).
   if (d.inviteRedeemedAt) return "aceito";
+  if (d.inviteCodeExpiresAt && d.inviteCodeExpiresAt < new Date()) return "expirado";
   return "enviado";
 }
 
@@ -322,6 +325,25 @@ router.post(
       res
         .status(400)
         .json({ error: "Convites individuais só são suportados para delegações de pilar inteiro (N1)." });
+      return;
+    }
+
+    // Validate the diagnostic exists, belongs to this clinic, and is still
+    // open. Sending a link bound to a non-existent / cross-clinic / already-
+    // concluded diagnostic would generate a token that fails on first use.
+    const [diag] = await db
+      .select({ id: diagnosticsTable.id, status: diagnosticsTable.status })
+      .from(diagnosticsTable)
+      .where(and(eq(diagnosticsTable.id, diagnosticoId), eq(diagnosticsTable.clinicId, clinicId)))
+      .limit(1);
+    if (!diag) {
+      res.status(404).json({ error: "Diagnóstico não encontrado nesta clínica." });
+      return;
+    }
+    if (diag.status === "concluido") {
+      res
+        .status(409)
+        .json({ error: "Diagnóstico já concluído — não é possível enviar novos convites." });
       return;
     }
 

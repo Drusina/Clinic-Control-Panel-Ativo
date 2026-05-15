@@ -515,21 +515,38 @@ router.get("/clinics/:clinicId/diagnostics/:diagnosticoId/hydrated", async (req,
       valor: r.valor,
       respondidoEm: r.respondidoEm.toISOString(),
     })),
-    delegacoes: delegacoes.map((d) => ({
-      id: d.id,
-      clinicId: d.clinicId,
-      pilarSlug: d.pilarSlug,
-      pilarNome: d.pilarNome,
-      nivel: d.nivel,
-      responsavelNome: d.responsavelNome,
-      responsavelEmail: d.responsavelEmail,
-      prazo: d.prazo,
-      status: d.status,
-      questaoInicio: d.questaoInicio,
-      questaoFim: d.questaoFim,
-      parentId: d.parentId,
-      observacoes: d.observacoes,
-    })),
+    delegacoes: delegacoes.map((d) => {
+      const now = new Date();
+      let inviteStatus: "nao_enviado" | "enviado" | "aceito" | "expirado" = "nao_enviado";
+      if (d.inviteCodeHash && d.inviteSentAt) {
+        // Redemption wins over expiry — once accepted, the invite stays "aceito"
+        // even after the code's TTL has lapsed (the JWT keeps working until its
+        // own expiry).
+        if (d.inviteRedeemedAt) inviteStatus = "aceito";
+        else if (d.inviteCodeExpiresAt && d.inviteCodeExpiresAt < now) inviteStatus = "expirado";
+        else inviteStatus = "enviado";
+      }
+      return {
+        id: d.id,
+        clinicId: d.clinicId,
+        pilarSlug: d.pilarSlug,
+        pilarNome: d.pilarNome,
+        nivel: d.nivel,
+        responsavelNome: d.responsavelNome,
+        responsavelEmail: d.responsavelEmail,
+        prazo: d.prazo,
+        status: d.status,
+        questaoInicio: d.questaoInicio,
+        questaoFim: d.questaoFim,
+        parentId: d.parentId,
+        observacoes: d.observacoes,
+        inviteSentAt: d.inviteSentAt ? d.inviteSentAt.toISOString() : null,
+        inviteRedeemedAt: d.inviteRedeemedAt ? d.inviteRedeemedAt.toISOString() : null,
+        inviteCodeExpiresAt: d.inviteCodeExpiresAt ? d.inviteCodeExpiresAt.toISOString() : null,
+        inviteDiagnosticoId: d.inviteDiagnosticoId ?? null,
+        inviteStatus,
+      };
+    }),
     team: teamMembers.map((m) => ({
       id: m.id,
       nome: m.nome,
