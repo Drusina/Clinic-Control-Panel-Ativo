@@ -446,24 +446,58 @@ router.get("/respondent/progress", requireRespondent, async (req, res): Promise<
     .select({ value: count() })
     .from(respostasTable)
     .where(eq(respostasTable.diagnosticoId, r.diagnosticoId));
-  // pilarTotal = escopo do respondente (não o pilar inteiro quando ele recebeu N3)
-  const allowed = await allowedPerguntaIds(r);
-  const allowedIds = Array.from(allowed);
-  const pilarTotal = allowedIds.length;
-  const pilarAnsweredRows = allowedIds.length === 0 ? [] : await db
-    .select({ id: respostasTable.id })
+
+  // Escopo TOTAL do respondente = pilar inteiro (N1) ou perguntaIds explícitos (N3),
+  // SEM remover o que ele já delegou — para a UI mostrar respondidas/delegadas/pendentes.
+  let scopeIds: string[];
+  if (r.perguntaIds && r.perguntaIds.length > 0) {
+    scopeIds = r.perguntaIds;
+  } else {
+    const rows = await db
+      .select({ id: perguntasTable.id })
+      .from(perguntasTable)
+      .where(eq(perguntasTable.pilarSlug, r.pilarSlug));
+    scopeIds = rows.map((p) => p.id);
+  }
+  const pilarTotal = scopeIds.length;
+
+  // Perguntas delegadas adiante por este respondente (filhos diretos)
+  const childDelegs = await db
+    .select({ id: delegacoesTable.id })
+    .from(delegacoesTable)
+    .where(eq(delegacoesTable.parentId, r.delegacaoId));
+  let delegatedIds = new Set<string>();
+  if (childDelegs.length > 0) {
+    const childIds = childDelegs.map((d) => d.id);
+    const child = await db
+      .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
+      .from(delegacoesPerguntasTable)
+      .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${childIds})`);
+    delegatedIds = new Set(child.map((c) => c.perguntaId).filter((id) => scopeIds.includes(id)));
+  }
+
+  const answeredRows = pilarTotal === 0 ? [] : await db
+    .select({ perguntaId: respostasTable.perguntaId })
     .from(respostasTable)
     .where(
       and(
         eq(respostasTable.diagnosticoId, r.diagnosticoId),
-        sql`${respostasTable.perguntaId} = ANY(${allowedIds})`,
+        sql`${respostasTable.perguntaId} = ANY(${scopeIds})`,
       ),
     );
+  const answeredIds = new Set(answeredRows.map((r) => r.perguntaId));
+
+  const pilarAnswered = answeredIds.size;
+  const pilarDelegated = Array.from(delegatedIds).filter((id) => !answeredIds.has(id)).length;
+  const pilarPending = Math.max(0, pilarTotal - pilarAnswered - pilarDelegated);
+
   res.json({
     totalGlobal,
     answeredGlobal,
     pilarTotal,
-    pilarAnswered: pilarAnsweredRows.length,
+    pilarAnswered,
+    pilarDelegated,
+    pilarPending,
   });
 });
 
@@ -505,24 +539,37 @@ router.post("/respondent/delegate", requireRespondent, async (req, res): Promise
     }
   }
 
-  // Carrega o pilar a partir das perguntas (já validadas como de um pilar via fluxo).
-  const [perguntaSample] = await db
-    .select({ pilarSlug: perguntasTable.pilarSlug, pilarNome: perguntasTable.pilarNome })
+  // Resolve pilar(es) a partir das perguntas escolhidas; cross-pilar é permitido.
+  const perguntasInfo = await db
+    .select({ id: perguntasTable.id, pilarSlug: perguntasTable.pilarSlug, pilarNome: perguntasTable.pilarNome })
     .from(perguntasTable)
-    .where(eq(perguntasTable.id, perguntaIds[0]))
-    .limit(1);
-  if (!perguntaSample) {
-    res.status(400).json({ error: "Pergunta inválida." });
+    .where(sql`${perguntasTable.id} = ANY(${perguntaIds})`);
+  if (perguntasInfo.length !== perguntaIds.length) {
+    res.status(400).json({ error: "Uma ou mais perguntas inválidas." });
     return;
   }
+  const distinctPilars = Array.from(new Set(perguntasInfo.map((p) => p.pilarSlug)));
+  const childPilarSlug = distinctPilars.length > 1 ? "misto" : distinctPilars[0];
+  const childPilarNome =
+    distinctPilars.length > 1
+      ? `${perguntasInfo.length} perguntas em ${distinctPilars.length} pilares`
+      : perguntasInfo[0].pilarNome;
+
+  // Sub-delegação: nivel = nivel(parent) + 1 — preserva profundidade da cadeia.
+  const [parentDeleg] = await db
+    .select({ nivel: delegacoesTable.nivel })
+    .from(delegacoesTable)
+    .where(eq(delegacoesTable.id, r.delegacaoId))
+    .limit(1);
+  const childNivel = (parentDeleg?.nivel ?? 2) + 1;
 
   const [novaDeleg] = await db
     .insert(delegacoesTable)
     .values({
       clinicId: r.clinicId,
-      pilarSlug: perguntaSample.pilarSlug,
-      pilarNome: perguntaSample.pilarNome,
-      nivel: 3,
+      pilarSlug: childPilarSlug,
+      pilarNome: childPilarNome,
+      nivel: childNivel,
       responsavelNome,
       responsavelEmail,
       prazo: prazo ?? null,
@@ -564,14 +611,14 @@ router.post("/respondent/delegate", requireRespondent, async (req, res): Promise
         .limit(1);
       const html = buildRespondentInviteEmail({
         responsavelNome,
-        pilarNome: `${perguntaSample.pilarNome} (${perguntaIds.length} pergunta${perguntaIds.length > 1 ? "s" : ""})`,
+        pilarNome: `${childPilarNome} (${perguntaIds.length} pergunta${perguntaIds.length > 1 ? "s" : ""})`,
         clinicName: clinic?.nome ?? undefined,
         prazo: prazo ?? null,
         link: inviteLink,
       });
       sendEmail({
         to: responsavelEmail,
-        subject: `[IONEX360] Convite — Diagnóstico 360°: ${perguntaSample.pilarNome}`,
+        subject: `[IONEX360] Convite — Diagnóstico 360°: ${childPilarNome}`,
         html,
       }).catch(() => {});
     } catch (err) {

@@ -168,20 +168,28 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     return;
   }
 
-  // Valida que todas as perguntas existem e pertencem ao pilar informado.
+  // Valida que todas as perguntas existem. Cross-pilar é permitido — quando o
+  // batch toca mais de um pilar, o registro fica com pilarSlug="misto" e
+  // pilarNome descritivo ("N perguntas em M pilares").
   let resolvedPerguntaIds: string[] | undefined;
+  let effectivePilarSlug = pilarSlug;
+  let effectivePilarNome = pilarNome;
   if (nivel === 3 && perguntaIds && perguntaIds.length > 0) {
     const found = await db
-      .select({ id: perguntasTable.id, pilarSlug: perguntasTable.pilarSlug })
+      .select({ id: perguntasTable.id, pilarSlug: perguntasTable.pilarSlug, pilarNome: perguntasTable.pilarNome })
       .from(perguntasTable)
       .where(sql`${perguntasTable.id} = ANY(${perguntaIds})`);
     if (found.length !== perguntaIds.length) {
       res.status(400).json({ error: "Uma ou mais perguntas não existem." });
       return;
     }
-    if (found.some((p) => p.pilarSlug !== pilarSlug)) {
-      res.status(400).json({ error: "Todas as perguntas devem pertencer ao mesmo pilar." });
-      return;
+    const distinctPilars = Array.from(new Set(found.map((p) => p.pilarSlug)));
+    if (distinctPilars.length > 1) {
+      effectivePilarSlug = "misto";
+      effectivePilarNome = `${found.length} perguntas em ${distinctPilars.length} pilares`;
+    } else {
+      effectivePilarSlug = distinctPilars[0];
+      effectivePilarNome = found[0].pilarNome;
     }
     resolvedPerguntaIds = found.map((p) => p.id);
   }
@@ -190,8 +198,8 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     .insert(delegacoesTable)
     .values({
       clinicId,
-      pilarSlug,
-      pilarNome,
+      pilarSlug: effectivePilarSlug,
+      pilarNome: effectivePilarNome,
       nivel,
       responsavelNome: responsavelNome ?? null,
       responsavelEmail: responsavelEmail ?? null,

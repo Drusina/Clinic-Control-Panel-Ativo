@@ -45,6 +45,8 @@ interface Progress {
   answeredGlobal: number;
   pilarTotal: number;
   pilarAnswered: number;
+  pilarDelegated?: number;
+  pilarPending?: number;
 }
 
 interface DelegatedOut {
@@ -352,7 +354,9 @@ export default function ResponderWizard() {
     );
   }
 
-  const completed = pilarAnswered === pilarTotal && pilarTotal > 0;
+  const pilarDelegated = delegByPergunta.size;
+  // Pilar concluído quando tudo foi respondido OU delegado adiante.
+  const completed = pilarAnswered + pilarDelegated >= pilarTotal && pilarTotal > 0;
 
   if (showThanks) {
     return (
@@ -456,7 +460,11 @@ export default function ResponderWizard() {
             <div>
               <div className="flex justify-between text-xs text-muted-foreground mb-1">
                 <span>Progresso do seu pilar</span>
-                <span>{pilarAnswered} / {pilarTotal}</span>
+                <span>
+                {pilarAnswered} respondidas
+                {pilarDelegated > 0 ? ` · ${pilarDelegated} delegadas` : ""}
+                {" "}/ {pilarTotal}
+              </span>
               </div>
               <Progress value={pilarPct} />
             </div>
@@ -480,9 +488,48 @@ export default function ResponderWizard() {
           </div>
         )}
 
+        {/* Delegadas por mim */}
+        {(delegatedOutQuery.data?.length ?? 0) > 0 && (
+          <Card className="border-violet-200 bg-violet-50/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-violet-700" />
+                Delegadas por mim ({delegatedOutQuery.data!.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {delegatedOutQuery.data!.map((d) => {
+                const status = d.inviteRedeemedAt
+                  ? "aceito"
+                  : d.inviteSentAt
+                    ? "convite enviado"
+                    : "rascunho";
+                const statusColor = d.inviteRedeemedAt
+                  ? "bg-green-100 text-green-800 border-green-300"
+                  : d.inviteSentAt
+                    ? "bg-blue-100 text-blue-800 border-blue-300"
+                    : "bg-gray-100 text-gray-700 border-gray-300";
+                return (
+                  <div key={d.id} className="rounded-md border bg-background px-3 py-2 text-xs flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">
+                        {d.responsavelNome ?? d.responsavelEmail ?? "Sem destinatário"}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {d.perguntaIds.length} pergunta{d.perguntaIds.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={`shrink-0 ${statusColor}`}>{status}</Badge>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Questions */}
         <div className="flex flex-col gap-4">
-          {questions.map((q, idx) => {
+          {questions.filter((q) => !delegByPergunta.has(q.id)).map((q, idx) => {
             const deleg = delegByPergunta.get(q.id);
             const isSelected = selectedQs.has(q.id);
             const canDelegate = ctx.diagnosticoStatus !== "concluido" && !deleg;
