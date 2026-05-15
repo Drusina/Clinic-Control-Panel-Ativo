@@ -627,8 +627,9 @@ router.post("/respondent/delegate", requireRespondent, async (req, res): Promise
   }
 
   res.status(201).json({
+    delegacaoId: novaDeleg.id,
     id: novaDeleg.id,
-    nivel: 3,
+    nivel: novaDeleg.nivel,
     pilarSlug: novaDeleg.pilarSlug,
     pilarNome: novaDeleg.pilarNome,
     responsavelNome: novaDeleg.responsavelNome,
@@ -637,6 +638,7 @@ router.post("/respondent/delegate", requireRespondent, async (req, res): Promise
     prazo: novaDeleg.prazo,
     parentId: novaDeleg.parentId,
     inviteLink,
+    inviteEnviadoPara: enviarConvite ? responsavelEmail : null,
   });
 });
 

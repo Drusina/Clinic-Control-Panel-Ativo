@@ -21,6 +21,7 @@ import {
 import { getStoredToken, useCurrentRole } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { DelegateQuestionsModal } from "@/components/diagnostic/delegate-questions-modal";
+import { resolveQuestionOwner } from "@/lib/scope/resolveQuestionOwner";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -74,6 +75,9 @@ interface DelegacaoLite {
   responsavelEmail: string | null;
   status: string;
   perguntaIds: string[] | null;
+  parentId?: string | null;
+  questaoInicio?: number | null;
+  questaoFim?: number | null;
 }
 
 interface DiagnosticDetail {
@@ -123,11 +127,20 @@ function QuestionControl({
   pergunta,
   value,
   onChange,
+  disabled,
 }: {
   pergunta: Pergunta;
   value: string | undefined;
   onChange: (val: string) => void;
+  disabled?: boolean;
 }) {
+  if (disabled) {
+    return (
+      <div className="rounded-md border border-dashed border-violet-300 bg-violet-50/40 px-3 py-2 text-xs text-violet-800">
+        Pergunta delegada — aguardando resposta do destinatário. Use a aba Delegação para acompanhar.
+      </div>
+    );
+  }
   if (pergunta.tipo === "sim_nao") {
     return (
       <div className="grid grid-cols-2 gap-3">
@@ -251,15 +264,6 @@ export default function DiagnosticoWizard() {
     refetchInterval: 30_000,
   });
 
-  const delegByPergunta = useMemo(() => {
-    const m = new Map<string, DelegacaoLite>();
-    for (const d of clinicDelegacoes ?? []) {
-      if (d.nivel !== 3 || !d.perguntaIds) continue;
-      for (const pid of d.perguntaIds) m.set(pid, d);
-    }
-    return m;
-  }, [clinicDelegacoes]);
-
   const toggleSelectQ = useCallback((id: string) => {
     setSelectedQs((prev) => {
       const next = new Set(prev);
@@ -288,6 +292,36 @@ export default function DiagnosticoWizard() {
   const allQuestions = useMemo((): Pergunta[] => {
     return pillarQuestionResults.flatMap((r) => r.data ?? []);
   }, [pillarQuestionResults]);
+
+  // Resolve dono atual (deepest leaf) por pergunta para todas as delegações
+  // ativas — N1/N2/N3. Usado para chip "Delegada para X" e bloqueio do input.
+  const delegByPergunta = useMemo(() => {
+    const m = new Map<string, DelegacaoLite>();
+    const all = (clinicDelegacoes ?? []).filter((d) => d.status !== "cancelada");
+    if (all.length === 0 || allQuestions.length === 0) return m;
+    for (const q of allQuestions) {
+      const owner = resolveQuestionOwner(
+        { id: q.id, pilarSlug: q.pilarSlug, ordem: q.ordem },
+        all.map((d) => ({
+          id: d.id,
+          nivel: d.nivel,
+          parentId: d.parentId ?? null,
+          status: d.status ?? null,
+          responsavelNome: d.responsavelNome ?? null,
+          responsavelEmail: d.responsavelEmail ?? null,
+          pilarSlug: d.pilarSlug,
+          questaoInicio: d.questaoInicio ?? null,
+          questaoFim: d.questaoFim ?? null,
+          perguntaIds: d.perguntaIds ?? null,
+        })),
+      );
+      if (owner) {
+        const found = all.find((x) => x.id === owner.id);
+        if (found) m.set(q.id, found);
+      }
+    }
+    return m;
+  }, [clinicDelegacoes, allQuestions]);
 
   const loadingQuestions = loadingPillars || pillarQuestionResults.some((r) => r.isLoading);
 
@@ -534,6 +568,7 @@ export default function DiagnosticoWizard() {
                   pergunta={pergunta}
                   value={localAnswers[pergunta.id]}
                   onChange={(val) => handleAnswer(pergunta.id, val)}
+                  disabled={!!deleg}
                 />
               </div>
             );

@@ -354,9 +354,15 @@ export default function ResponderWizard() {
     );
   }
 
-  const pilarDelegated = delegByPergunta.size;
-  // Pilar concluído quando tudo foi respondido OU delegado adiante.
-  const completed = pilarAnswered + pilarDelegated >= pilarTotal && pilarTotal > 0;
+  // /respondent/questions já EXCLUI as perguntas que este respondente delegou
+  // adiante. Para a UI de progresso/conclusão usamos o /respondent/progress
+  // (autoritativo, calcula sobre o escopo total — pilar inteiro em N1 ou
+  // perguntaIds em N3 — separando respondidas/delegadas/pendentes).
+  const pilarDelegated = progress?.pilarDelegated ?? delegByPergunta.size;
+  const totalScope = progress?.pilarTotal ?? (pilarTotal + pilarDelegated);
+  const pendingScope =
+    progress?.pilarPending ?? Math.max(0, totalScope - pilarAnswered - pilarDelegated);
+  const completed = pendingScope === 0 && totalScope > 0;
 
   if (showThanks) {
     return (
