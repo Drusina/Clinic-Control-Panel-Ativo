@@ -44,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -148,41 +149,166 @@ interface Delegacao {
   inviteStatus?: "nao_enviado" | "enviado" | "aceito" | "expirado";
 }
 
-const INVITE_BADGE: Record<string, { label: string; className: string }> = {
-  nao_enviado: { label: "Convite não enviado", className: "bg-muted text-muted-foreground" },
-  enviado: { label: "Convite enviado", className: "bg-blue-100 text-blue-800 border-blue-300" },
-  aceito: { label: "Convite aceito", className: "bg-green-100 text-green-800 border-green-300" },
-  expirado: { label: "Convite expirado", className: "bg-amber-100 text-amber-900 border-amber-300" },
+const INVITE_BADGE: Record<string, { className: string }> = {
+  nao_enviado: { className: "bg-muted text-muted-foreground" },
+  enviado: { className: "bg-blue-100 text-blue-800 border-blue-300" },
+  aceito: { className: "bg-green-100 text-green-800 border-green-300" },
+  expirado: { className: "bg-amber-100 text-amber-900 border-amber-300" },
 };
 
-function InviteStatusBadge({ delegacao }: { delegacao: Delegacao }) {
+function formatDateBR(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return new Date(value).toLocaleDateString("pt-BR");
+}
+
+function inviteBadgeLabel(
+  delegacao: Delegacao,
+  answered: number,
+  total: number,
+): string {
   const status = delegacao.inviteStatus ?? "nao_enviado";
-  if (status === "nao_enviado") return null;
+  if (status === "nao_enviado") return "Não enviado";
+  if (status === "enviado")
+    return `Enviado em ${formatDateBR(delegacao.inviteSentAt) ?? "—"}`;
+  if (status === "expirado")
+    return `Expirado em ${formatDateBR(delegacao.inviteCodeExpiresAt) ?? "—"}`;
+  // aceito
+  return total > 0
+    ? `Aberto · ${answered} de ${total} respondidas`
+    : "Aberto";
+}
+
+function InviteStatusBadge({
+  clinicId,
+  diagnosticoId,
+  delegacao,
+  answered,
+  total,
+}: {
+  clinicId: string;
+  diagnosticoId: string;
+  delegacao: Delegacao;
+  answered: number;
+  total: number;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const status = delegacao.inviteStatus ?? "nao_enviado";
   const cfg = INVITE_BADGE[status];
-  const sentAt = delegacao.inviteSentAt ? new Date(delegacao.inviteSentAt).toLocaleDateString("pt-BR") : null;
-  const expiresAt = delegacao.inviteCodeExpiresAt
-    ? new Date(delegacao.inviteCodeExpiresAt).toLocaleDateString("pt-BR")
-    : null;
-  return (
-    <Badge
-      variant="outline"
-      className={`text-[10px] gap-1 ${cfg.className}`}
-      title={
-        status === "aceito"
-          ? `Aberto em ${
-              delegacao.inviteRedeemedAt
-                ? new Date(delegacao.inviteRedeemedAt).toLocaleDateString("pt-BR")
-                : ""
-            }`
-          : status === "enviado"
-          ? `Enviado em ${sentAt} • expira em ${expiresAt}`
-          : status === "expirado"
-          ? `Expirado em ${expiresAt}`
-          : ""
+  const label = inviteBadgeLabel(delegacao, answered, total);
+  const pct = total === 0 ? 0 : Math.round((answered / total) * 100);
+
+  const sendMut = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch(
+        `/api/clinics/${clinicId}/diagnostics/${diagnosticoId}/delegacoes/${delegacao.id}/send-invite`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Erro ao gerar link");
       }
-    >
-      {cfg.label}
-    </Badge>
+      return res.json() as Promise<{ ok: boolean; sent: boolean; to: string; link: string }>;
+    },
+    onSuccess: async (data) => {
+      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] });
+      try {
+        await navigator.clipboard.writeText(data.link);
+        toast({
+          title: "Link copiado",
+          description: `Novo link gerado e copiado. E-mail ${data.sent ? "também enviado" : "não pôde ser enviado"} para ${data.to}.`,
+        });
+      } catch {
+        toast({ title: "Link gerado", description: data.link });
+      }
+    },
+    onError: (err: Error) =>
+      toast({ variant: "destructive", title: "Não foi possível gerar o link", description: err.message }),
+  });
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center"
+          aria-label="Ver detalhes do convite"
+        >
+          <Badge
+            variant="outline"
+            className={`text-[10px] gap-1 cursor-pointer ${cfg.className}`}
+          >
+            {label}
+          </Badge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 text-sm space-y-3">
+        <div>
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">
+            Convite individual
+          </div>
+          <div className="font-semibold">{delegacao.pilarNome}</div>
+          {delegacao.responsavelEmail && (
+            <div className="text-xs text-muted-foreground">{delegacao.responsavelEmail}</div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <div className="text-muted-foreground">Enviado em</div>
+            <div className="font-medium">{formatDateBR(delegacao.inviteSentAt) ?? "—"}</div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Aberto em</div>
+            <div className="font-medium">
+              {formatDateBR(delegacao.inviteRedeemedAt) ?? "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Expira em</div>
+            <div className="font-medium">
+              {formatDateBR(delegacao.inviteCodeExpiresAt) ?? "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground">Status</div>
+            <div className="font-medium capitalize">{status.replace("_", " ")}</div>
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <span>Respostas do pilar</span>
+            <span>
+              {answered}/{total} ({pct}%)
+            </span>
+          </div>
+          <Progress value={pct} className="h-1.5" />
+        </div>
+
+        <div className="pt-1 border-t">
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full text-xs"
+            disabled={!delegacao.responsavelEmail || sendMut.isPending}
+            onClick={() => sendMut.mutate()}
+            title={
+              !delegacao.responsavelEmail
+                ? "Adicione um e-mail antes de gerar o link"
+                : "Gera um novo link, envia por e-mail e copia para a área de transferência"
+            }
+          >
+            {sendMut.isPending ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <Mail className="h-3 w-3 mr-1" />
+            )}
+            {status === "nao_enviado" ? "Enviar e copiar link" : "Reenviar e copiar link"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -823,7 +949,15 @@ function PilarRow(props: PilarRowProps) {
               {statusCfg.icon}
               {statusCfg.label}
             </Badge>
-            {n1 && <InviteStatusBadge delegacao={n1} />}
+            {n1 && (
+              <InviteStatusBadge
+                clinicId={clinicId}
+                diagnosticoId={diagnosticoId}
+                delegacao={n1}
+                answered={pilar.answeredCount}
+                total={pilar.questionCount}
+              />
+            )}
           </div>
         </td>
         <td className="px-4 py-3 hidden lg:table-cell">
