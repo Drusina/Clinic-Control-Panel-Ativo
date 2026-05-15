@@ -24,6 +24,9 @@ export const delegacoesTable = pgTable("delegacoes", {
   inviteCodeExpiresAt: timestamp("invite_code_expires_at", { withTimezone: true }),
   inviteRedeemedAt: timestamp("invite_redeemed_at", { withTimezone: true }),
   inviteSentAt: timestamp("invite_sent_at", { withTimezone: true }),
+  // Diagnostic the invite is bound to. Old invites do NOT redeem into newer
+  // diagnostic cycles — the manager must explicitly re-send.
+  inviteDiagnosticoId: uuid("invite_diagnostico_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

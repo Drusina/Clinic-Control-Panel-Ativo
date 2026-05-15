@@ -33,9 +33,25 @@ function mapDelegacao(d: typeof delegacoesTable.$inferSelect) {
     questaoFim: d.questaoFim,
     parentId: d.parentId,
     observacoes: d.observacoes,
+    inviteSentAt: d.inviteSentAt ? d.inviteSentAt.toISOString() : null,
+    inviteRedeemedAt: d.inviteRedeemedAt ? d.inviteRedeemedAt.toISOString() : null,
+    inviteCodeExpiresAt: d.inviteCodeExpiresAt ? d.inviteCodeExpiresAt.toISOString() : null,
+    inviteDiagnosticoId: d.inviteDiagnosticoId ?? null,
+    inviteStatus: deriveInviteStatus(d),
     createdAt: d.createdAt.toISOString(),
     updatedAt: d.updatedAt.toISOString(),
   };
+}
+
+function deriveInviteStatus(d: typeof delegacoesTable.$inferSelect):
+  | "nao_enviado"
+  | "enviado"
+  | "aceito"
+  | "expirado" {
+  if (!d.inviteCodeHash || !d.inviteSentAt) return "nao_enviado";
+  if (d.inviteCodeExpiresAt && d.inviteCodeExpiresAt < new Date()) return "expirado";
+  if (d.inviteRedeemedAt) return "aceito";
+  return "enviado";
 }
 
 const CreateDelegacaoBody = z.object({
@@ -280,6 +296,9 @@ router.post(
   "/clinics/:clinicId/diagnostics/:diagnosticoId/delegacoes/:delegacaoId/send-invite",
   async (req, res): Promise<void> => {
     const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+    const diagnosticoId = Array.isArray(req.params.diagnosticoId)
+      ? req.params.diagnosticoId[0]
+      : req.params.diagnosticoId;
     const delegacaoId = Array.isArray(req.params.delegacaoId)
       ? req.params.delegacaoId[0]
       : req.params.delegacaoId;
@@ -320,6 +339,7 @@ router.post(
         inviteCodeExpiresAt: expiresAt,
         inviteSentAt: new Date(),
         inviteRedeemedAt: null,
+        inviteDiagnosticoId: diagnosticoId,
         updatedAt: new Date(),
       })
       .where(eq(delegacoesTable.id, deleg.id));

@@ -144,6 +144,46 @@ interface Delegacao {
   inviteSentAt?: string | null;
   inviteRedeemedAt?: string | null;
   inviteCodeExpiresAt?: string | null;
+  inviteDiagnosticoId?: string | null;
+  inviteStatus?: "nao_enviado" | "enviado" | "aceito" | "expirado";
+}
+
+const INVITE_BADGE: Record<string, { label: string; className: string }> = {
+  nao_enviado: { label: "Convite não enviado", className: "bg-muted text-muted-foreground" },
+  enviado: { label: "Convite enviado", className: "bg-blue-100 text-blue-800 border-blue-300" },
+  aceito: { label: "Convite aceito", className: "bg-green-100 text-green-800 border-green-300" },
+  expirado: { label: "Convite expirado", className: "bg-amber-100 text-amber-900 border-amber-300" },
+};
+
+function InviteStatusBadge({ delegacao }: { delegacao: Delegacao }) {
+  const status = delegacao.inviteStatus ?? "nao_enviado";
+  if (status === "nao_enviado") return null;
+  const cfg = INVITE_BADGE[status];
+  const sentAt = delegacao.inviteSentAt ? new Date(delegacao.inviteSentAt).toLocaleDateString("pt-BR") : null;
+  const expiresAt = delegacao.inviteCodeExpiresAt
+    ? new Date(delegacao.inviteCodeExpiresAt).toLocaleDateString("pt-BR")
+    : null;
+  return (
+    <Badge
+      variant="outline"
+      className={`text-[10px] gap-1 ${cfg.className}`}
+      title={
+        status === "aceito"
+          ? `Aberto em ${
+              delegacao.inviteRedeemedAt
+                ? new Date(delegacao.inviteRedeemedAt).toLocaleDateString("pt-BR")
+                : ""
+            }`
+          : status === "enviado"
+          ? `Enviado em ${sentAt} • expira em ${expiresAt}`
+          : status === "expirado"
+          ? `Expirado em ${expiresAt}`
+          : ""
+      }
+    >
+      {cfg.label}
+    </Badge>
+  );
 }
 
 // ─── Status visuals ─────────────────────────────────────────────────────────
@@ -778,10 +818,13 @@ function PilarRow(props: PilarRowProps) {
           </div>
         </td>
         <td className="px-4 py-3 hidden md:table-cell">
-          <Badge variant={statusCfg.variant} className="gap-1 text-xs">
-            {statusCfg.icon}
-            {statusCfg.label}
-          </Badge>
+          <div className="flex flex-col gap-1 items-start">
+            <Badge variant={statusCfg.variant} className="gap-1 text-xs">
+              {statusCfg.icon}
+              {statusCfg.label}
+            </Badge>
+            {n1 && <InviteStatusBadge delegacao={n1} />}
+          </div>
         </td>
         <td className="px-4 py-3 hidden lg:table-cell">
           {score != null ? (

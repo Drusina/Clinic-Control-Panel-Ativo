@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { createHash } from "crypto";
-import { and, eq, count } from "drizzle-orm";
+import { and, eq, count, inArray } from "drizzle-orm";
 import {
   db,
   delegacoesTable,
@@ -96,19 +96,26 @@ router.post("/auth/responder", async (req, res): Promise<void> => {
     return;
   }
 
-  // Resolve the active diagnostic for this clinic. We didn't add a
-  // diagnostic-pin column on `delegacoes` — instead, the responder always
-  // works against the latest in-progress diagnostic for the clinic; if all
-  // diagnostics are concluded, fall back to the most recent one (read-only).
-  const diagRows = await db
+  // The invite is bound to a specific diagnostic (`inviteDiagnosticoId`),
+  // pinned at send time. Old invites do NOT redeem into newer cycles —
+  // the manager must explicitly re-send to refresh the binding.
+  if (!deleg.inviteDiagnosticoId) {
+    res.status(409).json({ error: "Convite legado sem diagnóstico vinculado. Solicite um novo link." });
+    return;
+  }
+  const [activeDiag] = await db
     .select()
     .from(diagnosticsTable)
-    .where(eq(diagnosticsTable.clinicId, deleg.clinicId));
-  const sorted = diagRows.sort((a, b) => b.iniciadoEm.getTime() - a.iniciadoEm.getTime());
-  const activeDiag = sorted.find((d) => d.status !== "concluido") ?? sorted[0];
+    .where(
+      and(
+        eq(diagnosticsTable.id, deleg.inviteDiagnosticoId),
+        eq(diagnosticsTable.clinicId, deleg.clinicId),
+      ),
+    )
+    .limit(1);
 
   if (!activeDiag) {
-    res.status(404).json({ error: "Nenhum diagnóstico ativo para esta clínica." });
+    res.status(404).json({ error: "Diagnóstico vinculado ao convite não encontrado." });
     return;
   }
 

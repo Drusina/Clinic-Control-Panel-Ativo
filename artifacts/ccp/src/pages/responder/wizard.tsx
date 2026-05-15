@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, AlertTriangle, CheckCircle2, WifiOff, Building2, LogOut } from "lucide-react";
+import { Loader2, AlertTriangle, CheckCircle2, WifiOff, Building2, LogOut, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -182,6 +182,7 @@ export default function ResponderWizard() {
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showThanks, setShowThanks] = useState(false);
   const pendingAnswers = useRef<Record<string, string>>({});
   const autoSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -314,6 +315,44 @@ export default function ResponderWizard() {
 
   const completed = pilarAnswered === pilarTotal && pilarTotal > 0;
 
+  if (showThanks) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+              <PartyPopper className="h-7 w-7 text-green-600" />
+            </div>
+            <CardTitle className="text-2xl">Obrigado!</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Suas respostas foram enviadas. O gestor da clínica receberá os
+              resultados deste pilar e dará sequência ao diagnóstico.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Você pode fechar esta página com tranquilidade.
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowThanks(false)}>
+                Revisar minhas respostas
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  clearRespondentSession();
+                  navigate("/");
+                }}
+              >
+                Sair
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -435,6 +474,25 @@ export default function ResponderWizard() {
         <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground text-center">
           Suas respostas são salvas automaticamente. Você pode fechar a página e voltar pelo mesmo link.
         </div>
+
+        {completed && ctx.diagnosticoStatus !== "concluido" && (
+          <div className="sticky bottom-4 flex justify-center">
+            <Button
+              size="lg"
+              className="shadow-lg gap-2"
+              onClick={async () => {
+                // Flush any pending answers before showing thank-you.
+                if (Object.keys(pendingAnswers.current).length > 0) {
+                  await batchSave(pendingAnswers.current);
+                }
+                setShowThanks(true);
+              }}
+            >
+              <CheckCircle2 className="h-5 w-5" />
+              Concluir e enviar respostas
+            </Button>
+          </div>
+        )}
       </main>
     </div>
   );
