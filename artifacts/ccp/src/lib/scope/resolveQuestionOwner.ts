@@ -33,18 +33,25 @@ export function resolveQuestionOwner(
   pergunta: PerguntaLite,
   delegacoes: DelegacaoLite[],
 ): DelegacaoLite | null {
+  // Cobertura é definida pelo TIPO de escopo, não pelo nivel — assim cadeias
+  // arbitrariamente profundas (4, 5, …) continuam funcionando.
   const covers = (d: DelegacaoLite): boolean => {
     if (d.status === "cancelada") return false;
-    if (d.nivel === 3) {
-      return Array.isArray(d.perguntaIds) && d.perguntaIds.includes(pergunta.id);
+    // 1) Escopo question-set (delegações ad-hoc, qualquer nivel >= 3 / sub-delegações)
+    if (Array.isArray(d.perguntaIds) && d.perguntaIds.length > 0) {
+      return d.perguntaIds.includes(pergunta.id);
     }
-    if (d.pilarSlug !== "misto" && d.pilarSlug !== pergunta.pilarSlug) return false;
-    if (d.nivel === 2) {
+    // 2) Escopo por faixa contígua (N2)
+    if (d.questaoInicio != null || d.questaoFim != null) {
+      if (d.pilarSlug !== "misto" && d.pilarSlug !== pergunta.pilarSlug) return false;
       const ini = d.questaoInicio ?? Number.NEGATIVE_INFINITY;
       const fim = d.questaoFim ?? Number.POSITIVE_INFINITY;
       return pergunta.ordem >= ini && pergunta.ordem <= fim;
     }
-    if (d.nivel === 1) return true;
+    // 3) Escopo por pilar inteiro (N1)
+    if (d.nivel === 1) {
+      return d.pilarSlug === pergunta.pilarSlug;
+    }
     return false;
   };
 

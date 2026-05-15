@@ -138,16 +138,16 @@ router.post("/auth/responder", async (req, res): Promise<void> => {
       .where(eq(delegacoesTable.id, deleg.id));
   }
 
-  // Se delegação for N3 (perguntas ad-hoc), incluímos os IDs no claim para
-  // restringir o escopo do respondente.
-  let perguntaIds: string[] | undefined;
-  if (deleg.nivel === 3) {
-    const rows = await db
-      .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
-      .from(delegacoesPerguntasTable)
-      .where(eq(delegacoesPerguntasTable.delegacaoId, deleg.id));
-    perguntaIds = rows.map((r) => r.perguntaId);
-  }
+  // Cadeia indefinida: qualquer delegação que tenha linhas em
+  // delegacoes_perguntas é tratada como question-scoped, independentemente do
+  // nivel (3, 4, 5, …). Isso garante que sub-delegações profundas continuam
+  // restringindo o escopo corretamente.
+  const perguntaRows = await db
+    .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
+    .from(delegacoesPerguntasTable)
+    .where(eq(delegacoesPerguntasTable.delegacaoId, deleg.id));
+  const perguntaIds: string[] | undefined =
+    perguntaRows.length > 0 ? perguntaRows.map((r) => r.perguntaId) : undefined;
 
   const token = signToken(
     {
@@ -366,7 +366,10 @@ router.put("/respondent/respostas/:perguntaId", requireRespondent, async (req, r
     res.status(400).json({ error: "valor é obrigatório" });
     return;
   }
-  if (!(await assertPerguntaInPilar(perguntaId, r.pilarSlug))) {
+  // Para tokens N1 (pilar inteiro), reforça o filtro por pilar; para tokens
+  // question-scoped (N3+), pulamos esse check — o escopo correto é
+  // allowedPerguntaIds, e o pilarSlug pode ser "misto" em batches cross-pilar.
+  if (!r.perguntaIds && !(await assertPerguntaInPilar(perguntaId, r.pilarSlug))) {
     res.status(403).json({ error: "Pergunta fora do escopo do pilar do respondente" });
     return;
   }
