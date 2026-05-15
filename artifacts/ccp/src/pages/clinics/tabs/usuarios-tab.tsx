@@ -7,6 +7,7 @@ import {
   useDeleteTeamMember,
   useInviteClinicUser,
   useResendClinicTeamInvite,
+  ApiError,
 } from "@workspace/api-client-react";
 import type { TeamMember, UpdateTeamMemberBody, InviteUserResponse } from "@workspace/api-client-react";
 import { formatDistanceToNow } from "date-fns";
@@ -240,24 +241,29 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
                                         title: "Convite reenviado",
                                         description: `Enviado para ${member.email ?? member.nome}.`,
                                       });
+                                      queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
                                       if (resp.inviteLink) {
                                         setInviteLink(resp.inviteLink);
                                       }
                                     },
-                                    onError: async (err: unknown) => {
+                                    onError: (err: unknown) => {
                                       let description: string | undefined;
-                                      const maybeRes = (err as { response?: Response })?.response;
-                                      if (maybeRes && typeof maybeRes.json === "function") {
-                                        try {
-                                          const body = await maybeRes.json();
-                                          if (body?.error) description = body.error;
-                                        } catch {}
+                                      let inviteLinkFromError: string | undefined;
+                                      if (err instanceof ApiError) {
+                                        const data = err.data as { error?: string; inviteLink?: string } | null;
+                                        description = data?.error ?? err.message;
+                                        inviteLinkFromError = data?.inviteLink;
+                                      } else if (err instanceof Error) {
+                                        description = err.message;
                                       }
                                       toast({
                                         variant: "destructive",
                                         title: "Erro ao reenviar convite",
                                         description,
                                       });
+                                      if (inviteLinkFromError) {
+                                        setInviteLink(inviteLinkFromError);
+                                      }
                                     },
                                   }
                                 );
