@@ -26,6 +26,8 @@ import {
   Trash2,
   FilePlus,
   BookOpen,
+  Mail,
+  Send,
 } from "lucide-react";
 import {
   Dialog,
@@ -139,6 +141,9 @@ interface Delegacao {
   questaoFim: number | null;
   parentId: string | null;
   observacoes: string | null;
+  inviteSentAt?: string | null;
+  inviteRedeemedAt?: string | null;
+  inviteCodeExpiresAt?: string | null;
 }
 
 // ─── Status visuals ─────────────────────────────────────────────────────────
@@ -799,6 +804,7 @@ function PilarRow(props: PilarRowProps) {
                 <Button size="sm" variant="ghost" onClick={onSubdelegate}>
                   <Plus className="h-3 w-3 mr-1" /> Sub-delegar
                 </Button>
+                <SendInviteButton clinicId={clinicId} diagnosticoId={diagnosticoId} delegacao={n1} />
                 <Select
                   value={n1.status}
                   onValueChange={(val) => updateDelegMut.mutate({ id: n1.id, data: { status: val } })}
@@ -1100,6 +1106,74 @@ function AnswerInput({
       className="h-8 text-xs flex-1 min-w-[200px]"
       placeholder="Resposta"
     />
+  );
+}
+
+// ─── Send invite (link individual por pilar) — task #205 ───────────────────
+
+function SendInviteButton({
+  clinicId,
+  diagnosticoId,
+  delegacao,
+}: {
+  clinicId: string;
+  diagnosticoId: string;
+  delegacao: Delegacao;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const sendMut = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch(
+        `/api/clinics/${clinicId}/diagnostics/${diagnosticoId}/delegacoes/${delegacao.id}/send-invite`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Erro ao enviar convite");
+      }
+      return res.json() as Promise<{ ok: boolean; sent: boolean; to: string; link: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] });
+      toast({
+        title: data.sent ? "Convite enviado" : "Link gerado (e-mail falhou)",
+        description: data.sent
+          ? `E-mail enviado para ${data.to}. O link é válido por 30 dias.`
+          : `Compartilhe manualmente: ${data.link}`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ variant: "destructive", title: "Não foi possível enviar", description: err.message });
+    },
+  });
+
+  const alreadySent = !!delegacao.inviteSentAt;
+  const disabled = !delegacao.responsavelEmail || sendMut.isPending;
+
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      disabled={disabled}
+      onClick={() => sendMut.mutate()}
+      title={
+        !delegacao.responsavelEmail
+          ? "Adicione um e-mail de responsável antes de enviar"
+          : alreadySent
+          ? "Reenviar link de resposta"
+          : "Enviar link de resposta por e-mail"
+      }
+    >
+      {sendMut.isPending ? (
+        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+      ) : alreadySent ? (
+        <Send className="h-3 w-3 mr-1" />
+      ) : (
+        <Mail className="h-3 w-3 mr-1" />
+      )}
+      {alreadySent ? "Reenviar" : "Enviar convite"}
+    </Button>
   );
 }
 

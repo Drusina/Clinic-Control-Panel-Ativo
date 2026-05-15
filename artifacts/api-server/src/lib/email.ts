@@ -278,6 +278,61 @@ export function buildDelegationEmail(params: {
   return baseTemplate(`Delegação — ${params.pilarNome}`, body);
 }
 
+export function buildRespondentInviteEmail(params: {
+  responsavelNome: string;
+  pilarNome: string;
+  clinicName?: string;
+  prazo?: string | null;
+  link: string;
+}): string {
+  const clinicLine = params.clinicName
+    ? `<tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Clínica</p>
+        <p style="margin:0;color:#e2e8f0;font-weight:600;">${params.clinicName}</p>
+      </td></tr>`
+    : "";
+  const prazoLine = params.prazo
+    ? `<tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Prazo sugerido</p>
+        <p style="margin:0;color:#f59e0b;font-weight:600;">${params.prazo}</p>
+      </td></tr>`
+    : "";
+
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Convite para responder o Diagnóstico 360°</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      Olá, <strong style="color:#e2e8f0;">${params.responsavelNome}</strong>. Você foi indicado(a) para responder
+      as perguntas do pilar <strong style="color:#3b82f6;">${params.pilarNome}</strong>.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px;margin-bottom:24px;">
+      <tr><td>
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Pilar</p>
+        <p style="margin:0;color:#3b82f6;font-weight:700;font-size:18px;">${params.pilarNome}</p>
+      </td></tr>
+      ${clinicLine}
+      ${prazoLine}
+    </table>
+
+    <p style="color:#94a3b8;font-size:14px;line-height:1.7;">
+      Ao clicar no botão abaixo você abrirá <strong style="color:#e2e8f0;">apenas as perguntas do seu pilar</strong>.
+      Suas respostas são salvas automaticamente — pode pausar e voltar pelo mesmo link quando quiser.
+    </p>
+
+    ${primaryButton(params.link, "Responder agora →")}
+
+    <p style="color:#475569;font-size:12px;margin-top:8px;">
+      Ou copie e cole este link no navegador:<br/>
+      <span style="color:#3b82f6;word-break:break-all;">${params.link}</span>
+    </p>
+
+    <p style="color:#475569;font-size:12px;margin-top:16px;">
+      Este link é pessoal e válido por <strong style="color:#94a3b8;">30 dias</strong>. Não compartilhe com terceiros.
+    </p>
+  `;
+  return baseTemplate(`Convite — ${params.pilarNome}`, body);
+}
+
 export function buildExpiryDigestEmail(params: {
   clinicName: string;
   adminEmail: string;

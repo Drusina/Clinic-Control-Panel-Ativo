@@ -46,12 +46,17 @@ import cnpjRouter from "./cnpj";
 import documentCategoriesRouter from "./document-categories";
 import clinicDocumentsRouter from "./clinic-documents";
 import societaryDocsRouter from "./societary-docs";
+import respondentRouter from "./respondent";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(storageRouter);
 router.use(authRouter);
+// Per-pilar diagnostic respondent — public POST /api/auth/responder + token-gated
+// /api/respondent/* endpoints. Mounted at top-level (no requireAuth wrapper)
+// because each handler verifies its own diagnostic_respondent token inline.
+router.use(respondentRouter);
 // `meRouter` exposes `/api/me/clinics`. Mounted with no extra middleware
 // because it gates itself with `requireAuth` per-route (super_admin and
 // team_member both consume it).

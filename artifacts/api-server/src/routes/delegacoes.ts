@@ -4,7 +4,14 @@ import { db, delegacoesTable, clinicsTable, risksTable, actionsTable, teamTable 
 import { assertClinicAccess } from "../middleware/auth";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { z } from "zod";
-import { sendEmail, buildDelegationEmail, describeDelegationScope, resolveAppUrl } from "../lib/email.js";
+import {
+  sendEmail,
+  buildDelegationEmail,
+  buildRespondentInviteEmail,
+  describeDelegationScope,
+  resolveAppUrl,
+} from "../lib/email.js";
+import { generateInviteCode } from "../middleware/auth.js";
 import { sendDelegationWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
 import { sendPushToClinic, sendPushToEmail } from "../lib/push.js";
@@ -261,6 +268,93 @@ router.patch("/delegacoes/:id", async (req, res): Promise<void> => {
 
   res.json(mapDelegacao(delegacao));
 });
+
+// ─── Respondent invite (link individual por pilar) — task #205 ──────────────
+//
+// Generates (or rotates) a per-delegation invite token, stores its sha256
+// hash on `delegacoes`, and emails the link to the responsável. The token
+// is multi-use within its TTL (30 days). Only N1 (whole pilar) delegations
+// can be invited as respondents; sub-delegations (N2, faixas) reuse the
+// regular plataforma flow.
+router.post(
+  "/clinics/:clinicId/diagnostics/:diagnosticoId/delegacoes/:delegacaoId/send-invite",
+  async (req, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+    const delegacaoId = Array.isArray(req.params.delegacaoId)
+      ? req.params.delegacaoId[0]
+      : req.params.delegacaoId;
+
+    const [deleg] = await db
+      .select()
+      .from(delegacoesTable)
+      .where(and(eq(delegacoesTable.id, delegacaoId), eq(delegacoesTable.clinicId, clinicId)))
+      .limit(1);
+    if (!deleg) {
+      res.status(404).json({ error: "Delegação não encontrada" });
+      return;
+    }
+    if (!deleg.responsavelEmail) {
+      res
+        .status(400)
+        .json({ error: "Adicione um e-mail de responsável antes de enviar o convite." });
+      return;
+    }
+    if (deleg.nivel !== 1) {
+      res
+        .status(400)
+        .json({ error: "Convites individuais só são suportados para delegações de pilar inteiro (N1)." });
+      return;
+    }
+
+    const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    // generateInviteCode() is fine here — same primitives as team invites.
+    // We override the expiry to 30 days because respondent links must
+    // survive longer (full pilar response cycle).
+    const { code, hash } = generateInviteCode();
+    const expiresAt = new Date(Date.now() + TTL_MS);
+
+    await db
+      .update(delegacoesTable)
+      .set({
+        inviteCodeHash: hash,
+        inviteCodeExpiresAt: expiresAt,
+        inviteSentAt: new Date(),
+        inviteRedeemedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(delegacoesTable.id, deleg.id));
+
+    const [clinic] = await db
+      .select({ nome: clinicsTable.nome })
+      .from(clinicsTable)
+      .where(eq(clinicsTable.id, clinicId))
+      .limit(1);
+
+    const appUrl = await resolveAppUrl(req);
+    const link = `${appUrl}/responder?code=${encodeURIComponent(code)}`;
+    const html = buildRespondentInviteEmail({
+      responsavelNome: deleg.responsavelNome ?? "Responsável",
+      pilarNome: deleg.pilarNome,
+      clinicName: clinic?.nome ?? undefined,
+      prazo: deleg.prazo ?? null,
+      link,
+    });
+
+    const sendResult = await sendEmail({
+      to: deleg.responsavelEmail,
+      subject: `[IONEX360] Convite — Diagnóstico 360°: ${deleg.pilarNome}`,
+      html,
+    }).catch(() => false as const);
+
+    res.json({
+      ok: true,
+      sent: sendResult !== false,
+      to: deleg.responsavelEmail,
+      expiresAt: expiresAt.toISOString(),
+      link,
+    });
+  },
+);
 
 router.post("/clinics/:clinicId/delegacoes/seed", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;

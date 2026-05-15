@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, date, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, date, timestamp, integer, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { clinicsTable } from "./clinics";
@@ -19,9 +19,16 @@ export const delegacoesTable = pgTable("delegacoes", {
   questaoFim: integer("questao_fim"),
   parentId: uuid("parent_id"),
   observacoes: text("observacoes"),
+  // Invite token (link individual por pilar) — task #205
+  inviteCodeHash: text("invite_code_hash"),
+  inviteCodeExpiresAt: timestamp("invite_code_expires_at", { withTimezone: true }),
+  inviteRedeemedAt: timestamp("invite_redeemed_at", { withTimezone: true }),
+  inviteSentAt: timestamp("invite_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  inviteHashIdx: index("delegacoes_invite_code_hash_idx").on(t.inviteCodeHash),
+}));
 
 export const insertDelegacaoSchema = createInsertSchema(delegacoesTable).omit({
   id: true,

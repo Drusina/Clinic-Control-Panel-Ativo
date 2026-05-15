@@ -1,0 +1,441 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, AlertTriangle, CheckCircle2, WifiOff, Building2, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import {
+  getRespondentToken,
+  getRespondentContext,
+  clearRespondentSession,
+} from "./index";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+interface Pergunta {
+  id: string;
+  pilarSlug: string;
+  pilarNome: string;
+  pilarOrdem: number;
+  texto: string;
+  tipo: "sim_nao" | "escala_1_5" | "texto_livre" | "numerico";
+  peso: number;
+  ordem: number;
+  dica?: string | null;
+  valorMin?: number | null;
+  valorMax?: number | null;
+  inverso?: boolean;
+}
+
+interface Resposta {
+  id: string;
+  perguntaId: string;
+  valor: string;
+  respondidoEm: string;
+}
+
+interface Progress {
+  totalGlobal: number;
+  answeredGlobal: number;
+  pilarTotal: number;
+  pilarAnswered: number;
+}
+
+const ESCALA_LABELS: Record<number, { label: string; color: string }> = {
+  1: { label: "Crítico", color: "bg-red-100 border-red-400 text-red-800 hover:bg-red-200" },
+  2: { label: "Ruim", color: "bg-orange-100 border-orange-400 text-orange-800 hover:bg-orange-200" },
+  3: { label: "Médio", color: "bg-yellow-100 border-yellow-400 text-yellow-800 hover:bg-yellow-200" },
+  4: { label: "Bom", color: "bg-blue-100 border-blue-400 text-blue-800 hover:bg-blue-200" },
+  5: { label: "Ótimo", color: "bg-green-100 border-green-400 text-green-800 hover:bg-green-200" },
+};
+const ESCALA_SELECTED: Record<number, string> = {
+  1: "bg-red-500 border-red-500 text-white",
+  2: "bg-orange-500 border-orange-500 text-white",
+  3: "bg-yellow-500 border-yellow-500 text-white",
+  4: "bg-blue-500 border-blue-500 text-white",
+  5: "bg-green-500 border-green-500 text-white",
+};
+
+function respFetch(path: string, init?: RequestInit) {
+  const token = getRespondentToken();
+  return fetch(`${BASE}/api${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
+  });
+}
+
+async function respJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await respFetch(path, init);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+function QuestionControl({
+  pergunta,
+  value,
+  onChange,
+  disabled,
+}: {
+  pergunta: Pergunta;
+  value: string | undefined;
+  onChange: (val: string) => void;
+  disabled?: boolean;
+}) {
+  if (pergunta.tipo === "sim_nao") {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        {(["sim", "nao"] as const).map((opt) => (
+          <button
+            key={opt}
+            disabled={disabled}
+            onClick={() => onChange(opt)}
+            className={`py-4 rounded-xl border-2 text-base font-bold transition-all disabled:opacity-50 ${
+              value === opt
+                ? opt === "sim"
+                  ? "bg-green-500 border-green-500 text-white shadow-md"
+                  : "bg-red-500 border-red-500 text-white shadow-md"
+                : "bg-card hover:bg-accent border-border"
+            }`}
+          >
+            {opt === "sim" ? "✅ Sim" : "❌ Não"}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  if (pergunta.tipo === "escala_1_5") {
+    return (
+      <div className="grid grid-cols-5 gap-2">
+        {[1, 2, 3, 4, 5].map((val) => {
+          const info = ESCALA_LABELS[val];
+          const selected = value === String(val);
+          return (
+            <button
+              key={val}
+              disabled={disabled}
+              onClick={() => onChange(String(val))}
+              className={`flex flex-col items-center gap-1 py-3 px-1 rounded-xl border-2 transition-all disabled:opacity-50 ${
+                selected ? ESCALA_SELECTED[val] : `${info.color} border-transparent`
+              }`}
+            >
+              <span className="text-xl font-bold">{val}</span>
+              <span className="text-xs font-medium leading-tight text-center">{info.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+  if (pergunta.tipo === "texto_livre") {
+    return (
+      <Textarea
+        value={value ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Digite sua resposta..."
+        rows={3}
+        className="resize-none"
+      />
+    );
+  }
+  if (pergunta.tipo === "numerico") {
+    return (
+      <Input
+        type="number"
+        disabled={disabled}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={
+          pergunta.valorMin != null && pergunta.valorMax != null
+            ? `${pergunta.valorMin} – ${pergunta.valorMax}`
+            : "Digite um número..."
+        }
+        min={pergunta.valorMin ?? undefined}
+        max={pergunta.valorMax ?? undefined}
+        className="text-lg h-12 text-center"
+      />
+    );
+  }
+  return null;
+}
+
+export default function ResponderWizard() {
+  const [, navigate] = useLocation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const ctx = getRespondentContext();
+  const token = getRespondentToken();
+
+  useEffect(() => {
+    if (!token || !ctx) navigate("/responder", { replace: true });
+  }, [token, ctx, navigate]);
+
+  const [localAnswers, setLocalAnswers] = useState<Record<string, string>>({});
+  const [saveError, setSaveError] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const pendingAnswers = useRef<Record<string, string>>({});
+  const autoSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const questionsQuery = useQuery<Pergunta[]>({
+    queryKey: ["respondent-questions"],
+    queryFn: () => respJson<Pergunta[]>("/respondent/questions"),
+    enabled: !!token,
+  });
+
+  const respostasQuery = useQuery<Resposta[]>({
+    queryKey: ["respondent-respostas"],
+    queryFn: () => respJson<Resposta[]>("/respondent/respostas"),
+    enabled: !!token,
+  });
+
+  const progressQuery = useQuery<Progress>({
+    queryKey: ["respondent-progress"],
+    queryFn: () => respJson<Progress>("/respondent/progress"),
+    enabled: !!token,
+    refetchInterval: 30000,
+  });
+
+  useEffect(() => {
+    if (!respostasQuery.data) return;
+    const map: Record<string, string> = {};
+    for (const r of respostasQuery.data) map[r.perguntaId] = r.valor;
+    setLocalAnswers(map);
+  }, [respostasQuery.data]);
+
+  const batchSave = useCallback(
+    async (answers: Record<string, string>) => {
+      const respostas = Object.entries(answers).map(([perguntaId, valor]) => ({ perguntaId, valor }));
+      if (respostas.length === 0) return;
+      setIsSaving(true);
+      try {
+        const res = await respFetch("/respondent/respostas/batch", {
+          method: "POST",
+          body: JSON.stringify({ respostas }),
+        });
+        if (!res.ok) {
+          if (res.status === 409) {
+            toast({
+              variant: "destructive",
+              title: "Diagnóstico encerrado",
+              description: "Este diagnóstico já foi concluído pelo gestor.",
+            });
+          }
+          throw new Error("save failed");
+        }
+        setSaveError(false);
+        pendingAnswers.current = {};
+        qc.invalidateQueries({ queryKey: ["respondent-progress"] });
+      } catch {
+        setSaveError(true);
+        toast({
+          variant: "destructive",
+          title: "Falha ao salvar",
+          description: "Verifique sua conexão. Suas respostas ficarão salvas localmente.",
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [qc, toast],
+  );
+
+  const handleAnswer = useCallback(
+    (perguntaId: string, valor: string) => {
+      setLocalAnswers((prev) => ({ ...prev, [perguntaId]: valor }));
+      pendingAnswers.current[perguntaId] = valor;
+      if (autoSaveTimers.current[perguntaId]) clearTimeout(autoSaveTimers.current[perguntaId]);
+      autoSaveTimers.current[perguntaId] = setTimeout(() => {
+        batchSave({ [perguntaId]: pendingAnswers.current[perguntaId] ?? valor });
+      }, 800);
+    },
+    [batchSave],
+  );
+
+  const questions = questionsQuery.data ?? [];
+  const progress = progressQuery.data;
+  const pilarAnswered = useMemo(
+    () => questions.filter((q) => localAnswers[q.id] !== undefined && localAnswers[q.id] !== "").length,
+    [questions, localAnswers],
+  );
+  const pilarTotal = questions.length;
+  const pilarPct = pilarTotal > 0 ? Math.round((pilarAnswered / pilarTotal) * 100) : 0;
+  const globalPct =
+    progress && progress.totalGlobal > 0
+      ? Math.round((progress.answeredGlobal / progress.totalGlobal) * 100)
+      : 0;
+
+  if (!token || !ctx) return null;
+
+  if (questionsQuery.isLoading || respostasQuery.isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (questionsQuery.isError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <Card className="max-w-md">
+          <CardHeader>
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle>Sessão expirada</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-sm text-muted-foreground mb-4">
+              Seu link pode ter expirado. Solicite um novo convite ao gestor.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                clearRespondentSession();
+                navigate("/responder");
+              }}
+            >
+              Voltar
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const completed = pilarAnswered === pilarTotal && pilarTotal > 0;
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="sticky top-0 z-10 border-b border-border/40 bg-background/95 backdrop-blur">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-xs text-muted-foreground leading-none">IONEX360</p>
+              <p className="text-sm font-semibold leading-tight">{ctx.clinicNome ?? "Diagnóstico"}</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              clearRespondentSession();
+              navigate("/");
+            }}
+          >
+            <LogOut className="h-4 w-4 mr-1" /> Sair
+          </Button>
+        </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-6">
+        {saveError && (
+          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-start gap-2">
+            <WifiOff className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              <strong>Falha ao salvar.</strong> Verifique sua internet — vamos tentar novamente automaticamente.
+            </span>
+          </div>
+        )}
+
+        {/* Pilar header */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <Badge variant="secondary" className="mb-2">Seu pilar</Badge>
+                <CardTitle className="text-xl">{ctx.pilarNome}</CardTitle>
+                {ctx.responsavelNome && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Respondendo como <strong>{ctx.responsavelNome}</strong>
+                  </p>
+                )}
+              </div>
+              {isSaving && (
+                <Badge variant="outline" className="gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Salvando…
+                </Badge>
+              )}
+              {!isSaving && completed && (
+                <Badge variant="default" className="bg-green-600 hover:bg-green-600 gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Pilar concluído
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                <span>Progresso do seu pilar</span>
+                <span>{pilarAnswered} / {pilarTotal}</span>
+              </div>
+              <Progress value={pilarPct} />
+            </div>
+            <div>
+              <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                <span>Progresso geral do diagnóstico</span>
+                <span>{progress?.answeredGlobal ?? 0} / {progress?.totalGlobal ?? 0}</span>
+              </div>
+              <Progress value={globalPct} className="opacity-70" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {ctx.diagnosticoStatus === "concluido" && (
+          <div className="rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              Este diagnóstico já foi <strong>encerrado pelo gestor</strong>. Você pode revisar suas respostas, mas
+              elas não podem mais ser editadas.
+            </span>
+          </div>
+        )}
+
+        {/* Questions */}
+        <div className="flex flex-col gap-4">
+          {questions.map((q, idx) => (
+            <Card key={q.id}>
+              <CardHeader className="pb-3">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium leading-snug">{q.texto}</p>
+                    {q.dica && <p className="text-xs text-muted-foreground mt-1">{q.dica}</p>}
+                  </div>
+                  {localAnswers[q.id] !== undefined && localAnswers[q.id] !== "" && (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-1" />
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <QuestionControl
+                  pergunta={q}
+                  value={localAnswers[q.id]}
+                  onChange={(v) => handleAnswer(q.id, v)}
+                  disabled={ctx.diagnosticoStatus === "concluido"}
+                />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground text-center">
+          Suas respostas são salvas automaticamente. Você pode fechar a página e voltar pelo mesmo link.
+        </div>
+      </main>
+    </div>
+  );
+}

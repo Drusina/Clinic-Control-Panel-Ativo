@@ -34,6 +34,8 @@ import RelatoriosPage from "@/pages/relatorios/index";
 import IcsTemplatesPage from "@/pages/ics-templates/index";
 import AdminConfiguracoesPage from "@/pages/admin-configuracoes/index";
 import ConvitePage from "@/pages/convite/index";
+import ResponderEntrypoint from "@/pages/responder/index";
+import ResponderWizard from "@/pages/responder/wizard";
 import ClinicDocumentsPage from "@/pages/clinic-documents/index";
 import AssinarPage from "@/pages/assinar/index";
 import MeClinicasPage from "@/pages/me/clinicas";
@@ -115,6 +117,10 @@ function Router() {
       <Route path="/assinar/:token" component={AssinarPage} />
 
       <Route path="/convite" component={ConvitePage} />
+
+      {/* Public per-pilar respondent flow (no AppLayout, no auth gate). */}
+      <Route path="/responder" component={ResponderEntrypoint} />
+      <Route path="/responder/wizard" component={ResponderWizard} />
 
       {/* Multi-clinic chooser for team members (post-login landing). */}
       <Route path="/me/clinicas">
