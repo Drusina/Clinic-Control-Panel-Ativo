@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
-import { sendEmail, buildInviteEmail, resolveAppUrl } from "../lib/email.js";
+import { sendEmail, sendEmailDetailed, buildInviteEmail, resolveAppUrl } from "../lib/email.js";
 import { generateInviteCode } from "../middleware/auth";
 import { objectStorageClient } from "../lib/objectStorage";
 import { seedIcsData } from "../lib/ics-seed.js";
@@ -588,13 +588,24 @@ clinicsAdminRouter.post(
       magicLink: inviteLink,
       clinicName: clinic.nome ?? undefined,
     });
-    sendEmail({
+    const sendResult = await sendEmailDetailed({
       to: member.email,
       subject: `[IONEX360] Convite reenviado — ${clinic.nome}`,
       html: inviteHtml,
-    }).catch((err) => {
-      req.log?.warn?.({ err }, "resend-invite email send failed");
     });
+
+    if (!sendResult.ok) {
+      req.log?.warn?.(
+        { err: sendResult.error, status: sendResult.status, memberId: member.id },
+        "resend-invite email send failed",
+      );
+      const detail = sendResult.error ?? "falha desconhecida no provedor de e-mail";
+      res.status(502).json({
+        error: `Não foi possível enviar o e-mail de convite (${detail}). O link foi gerado e pode ser copiado manualmente.`,
+        inviteLink,
+      });
+      return;
+    }
 
     res.json({
       success: true,
