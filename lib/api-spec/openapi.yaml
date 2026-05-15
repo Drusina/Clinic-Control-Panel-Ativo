@@ -489,6 +489,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/InviteUserResponse"
 
+  /clinics/{id}/team/{teamMemberId}/resend-invite:
+    post:
+      operationId: resendClinicTeamInvite
+      tags: [clinics]
+      summary: Resend platform invite to an existing team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: teamMemberId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invite resent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteUserResponse"
+
   # ─── ACTIVITY ───────────────────────────────────────────────────────────────
   /clinics/{clinicId}/activity:
     get:
@@ -2338,6 +2362,8 @@ components:
         success:
           type: boolean
         message:
+          type: string
+        inviteLink:
           type: string
       required:
         - success

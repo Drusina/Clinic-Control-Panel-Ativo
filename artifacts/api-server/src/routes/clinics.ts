@@ -527,5 +527,82 @@ clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<vo
   });
 });
 
+clinicsAdminRouter.post(
+  "/clinics/:id/team/:teamMemberId/resend-invite",
+  async (req, res): Promise<void> => {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const teamMemberId = Array.isArray(req.params.teamMemberId)
+      ? req.params.teamMemberId[0]
+      : req.params.teamMemberId;
+
+    const [clinic] = await db.select().from(clinicsTable).where(eq(clinicsTable.id, id));
+    if (!clinic) {
+      res.status(404).json({ error: "Clínica não encontrada." });
+      return;
+    }
+
+    const [member] = await db
+      .select()
+      .from(teamTable)
+      .where(and(eq(teamTable.id, teamMemberId), eq(teamTable.clinicId, id)));
+    if (!member) {
+      res.status(404).json({ error: "Membro da equipe não encontrado nesta clínica." });
+      return;
+    }
+
+    if (!member.email) {
+      res.status(400).json({ error: "Este membro não possui e-mail cadastrado. Edite o cadastro antes de reenviar o convite." });
+      return;
+    }
+
+    if (!member.temAcessoPlataforma) {
+      res.status(400).json({ error: "Este membro não tem acesso à plataforma. Conceda acesso antes de reenviar o convite." });
+      return;
+    }
+
+    const appUrl = await resolveAppUrl(req);
+    const { code, hash, expiresAt } = generateInviteCode();
+    await db
+      .update(teamTable)
+      .set({
+        inviteCodeHash: hash,
+        inviteCodeExpiresAt: expiresAt,
+        inviteRedeemedAt: null,
+        inviteStatus: "pending",
+      })
+      .where(eq(teamTable.id, member.id));
+
+    const inviteLink = `${appUrl}/convite?code=${encodeURIComponent(code)}`;
+
+    await db.insert(clinicActivityTable).values({
+      clinicId: id,
+      tipo: "usuario_convidado",
+      titulo: `Convite reenviado para ${member.email}`,
+      descricao: `Perfil: ${member.funcao ?? "colaborador"}`,
+      autorNome: "Super Admin",
+    });
+
+    const inviteHtml = buildInviteEmail({
+      email: member.email,
+      role: member.funcao ?? "colaborador",
+      magicLink: inviteLink,
+      clinicName: clinic.nome ?? undefined,
+    });
+    sendEmail({
+      to: member.email,
+      subject: `[IONEX360] Convite reenviado — ${clinic.nome}`,
+      html: inviteHtml,
+    }).catch((err) => {
+      req.log?.warn?.({ err }, "resend-invite email send failed");
+    });
+
+    res.json({
+      success: true,
+      message: `Convite reenviado para ${member.email}.`,
+      inviteLink,
+    });
+  },
+);
+
 export { clinicsAdminRouter };
 export default router;

@@ -1896,6 +1896,97 @@ export const useInviteClinicUser = <
 };
 
 /**
+ * @summary Resend platform invite to an existing team member
+ */
+export const getResendClinicTeamInviteUrl = (
+  id: string,
+  teamMemberId: string,
+) => {
+  return `/api/clinics/${id}/team/${teamMemberId}/resend-invite`;
+};
+
+export const resendClinicTeamInvite = async (
+  id: string,
+  teamMemberId: string,
+  options?: RequestInit,
+): Promise<InviteUserResponse> => {
+  return customFetch<InviteUserResponse>(
+    getResendClinicTeamInviteUrl(id, teamMemberId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getResendClinicTeamInviteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendClinicTeamInvite>>,
+    TError,
+    { id: string; teamMemberId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resendClinicTeamInvite>>,
+  TError,
+  { id: string; teamMemberId: string },
+  TContext
+> => {
+  const mutationKey = ["resendClinicTeamInvite"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resendClinicTeamInvite>>,
+    { id: string; teamMemberId: string }
+  > = (props) => {
+    const { id, teamMemberId } = props ?? {};
+
+    return resendClinicTeamInvite(id, teamMemberId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResendClinicTeamInviteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendClinicTeamInvite>>
+>;
+
+export type ResendClinicTeamInviteMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Resend platform invite to an existing team member
+ */
+export const useResendClinicTeamInvite = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendClinicTeamInvite>>,
+    TError,
+    { id: string; teamMemberId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resendClinicTeamInvite>>,
+  TError,
+  { id: string; teamMemberId: string },
+  TContext
+> => {
+  return useMutation(getResendClinicTeamInviteMutationOptions(options));
+};
+
+/**
  * @summary Get clinic activity timeline
  */
 export const getGetClinicActivityUrl = (clinicId: string) => {

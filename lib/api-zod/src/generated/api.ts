@@ -630,6 +630,21 @@ export const InviteClinicUserBody = zod.object({
 export const InviteClinicUserResponse = zod.object({
   success: zod.boolean(),
   message: zod.string(),
+  inviteLink: zod.string().optional(),
+});
+
+/**
+ * @summary Resend platform invite to an existing team member
+ */
+export const ResendClinicTeamInviteParams = zod.object({
+  id: zod.coerce.string(),
+  teamMemberId: zod.coerce.string(),
+});
+
+export const ResendClinicTeamInviteResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
+  inviteLink: zod.string().optional(),
 });
 
 /**

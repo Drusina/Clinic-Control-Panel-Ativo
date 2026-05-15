@@ -6,6 +6,7 @@ import {
   useUpdateTeamMember,
   useDeleteTeamMember,
   useInviteClinicUser,
+  useResendClinicTeamInvite,
 } from "@workspace/api-client-react";
 import type { TeamMember, UpdateTeamMemberBody, InviteUserResponse } from "@workspace/api-client-react";
 import { formatDistanceToNow } from "date-fns";
@@ -86,6 +87,7 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
   });
 
   const inviteUser = useInviteClinicUser();
+  const resendInvite = useResendClinicTeamInvite();
   const updateMember = useUpdateTeamMember();
   const deleteMember = useDeleteTeamMember();
 
@@ -228,22 +230,41 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
+                              disabled={resendInvite.isPending}
                               onClick={() => {
-                                inviteUser.mutate(
-                                  { id: clinicId, data: { email: member.email ?? "", role: member.funcao ?? "colaborador" } },
+                                resendInvite.mutate(
+                                  { id: clinicId, teamMemberId: member.id },
                                   {
                                     onSuccess: (resp: InviteUserResponse) => {
+                                      toast({
+                                        title: "Convite reenviado",
+                                        description: `Enviado para ${member.email ?? member.nome}.`,
+                                      });
                                       if (resp.inviteLink) {
                                         setInviteLink(resp.inviteLink);
-                                      } else {
-                                        toast({ title: "Convite reenviado" });
                                       }
                                     },
-                                    onError: () => toast({ variant: "destructive", title: "Erro ao reenviar convite" }),
+                                    onError: async (err: unknown) => {
+                                      let description: string | undefined;
+                                      const maybeRes = (err as { response?: Response })?.response;
+                                      if (maybeRes && typeof maybeRes.json === "function") {
+                                        try {
+                                          const body = await maybeRes.json();
+                                          if (body?.error) description = body.error;
+                                        } catch {}
+                                      }
+                                      toast({
+                                        variant: "destructive",
+                                        title: "Erro ao reenviar convite",
+                                        description,
+                                      });
+                                    },
                                   }
                                 );
                               }}
+                              data-testid={`btn-resend-invite-${member.id}`}
                             >
+                              <Mail className="mr-2 h-4 w-4" />
                               Reenviar Convite
                             </DropdownMenuItem>
                             <DropdownMenuItem
