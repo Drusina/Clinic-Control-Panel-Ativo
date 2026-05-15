@@ -25,8 +25,20 @@ const INVITE_CODE_TTL_SECONDS = 72 * 60 * 60;
 
 export const INVITE_CODE_TTL_MS = INVITE_CODE_TTL_SECONDS * 1000;
 
+// Token length is intentionally short (12 bytes → 16 base64url chars).
+// Why: Outlook/Hotmail wraps quoted-printable email parts at 76 chars per
+// line. With our invite URL prefix `https://clinionex.com.br/convite?code=`
+// (~38 chars), longer tokens push the URL past that limit, the QP encoder
+// inserts a soft line break (a trailing `=`) inside the `<a href>`, and
+// some Outlook renderers fail to rejoin the line — the user clicks the
+// button and lands on `…/convite` with no `?code=…`, which 401s as
+// "Token de convite inválido ou expirado".
+// 12 random bytes still gives 96 bits of entropy, far more than needed
+// for a single-use token with a 72-hour TTL. Backwards-compatible: the
+// stored value is a SHA-256 hash (always 64 chars), so older long codes
+// still in users' inboxes continue to redeem normally until they expire.
 export function generateInviteCode(): { code: string; hash: string; expiresAt: Date } {
-  const code = randomBytes(32).toString("base64url");
+  const code = randomBytes(12).toString("base64url");
   const hash = createHash("sha256").update(code).digest("hex");
   const expiresAt = new Date(Date.now() + INVITE_CODE_TTL_MS);
   return { code, hash, expiresAt };
