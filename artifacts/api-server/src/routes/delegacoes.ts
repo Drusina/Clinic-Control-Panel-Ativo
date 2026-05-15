@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, count, sql } from "drizzle-orm";
-import { db, delegacoesTable, clinicsTable, risksTable, actionsTable, teamTable, diagnosticsTable } from "@workspace/db";
+import { db, delegacoesTable, delegacoesPerguntasTable, perguntasTable, clinicsTable, risksTable, actionsTable, teamTable, diagnosticsTable } from "@workspace/db";
 import { assertClinicAccess } from "../middleware/auth";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { z } from "zod";
@@ -18,7 +18,7 @@ import { sendPushToClinic, sendPushToEmail } from "../lib/push.js";
 
 const router: IRouter = Router();
 
-function mapDelegacao(d: typeof delegacoesTable.$inferSelect) {
+function mapDelegacao(d: typeof delegacoesTable.$inferSelect, perguntaIds?: string[]) {
   return {
     id: d.id,
     clinicId: d.clinicId,
@@ -33,6 +33,7 @@ function mapDelegacao(d: typeof delegacoesTable.$inferSelect) {
     questaoFim: d.questaoFim,
     parentId: d.parentId,
     observacoes: d.observacoes,
+    perguntaIds: perguntaIds ?? null,
     inviteSentAt: d.inviteSentAt ? d.inviteSentAt.toISOString() : null,
     inviteRedeemedAt: d.inviteRedeemedAt ? d.inviteRedeemedAt.toISOString() : null,
     inviteCodeExpiresAt: d.inviteCodeExpiresAt ? d.inviteCodeExpiresAt.toISOString() : null,
@@ -60,7 +61,7 @@ function deriveInviteStatus(d: typeof delegacoesTable.$inferSelect):
 const CreateDelegacaoBody = z.object({
   pilarSlug: z.string(),
   pilarNome: z.string(),
-  nivel: z.number().int().min(1).max(2).optional().default(1),
+  nivel: z.number().int().min(1).max(3).optional().default(1),
   responsavelNome: z.string().optional(),
   responsavelEmail: z.string().email().optional(),
   responsavelWhatsapp: z.string().optional(),
@@ -71,6 +72,10 @@ const CreateDelegacaoBody = z.object({
   parentId: z.string().uuid().optional(),
   observacoes: z.string().optional(),
   diagnosticoId: z.string().uuid().optional(),
+  // Nível 3: perguntas individuais ad-hoc (lote ou unitária)
+  perguntaIds: z.array(z.string().uuid()).optional(),
+  // Quando true, gera invite code e dispara e-mail imediatamente.
+  enviarConvite: z.boolean().optional().default(false),
 });
 
 const UpdateDelegacaoBody = z.object({
@@ -113,7 +118,22 @@ router.get("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => {
     .where(eq(delegacoesTable.clinicId, clinicId))
     .orderBy(delegacoesTable.nivel, delegacoesTable.createdAt);
 
-  res.json(delegacoes.map(mapDelegacao));
+  // Hidrata perguntaIds para nivel=3 (delegação ad-hoc por pergunta).
+  const n3Ids = delegacoes.filter((d) => d.nivel === 3).map((d) => d.id);
+  const perguntasByDeleg = new Map<string, string[]>();
+  if (n3Ids.length > 0) {
+    const links = await db
+      .select()
+      .from(delegacoesPerguntasTable)
+      .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${n3Ids})`);
+    for (const l of links) {
+      const arr = perguntasByDeleg.get(l.delegacaoId) ?? [];
+      arr.push(l.perguntaId);
+      perguntasByDeleg.set(l.delegacaoId, arr);
+    }
+  }
+
+  res.json(delegacoes.map((d) => mapDelegacao(d, perguntasByDeleg.get(d.id))));
 });
 
 router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => {
@@ -138,7 +158,33 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     parentId,
     observacoes,
     diagnosticoId,
+    perguntaIds,
+    enviarConvite,
   } = parsed.data;
+
+  // Para nível 3 (perguntas ad-hoc), perguntaIds é obrigatório.
+  if (nivel === 3 && (!perguntaIds || perguntaIds.length === 0)) {
+    res.status(400).json({ error: "Nível 3 requer perguntaIds com pelo menos uma pergunta." });
+    return;
+  }
+
+  // Valida que todas as perguntas existem e pertencem ao pilar informado.
+  let resolvedPerguntaIds: string[] | undefined;
+  if (nivel === 3 && perguntaIds && perguntaIds.length > 0) {
+    const found = await db
+      .select({ id: perguntasTable.id, pilarSlug: perguntasTable.pilarSlug })
+      .from(perguntasTable)
+      .where(sql`${perguntasTable.id} = ANY(${perguntaIds})`);
+    if (found.length !== perguntaIds.length) {
+      res.status(400).json({ error: "Uma ou mais perguntas não existem." });
+      return;
+    }
+    if (found.some((p) => p.pilarSlug !== pilarSlug)) {
+      res.status(400).json({ error: "Todas as perguntas devem pertencer ao mesmo pilar." });
+      return;
+    }
+    resolvedPerguntaIds = found.map((p) => p.id);
+  }
 
   const [delegacao] = await db
     .insert(delegacoesTable)
@@ -157,6 +203,54 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
       observacoes: observacoes ?? null,
     })
     .returning();
+
+  if (resolvedPerguntaIds && resolvedPerguntaIds.length > 0) {
+    await db.insert(delegacoesPerguntasTable).values(
+      resolvedPerguntaIds.map((pid) => ({ delegacaoId: delegacao.id, perguntaId: pid })),
+    );
+  }
+
+  // Se enviarConvite=true e tiver e-mail + diagnostico, gera invite imediatamente.
+  let inviteLink: string | null = null;
+  if (enviarConvite && responsavelEmail && diagnosticoId) {
+    try {
+      const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+      const { code, hash } = generateInviteCode();
+      const expiresAt = new Date(Date.now() + TTL_MS);
+      await db
+        .update(delegacoesTable)
+        .set({
+          inviteCodeHash: hash,
+          inviteCodeExpiresAt: expiresAt,
+          inviteSentAt: new Date(),
+          inviteRedeemedAt: null,
+          inviteDiagnosticoId: diagnosticoId,
+          updatedAt: new Date(),
+        })
+        .where(eq(delegacoesTable.id, delegacao.id));
+      const appUrl = await resolveAppUrl(req);
+      inviteLink = `${appUrl}/responder?code=${encodeURIComponent(code)}`;
+      const [clinicRow] = await db
+        .select({ nome: clinicsTable.nome })
+        .from(clinicsTable)
+        .where(eq(clinicsTable.id, clinicId))
+        .limit(1);
+      const html = buildRespondentInviteEmail({
+        responsavelNome: responsavelNome ?? "Responsável",
+        pilarNome,
+        clinicName: clinicRow?.nome ?? undefined,
+        prazo: prazo ?? null,
+        link: inviteLink,
+      });
+      sendEmail({
+        to: responsavelEmail,
+        subject: `[IONEX360] Convite — Diagnóstico 360°: ${pilarNome}`,
+        html,
+      }).catch(() => {});
+    } catch (err) {
+      req.log?.error({ err }, "Falha ao auto-enviar convite de delegação");
+    }
+  }
 
   const escopoLabel = describeDelegationScope({ nivel, questaoInicio, questaoFim });
 
@@ -242,7 +336,14 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     }
   }
 
-  res.status(201).json(mapDelegacao(delegacao));
+  // Re-read after potential invite update to get fresh invite columns.
+  const [final] = await db
+    .select()
+    .from(delegacoesTable)
+    .where(eq(delegacoesTable.id, delegacao.id))
+    .limit(1);
+  const out = mapDelegacao(final ?? delegacao, resolvedPerguntaIds);
+  res.status(201).json(inviteLink ? { ...out, inviteLink } : out);
 });
 
 router.patch("/delegacoes/:id", async (req, res): Promise<void> => {
@@ -321,10 +422,10 @@ router.post(
         .json({ error: "Adicione um e-mail de responsável antes de enviar o convite." });
       return;
     }
-    if (deleg.nivel !== 1) {
+    if (deleg.nivel !== 1 && deleg.nivel !== 3) {
       res
         .status(400)
-        .json({ error: "Convites individuais só são suportados para delegações de pilar inteiro (N1)." });
+        .json({ error: "Convites individuais só são suportados para delegações de pilar (N1) ou perguntas ad-hoc (N3)." });
       return;
     }
 
@@ -438,7 +539,7 @@ router.post("/clinics/:clinicId/delegacoes/seed", async (req, res): Promise<void
     )
     .returning();
 
-  res.status(201).json({ created: created.length, delegacoes: created.map(mapDelegacao) });
+  res.status(201).json({ created: created.length, delegacoes: created.map((d) => mapDelegacao(d)) });
 });
 
 router.delete("/delegacoes/:id", async (req, res): Promise<void> => {

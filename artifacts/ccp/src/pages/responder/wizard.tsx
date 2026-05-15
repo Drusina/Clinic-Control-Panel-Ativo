@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, AlertTriangle, CheckCircle2, WifiOff, Building2, LogOut, PartyPopper } from "lucide-react";
+import { Loader2, AlertTriangle, CheckCircle2, WifiOff, Building2, LogOut, PartyPopper, UserCheck, X } from "lucide-react";
+import { DelegateQuestionsModal } from "@/components/diagnostic/delegate-questions-modal";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,17 @@ interface Progress {
   answeredGlobal: number;
   pilarTotal: number;
   pilarAnswered: number;
+}
+
+interface DelegatedOut {
+  id: string;
+  responsavelNome: string | null;
+  responsavelEmail: string | null;
+  prazo: string | null;
+  status: string;
+  perguntaIds: string[];
+  inviteSentAt: string | null;
+  inviteRedeemedAt: string | null;
 }
 
 const ESCALA_LABELS: Record<number, { label: string; color: string }> = {
@@ -183,8 +195,20 @@ export default function ResponderWizard() {
   const [saveError, setSaveError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showThanks, setShowThanks] = useState(false);
+  const [selectedQs, setSelectedQs] = useState<Set<string>>(new Set());
+  const [delegateModal, setDelegateModal] = useState<{ perguntaIds: string[] } | null>(null);
   const pendingAnswers = useRef<Record<string, string>>({});
   const autoSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedQs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelectedQs(new Set()), []);
 
   const questionsQuery = useQuery<Pergunta[]>({
     queryKey: ["respondent-questions"],
@@ -204,6 +228,21 @@ export default function ResponderWizard() {
     enabled: !!token,
     refetchInterval: 30000,
   });
+
+  const delegatedOutQuery = useQuery<DelegatedOut[]>({
+    queryKey: ["respondent-delegated-out"],
+    queryFn: () => respJson<DelegatedOut[]>("/respondent/delegated-out"),
+    enabled: !!token,
+    refetchInterval: 30000,
+  });
+
+  const delegByPergunta = useMemo(() => {
+    const m = new Map<string, DelegatedOut>();
+    for (const d of delegatedOutQuery.data ?? []) {
+      for (const pid of d.perguntaIds) m.set(pid, d);
+    }
+    return m;
+  }, [delegatedOutQuery.data]);
 
   useEffect(() => {
     if (!respostasQuery.data) return;
@@ -443,33 +482,103 @@ export default function ResponderWizard() {
 
         {/* Questions */}
         <div className="flex flex-col gap-4">
-          {questions.map((q, idx) => (
-            <Card key={q.id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    {idx + 1}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium leading-snug">{q.texto}</p>
-                    {q.dica && <p className="text-xs text-muted-foreground mt-1">{q.dica}</p>}
+          {questions.map((q, idx) => {
+            const deleg = delegByPergunta.get(q.id);
+            const isSelected = selectedQs.has(q.id);
+            const canDelegate = ctx.diagnosticoStatus !== "concluido" && !deleg;
+            return (
+              <Card
+                key={q.id}
+                className={isSelected ? "ring-2 ring-violet-300 border-violet-300" : ""}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start gap-3">
+                    {canDelegate ? (
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 accent-violet-600 cursor-pointer"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(q.id)}
+                        aria-label={`Selecionar pergunta ${idx + 1} para delegar`}
+                      />
+                    ) : (
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {idx + 1}
+                      </span>
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm font-medium leading-snug">{q.texto}</p>
+                      {q.dica && <p className="text-xs text-muted-foreground mt-1">{q.dica}</p>}
+                      {deleg && (
+                        <Badge variant="secondary" className="text-[10px] mt-1 gap-1">
+                          <UserCheck className="h-3 w-3" />
+                          Delegada para {deleg.responsavelNome ?? deleg.responsavelEmail ?? "—"}
+                        </Badge>
+                      )}
+                    </div>
+                    {canDelegate && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs shrink-0"
+                        onClick={() => setDelegateModal({ perguntaIds: [q.id] })}
+                      >
+                        <UserCheck className="h-3 w-3 mr-1" /> Delegar
+                      </Button>
+                    )}
+                    {localAnswers[q.id] !== undefined && localAnswers[q.id] !== "" && (
+                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-1" />
+                    )}
                   </div>
-                  {localAnswers[q.id] !== undefined && localAnswers[q.id] !== "" && (
-                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-1" />
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <QuestionControl
-                  pergunta={q}
-                  value={localAnswers[q.id]}
-                  onChange={(v) => handleAnswer(q.id, v)}
-                  disabled={ctx.diagnosticoStatus === "concluido"}
-                />
-              </CardContent>
-            </Card>
-          ))}
+                </CardHeader>
+                <CardContent>
+                  <QuestionControl
+                    pergunta={q}
+                    value={localAnswers[q.id]}
+                    onChange={(v) => handleAnswer(q.id, v)}
+                    disabled={ctx.diagnosticoStatus === "concluido"}
+                  />
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
+
+        {selectedQs.size > 0 && ctx.diagnosticoStatus !== "concluido" && (
+          <div className="sticky bottom-4 z-20 mx-auto flex items-center gap-3 rounded-full border bg-background/95 backdrop-blur shadow-lg px-4 py-2">
+            <span className="text-sm font-medium">
+              {selectedQs.size} selecionada{selectedQs.size === 1 ? "" : "s"}
+            </span>
+            <Button
+              size="sm"
+              onClick={() => setDelegateModal({ perguntaIds: Array.from(selectedQs) })}
+            >
+              <UserCheck className="h-4 w-4 mr-1" /> Sub-delegar
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clearSelection}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
+        {delegateModal && (
+          <DelegateQuestionsModal
+            mode="respondent"
+            open
+            onClose={() => setDelegateModal(null)}
+            perguntaIds={delegateModal.perguntaIds}
+            pilarSlug={ctx.pilarSlug}
+            pilarNome={ctx.pilarNome}
+            diagnosticoId={ctx.diagnosticoId}
+            selfEmail={ctx.responsavelEmail}
+            preview={delegateModal.perguntaIds.map((pid) => {
+              const q = questions.find((x) => x.id === pid);
+              const idx = questions.findIndex((x) => x.id === pid);
+              return q ? `Q${idx + 1}: ${q.texto}` : pid;
+            })}
+            onSuccess={clearSelection}
+          />
+        )}
 
         <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground text-center">
           Suas respostas são salvas automaticamente. Você pode fechar a página e voltar pelo mesmo link.

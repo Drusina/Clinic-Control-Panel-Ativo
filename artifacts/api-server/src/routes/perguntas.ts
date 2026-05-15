@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, perguntasTable, respostasTable, diagnosticsTable, delegacoesTable, teamTable } from "@workspace/db";
+import { db, perguntasTable, respostasTable, diagnosticsTable, delegacoesTable, delegacoesPerguntasTable, teamTable } from "@workspace/db";
 import { eq, and, count } from "drizzle-orm";
 import { z } from "zod";
 import multer, { MulterError } from "multer";
@@ -454,7 +454,7 @@ router.get("/clinics/:clinicId/diagnostics/:diagnosticoId/hydrated", async (req,
     return;
   }
 
-  const [perguntas, respostas, delegacoes, teamMembers] = await Promise.all([
+  const [perguntas, respostas, delegacoes, delegPerguntas, teamMembers] = await Promise.all([
     db
       .select()
       .from(perguntasTable)
@@ -468,6 +468,14 @@ router.get("/clinics/:clinicId/diagnostics/:diagnosticoId/hydrated", async (req,
       .from(delegacoesTable)
       .where(eq(delegacoesTable.clinicId, clinicId))
       .orderBy(delegacoesTable.nivel, delegacoesTable.createdAt),
+    db
+      .select({
+        delegacaoId: delegacoesPerguntasTable.delegacaoId,
+        perguntaId: delegacoesPerguntasTable.perguntaId,
+      })
+      .from(delegacoesPerguntasTable)
+      .innerJoin(delegacoesTable, eq(delegacoesTable.id, delegacoesPerguntasTable.delegacaoId))
+      .where(eq(delegacoesTable.clinicId, clinicId)),
     db
       .select({
         id: teamTable.id,
@@ -515,7 +523,14 @@ router.get("/clinics/:clinicId/diagnostics/:diagnosticoId/hydrated", async (req,
       valor: r.valor,
       respondidoEm: r.respondidoEm.toISOString(),
     })),
-    delegacoes: delegacoes.map((d) => {
+    delegacoes: (() => {
+      const delegPerguntasMap = new Map<string, string[]>();
+      for (const dp of delegPerguntas) {
+        const arr = delegPerguntasMap.get(dp.delegacaoId) ?? [];
+        arr.push(dp.perguntaId);
+        delegPerguntasMap.set(dp.delegacaoId, arr);
+      }
+      return delegacoes.map((d) => {
       const now = new Date();
       let inviteStatus: "nao_enviado" | "enviado" | "aceito" | "expirado" = "nao_enviado";
       if (d.inviteCodeHash && d.inviteSentAt) {
@@ -540,13 +555,15 @@ router.get("/clinics/:clinicId/diagnostics/:diagnosticoId/hydrated", async (req,
         questaoFim: d.questaoFim,
         parentId: d.parentId,
         observacoes: d.observacoes,
+        perguntaIds: delegPerguntasMap.get(d.id) ?? null,
         inviteSentAt: d.inviteSentAt ? d.inviteSentAt.toISOString() : null,
         inviteRedeemedAt: d.inviteRedeemedAt ? d.inviteRedeemedAt.toISOString() : null,
         inviteCodeExpiresAt: d.inviteCodeExpiresAt ? d.inviteCodeExpiresAt.toISOString() : null,
         inviteDiagnosticoId: d.inviteDiagnosticoId ?? null,
         inviteStatus,
       };
-    }),
+    });
+    })(),
     team: teamMembers.map((m) => ({
       id: m.id,
       nome: m.nome,

@@ -15,9 +15,12 @@ import {
   AlertTriangle,
   WifiOff,
   BarChart3,
+  UserCheck,
+  X,
 } from "lucide-react";
-import { getStoredToken } from "@/hooks/use-auth";
+import { getStoredToken, useCurrentRole } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { DelegateQuestionsModal } from "@/components/diagnostic/delegate-questions-modal";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -60,6 +63,22 @@ interface Pergunta {
 interface Resposta {
   perguntaId: string;
   valor: string;
+}
+
+interface DelegacaoLite {
+  id: string;
+  nivel: number;
+  pilarSlug: string;
+  pilarNome: string;
+  responsavelNome: string | null;
+  responsavelEmail: string | null;
+  status: string;
+  perguntaIds: string[] | null;
+}
+
+interface DiagnosticDetail {
+  id: string;
+  clinicId: string;
 }
 
 const ESCALA_LABELS: Record<number, { label: string; color: string }> = {
@@ -206,9 +225,51 @@ export default function DiagnosticoWizard() {
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>({});
   const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [selectedQs, setSelectedQs] = useState<Set<string>>(new Set());
+  const [delegateModal, setDelegateModal] = useState<
+    | { perguntaIds: string[]; pilarSlug: string; pilarNome: string }
+    | null
+  >(null);
   const pendingAnswers = useRef<Record<string, string>>({});
   const autoSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const { toast } = useToast();
+  const { data: currentRole } = useCurrentRole();
+  const selfEmail = currentRole?.email ?? null;
+
+  const { data: diagnosticDetail } = useQuery<DiagnosticDetail>({
+    queryKey: ["diagnostic-detail", diagnosticoId],
+    queryFn: () => apiFetch(`/diagnostics/${diagnosticoId}`),
+    enabled: !!diagnosticoId,
+    staleTime: 5 * 60_000,
+  });
+  const clinicId = diagnosticDetail?.clinicId ?? null;
+
+  const { data: clinicDelegacoes } = useQuery<DelegacaoLite[]>({
+    queryKey: ["clinic-delegacoes", clinicId, diagnosticoId],
+    queryFn: () => apiFetch(`/clinics/${clinicId}/delegacoes`),
+    enabled: !!clinicId,
+    refetchInterval: 30_000,
+  });
+
+  const delegByPergunta = useMemo(() => {
+    const m = new Map<string, DelegacaoLite>();
+    for (const d of clinicDelegacoes ?? []) {
+      if (d.nivel !== 3 || !d.perguntaIds) continue;
+      for (const pid of d.perguntaIds) m.set(pid, d);
+    }
+    return m;
+  }, [clinicDelegacoes]);
+
+  const toggleSelectQ = useCallback((id: string) => {
+    setSelectedQs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedQs(new Set()), []);
 
   const { data: pillars, isLoading: loadingPillars } = useQuery<DiagnosticPillar[]>({
     queryKey: ["diagnostic-pillars"],
@@ -407,28 +468,67 @@ export default function DiagnosticoWizard() {
         <div className="flex flex-col gap-4">
           {pilarQuestions.map((pergunta) => {
             const isAnswered = localAnswers[pergunta.id] !== undefined;
+            const deleg = delegByPergunta.get(pergunta.id);
+            const isSelected = selectedQs.has(pergunta.id);
             return (
               <div
                 key={pergunta.id}
                 className={`rounded-xl border bg-card shadow-sm p-5 flex flex-col gap-4 transition-all ${
-                  isAnswered ? "border-green-200" : "border-border"
+                  isSelected
+                    ? "border-violet-400 ring-2 ring-violet-200"
+                    : isAnswered
+                    ? "border-green-200"
+                    : "border-border"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-muted-foreground font-medium">
-                        #{pergunta.ordem}
-                      </span>
-                      {isAnswered && (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                  <div className="flex items-start gap-3 flex-1">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 accent-violet-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                      checked={isSelected}
+                      disabled={!!deleg || !clinicId}
+                      onChange={() => toggleSelectQ(pergunta.id)}
+                      aria-label={`Selecionar pergunta ${pergunta.ordem} para delegar`}
+                      title={deleg ? "Já delegada" : undefined}
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-xs text-muted-foreground font-medium">
+                          #{pergunta.ordem}
+                        </span>
+                        {isAnswered && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                        )}
+                        {deleg && (
+                          <Badge variant="secondary" className="text-[10px] gap-1">
+                            <UserCheck className="h-3 w-3" />
+                            Delegada para {deleg.responsavelNome ?? deleg.responsavelEmail ?? "—"}
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="text-sm font-semibold leading-snug">{pergunta.texto}</h3>
+                      {pergunta.dica && (
+                        <p className="text-xs text-muted-foreground mt-1 italic">{pergunta.dica}</p>
                       )}
                     </div>
-                    <h3 className="text-sm font-semibold leading-snug">{pergunta.texto}</h3>
-                    {pergunta.dica && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">{pergunta.dica}</p>
-                    )}
                   </div>
+                  {!deleg && clinicId && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs shrink-0"
+                      onClick={() =>
+                        setDelegateModal({
+                          perguntaIds: [pergunta.id],
+                          pilarSlug: pergunta.pilarSlug,
+                          pilarNome: pergunta.pilarNome,
+                        })
+                      }
+                    >
+                      <UserCheck className="h-3 w-3 mr-1" /> Delegar
+                    </Button>
+                  )}
                 </div>
                 <QuestionControl
                   pergunta={pergunta}
@@ -439,6 +539,50 @@ export default function DiagnosticoWizard() {
             );
           })}
         </div>
+
+        {selectedQs.size > 0 && clinicId && (
+          <div className="sticky bottom-4 z-20 mx-auto flex items-center gap-3 rounded-full border bg-background/95 backdrop-blur shadow-lg px-4 py-2">
+            <span className="text-sm font-medium">
+              {selectedQs.size} pergunta{selectedQs.size === 1 ? "" : "s"} selecionada{selectedQs.size === 1 ? "" : "s"}
+            </span>
+            <Button
+              size="sm"
+              onClick={() => {
+                const selected = pilarQuestions.filter((q) => selectedQs.has(q.id));
+                if (selected.length === 0) return;
+                setDelegateModal({
+                  perguntaIds: selected.map((q) => q.id),
+                  pilarSlug: selected[0].pilarSlug,
+                  pilarNome: selected[0].pilarNome,
+                });
+              }}
+            >
+              <UserCheck className="h-4 w-4 mr-1" /> Delegar selecionadas
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clearSelection}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
+        {delegateModal && clinicId && (
+          <DelegateQuestionsModal
+            mode="admin"
+            open
+            onClose={() => setDelegateModal(null)}
+            perguntaIds={delegateModal.perguntaIds}
+            pilarSlug={delegateModal.pilarSlug}
+            pilarNome={delegateModal.pilarNome}
+            diagnosticoId={diagnosticoId}
+            clinicId={clinicId}
+            selfEmail={selfEmail}
+            preview={delegateModal.perguntaIds.map((pid) => {
+              const q = pilarQuestions.find((x) => x.id === pid);
+              return q ? `Q${q.ordem}: ${q.texto}` : pid;
+            })}
+            onSuccess={clearSelection}
+          />
+        )}
 
         <div className="flex items-center justify-between pt-2 pb-6">
           <Button

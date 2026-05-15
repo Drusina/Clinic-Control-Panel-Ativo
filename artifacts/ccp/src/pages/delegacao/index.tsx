@@ -711,15 +711,16 @@ function PilaresTable({
   }, [hydrated.questions]);
 
   const delegacoesByPilar = useMemo(() => {
-    const m = new Map<string, { n1?: Delegacao; n2s: Delegacao[] }>();
+    const m = new Map<string, { n1?: Delegacao; n2s: Delegacao[]; n3s: Delegacao[] }>();
     for (const d of delegacoes) {
       let bucket = m.get(d.pilarSlug);
       if (!bucket) {
-        bucket = { n2s: [] };
+        bucket = { n2s: [], n3s: [] };
         m.set(d.pilarSlug, bucket);
       }
       if (d.nivel === 1) bucket.n1 = d;
-      else bucket.n2s.push(d);
+      else if (d.nivel === 2) bucket.n2s.push(d);
+      else if (d.nivel === 3) bucket.n3s.push(d);
     }
     return m;
   }, [delegacoes]);
@@ -757,6 +758,7 @@ function PilaresTable({
               const bucket = delegacoesByPilar.get(pilar.slug);
               const n1 = bucket?.n1;
               const n2s = bucket?.n2s ?? [];
+              const n3s = bucket?.n3s ?? [];
               const status = n1?.status ?? "nao_delegado";
               const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.nao_delegado;
               const pct =
@@ -772,6 +774,7 @@ function PilaresTable({
                   respByPergunta={respByPergunta}
                   n1={n1}
                   n2s={n2s}
+                  n3s={n3s}
                   statusCfg={statusCfg}
                   pct={pct}
                   score={score}
@@ -838,6 +841,7 @@ interface PilarRowProps {
   respByPergunta: Map<string, RespostaTipo>;
   n1: Delegacao | undefined;
   n2s: Delegacao[];
+  n3s: Delegacao[];
   statusCfg: typeof STATUS_CONFIG[string];
   pct: number;
   score: number | undefined;
@@ -861,6 +865,7 @@ function PilarRow(props: PilarRowProps) {
     respByPergunta,
     n1,
     n2s,
+    n3s,
     statusCfg,
     pct,
     score,
@@ -1021,6 +1026,7 @@ function PilarRow(props: PilarRowProps) {
               questions={questions}
               respByPergunta={respByPergunta}
               n2s={n2s}
+              n3s={n3s}
               isSuperAdmin={isSuperAdmin}
               clinicId={clinicId}
               diagnosticoId={diagnosticoId}
@@ -1043,6 +1049,7 @@ function ExpandedPilar({
   questions,
   respByPergunta,
   n2s,
+  n3s,
   isSuperAdmin,
   clinicId,
   diagnosticoId,
@@ -1055,6 +1062,7 @@ function ExpandedPilar({
   questions: PerguntaTipo[];
   respByPergunta: Map<string, RespostaTipo>;
   n2s: Delegacao[];
+  n3s: Delegacao[];
   isSuperAdmin: boolean;
   clinicId: string;
   diagnosticoId: string;
@@ -1105,8 +1113,50 @@ function ExpandedPilar({
         ordem <= d.questaoFim
     );
 
+  // n3 (per-question) sub-delegations indexed by perguntaId
+  const n3ByPergunta = useMemo(() => {
+    const m = new Map<string, Delegacao>();
+    for (const d of n3s) {
+      const ids = (d as Delegacao & { perguntaIds?: string[] | null }).perguntaIds ?? [];
+      for (const pid of ids) m.set(pid, d);
+    }
+    return m;
+  }, [n3s]);
+
   return (
     <div className="space-y-3">
+      {n3s.length > 0 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="text-muted-foreground self-center">Sub-delegações por pergunta:</span>
+          {n3s.map((d) => {
+            const ids = (d as Delegacao & { perguntaIds?: string[] | null }).perguntaIds ?? [];
+            return (
+              <div
+                key={d.id}
+                className="inline-flex items-center gap-1.5 border border-violet-200 rounded px-2 py-1 bg-violet-50/50"
+              >
+                <span className="font-medium">{d.responsavelNome ?? "—"}</span>
+                <span className="text-muted-foreground">
+                  {ids.length} pergunta{ids.length === 1 ? "" : "s"}
+                </span>
+                <Badge variant={STATUS_CONFIG[d.status]?.variant ?? "outline"} className="text-[10px]">
+                  {STATUS_CONFIG[d.status]?.label ?? d.status}
+                </Badge>
+                <button
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => {
+                    if (confirm("Remover esta sub-delegação?")) onDeleteDelegacao(d.id);
+                  }}
+                  aria-label="Remover sub-delegação"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {n2s.length > 0 && (
         <div className="flex flex-wrap gap-2 text-xs">
           <span className="text-muted-foreground self-center">Sub-delegações:</span>
@@ -1173,7 +1223,11 @@ function ExpandedPilar({
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  {ownerN2 ? (
+                  {n3ByPergunta.get(q.id) ? (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {n3ByPergunta.get(q.id)!.responsavelNome ?? "—"}
+                    </Badge>
+                  ) : ownerN2 ? (
                     <Badge variant="secondary" className="text-[10px]">
                       {ownerN2.responsavelNome ?? "—"}
                     </Badge>

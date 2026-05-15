@@ -1,15 +1,17 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { createHash } from "crypto";
-import { and, eq, count, inArray } from "drizzle-orm";
+import { and, eq, count, inArray, sql } from "drizzle-orm";
 import {
   db,
   delegacoesTable,
+  delegacoesPerguntasTable,
   perguntasTable,
   respostasTable,
   diagnosticsTable,
   clinicsTable,
 } from "@workspace/db";
-import { signToken, verifyToken, extractToken } from "../middleware/auth.js";
+import { signToken, verifyToken, extractToken, generateInviteCode } from "../middleware/auth.js";
+import { sendEmail, buildRespondentInviteEmail, resolveAppUrl } from "../lib/email.js";
 // NOTE: respondents intentionally do NOT trigger recalculateScores. That helper
 // auto-promotes the diagnostic to status='concluido' when every question is
 // answered, which would let the *last* respondent to finish their pilar
@@ -29,6 +31,10 @@ interface RespondentClaims {
   pilarSlug: string;
   email: string;
   nome?: string;
+  // Quando presente, o respondente está restrito a este conjunto de perguntas
+  // (delegação nível 3 — perguntas ad-hoc, possivelmente sub-delegada por outro
+  // respondente). Quando ausente, o escopo é o pilar inteiro (N1).
+  perguntaIds?: string[];
 }
 
 declare global {
@@ -132,6 +138,17 @@ router.post("/auth/responder", async (req, res): Promise<void> => {
       .where(eq(delegacoesTable.id, deleg.id));
   }
 
+  // Se delegação for N3 (perguntas ad-hoc), incluímos os IDs no claim para
+  // restringir o escopo do respondente.
+  let perguntaIds: string[] | undefined;
+  if (deleg.nivel === 3) {
+    const rows = await db
+      .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
+      .from(delegacoesPerguntasTable)
+      .where(eq(delegacoesPerguntasTable.delegacaoId, deleg.id));
+    perguntaIds = rows.map((r) => r.perguntaId);
+  }
+
   const token = signToken(
     {
       role: "diagnostic_respondent",
@@ -141,6 +158,7 @@ router.post("/auth/responder", async (req, res): Promise<void> => {
       pilarSlug: deleg.pilarSlug,
       email: deleg.responsavelEmail,
       nome: deleg.responsavelNome ?? undefined,
+      ...(perguntaIds && perguntaIds.length > 0 ? { perguntaIds } : {}),
     },
     RESPONDENT_TTL_SECONDS,
   );
@@ -196,18 +214,47 @@ router.get("/respondent/context", requireRespondent, async (req, res): Promise<v
     responsavelNome: deleg.responsavelNome,
     responsavelEmail: deleg.responsavelEmail,
     prazo: deleg.prazo,
+    nivel: deleg.nivel,
+    perguntaIds: r.perguntaIds ?? null,
   });
 });
 
 router.get("/respondent/questions", requireRespondent, async (req, res): Promise<void> => {
   const r = req.respondent!;
+  // Base set: pilar inteiro OU subset ad-hoc (N3).
+  let baseIds: string[] | null = null;
+  if (r.perguntaIds && r.perguntaIds.length > 0) {
+    baseIds = r.perguntaIds;
+  }
+  // Excluir perguntas que ESTE respondente já delegou adiante (sub-delegações
+  // criadas a partir da delegação dele, parentId === r.delegacaoId).
+  const childDelegs = await db
+    .select({ id: delegacoesTable.id })
+    .from(delegacoesTable)
+    .where(eq(delegacoesTable.parentId, r.delegacaoId));
+  let excluded: Set<string> = new Set();
+  if (childDelegs.length > 0) {
+    const childIds = childDelegs.map((d) => d.id);
+    const childPerguntas = await db
+      .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
+      .from(delegacoesPerguntasTable)
+      .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${childIds})`);
+    excluded = new Set(childPerguntas.map((p) => p.perguntaId));
+  }
+
   const perguntas = await db
     .select()
     .from(perguntasTable)
-    .where(eq(perguntasTable.pilarSlug, r.pilarSlug))
+    .where(
+      baseIds
+        ? sql`${perguntasTable.id} = ANY(${baseIds})`
+        : eq(perguntasTable.pilarSlug, r.pilarSlug),
+    )
     .orderBy(perguntasTable.ordem);
+
+  const filtered = perguntas.filter((p) => !excluded.has(p.id));
   res.json(
-    perguntas.map((p) => ({
+    filtered.map((p) => ({
       id: p.id,
       pilarSlug: p.pilarSlug,
       pilarNome: p.pilarNome,
@@ -226,7 +273,14 @@ router.get("/respondent/questions", requireRespondent, async (req, res): Promise
 
 router.get("/respondent/respostas", requireRespondent, async (req, res): Promise<void> => {
   const r = req.respondent!;
-  // Only return answers for questions in this respondent's pilar.
+  // Only return answers for questions in this respondent's allowed scope
+  // (pillar minus questions delegated forward, or — for N3 tokens — only
+  // the explicitly assigned perguntaIds).
+  const allowed = await allowedPerguntaIds(r);
+  if (allowed.size === 0) {
+    res.json([]);
+    return;
+  }
   const rows = await db
     .select({
       id: respostasTable.id,
@@ -235,20 +289,16 @@ router.get("/respondent/respostas", requireRespondent, async (req, res): Promise
       respondidoEm: respostasTable.respondidoEm,
     })
     .from(respostasTable)
-    .innerJoin(perguntasTable, eq(perguntasTable.id, respostasTable.perguntaId))
-    .where(
-      and(
-        eq(respostasTable.diagnosticoId, r.diagnosticoId),
-        eq(perguntasTable.pilarSlug, r.pilarSlug),
-      ),
-    );
+    .where(eq(respostasTable.diagnosticoId, r.diagnosticoId));
   res.json(
-    rows.map((row) => ({
-      id: row.id,
-      perguntaId: row.perguntaId,
-      valor: row.valor,
-      respondidoEm: row.respondidoEm.toISOString(),
-    })),
+    rows
+      .filter((row) => allowed.has(row.perguntaId))
+      .map((row) => ({
+        id: row.id,
+        perguntaId: row.perguntaId,
+        valor: row.valor,
+        respondidoEm: row.respondidoEm.toISOString(),
+      })),
   );
 });
 
@@ -278,6 +328,36 @@ async function assertPerguntaInPilar(perguntaId: string, pilarSlug: string): Pro
   return !!p && p.pilarSlug === pilarSlug;
 }
 
+/**
+ * Returns the set of perguntaIds the current respondent is allowed to answer:
+ * the explicit perguntaIds claim (N3) ∩ pilar OR the entire pilar (N1) MINUS
+ * questions already sub-delegated forward by this respondent.
+ */
+async function allowedPerguntaIds(r: RespondentClaims): Promise<Set<string>> {
+  let base: string[];
+  if (r.perguntaIds && r.perguntaIds.length > 0) {
+    base = r.perguntaIds;
+  } else {
+    const rows = await db
+      .select({ id: perguntasTable.id })
+      .from(perguntasTable)
+      .where(eq(perguntasTable.pilarSlug, r.pilarSlug));
+    base = rows.map((p) => p.id);
+  }
+  const childDelegs = await db
+    .select({ id: delegacoesTable.id })
+    .from(delegacoesTable)
+    .where(eq(delegacoesTable.parentId, r.delegacaoId));
+  if (childDelegs.length === 0) return new Set(base);
+  const childIds = childDelegs.map((d) => d.id);
+  const child = await db
+    .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
+    .from(delegacoesPerguntasTable)
+    .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${childIds})`);
+  const excluded = new Set(child.map((c) => c.perguntaId));
+  return new Set(base.filter((id) => !excluded.has(id)));
+}
+
 router.put("/respondent/respostas/:perguntaId", requireRespondent, async (req, res): Promise<void> => {
   const r = req.respondent!;
   const perguntaId = Array.isArray(req.params.perguntaId) ? req.params.perguntaId[0] : req.params.perguntaId;
@@ -288,6 +368,11 @@ router.put("/respondent/respostas/:perguntaId", requireRespondent, async (req, r
   }
   if (!(await assertPerguntaInPilar(perguntaId, r.pilarSlug))) {
     res.status(403).json({ error: "Pergunta fora do escopo do pilar do respondente" });
+    return;
+  }
+  const allowed = await allowedPerguntaIds(r);
+  if (!allowed.has(perguntaId)) {
+    res.status(403).json({ error: "Pergunta fora do escopo do respondente (delegada adiante ou não atribuída)." });
     return;
   }
   if (!(await ensureDiagnosticOpen(r.diagnosticoId, res))) return;
@@ -319,15 +404,13 @@ router.post("/respondent/respostas/batch", requireRespondent, async (req, res): 
   }
   if (!(await ensureDiagnosticOpen(r.diagnosticoId, res))) return;
 
-  // Validate ALL perguntas are in the respondent's pilar.
+  // Validate ALL perguntas estão no escopo permitido (pilar OU subset ad-hoc),
+  // descontando o que o respondente já delegou adiante.
   const ids = respostas.map((x) => x.perguntaId);
-  const found = await db
-    .select({ id: perguntasTable.id, pilarSlug: perguntasTable.pilarSlug })
-    .from(perguntasTable);
-  const allowed = new Set(found.filter((p) => p.pilarSlug === r.pilarSlug).map((p) => p.id));
+  const allowed = await allowedPerguntaIds(r);
   for (const id of ids) {
     if (!allowed.has(id)) {
-      res.status(403).json({ error: "Uma ou mais perguntas estão fora do escopo do pilar." });
+      res.status(403).json({ error: "Uma ou mais perguntas estão fora do escopo do respondente." });
       return;
     }
   }
@@ -363,18 +446,17 @@ router.get("/respondent/progress", requireRespondent, async (req, res): Promise<
     .select({ value: count() })
     .from(respostasTable)
     .where(eq(respostasTable.diagnosticoId, r.diagnosticoId));
-  const [{ value: pilarTotal }] = await db
-    .select({ value: count() })
-    .from(perguntasTable)
-    .where(eq(perguntasTable.pilarSlug, r.pilarSlug));
-  const pilarAnsweredRows = await db
+  // pilarTotal = escopo do respondente (não o pilar inteiro quando ele recebeu N3)
+  const allowed = await allowedPerguntaIds(r);
+  const allowedIds = Array.from(allowed);
+  const pilarTotal = allowedIds.length;
+  const pilarAnsweredRows = allowedIds.length === 0 ? [] : await db
     .select({ id: respostasTable.id })
     .from(respostasTable)
-    .innerJoin(perguntasTable, eq(perguntasTable.id, respostasTable.perguntaId))
     .where(
       and(
         eq(respostasTable.diagnosticoId, r.diagnosticoId),
-        eq(perguntasTable.pilarSlug, r.pilarSlug),
+        sql`${respostasTable.perguntaId} = ANY(${allowedIds})`,
       ),
     );
   res.json({
@@ -383,6 +465,168 @@ router.get("/respondent/progress", requireRespondent, async (req, res): Promise<
     pilarTotal,
     pilarAnswered: pilarAnsweredRows.length,
   });
+});
+
+// ─── Sub-delegação a partir do respondente ──────────────────────────────────
+//
+// O respondente pode delegar adiante perguntas do seu próprio escopo. A nova
+// delegação é nivel=3, parent_id = sua delegação, herda o pilar e (se quiser)
+// dispara um convite por e-mail para o sub-respondente.
+router.post("/respondent/delegate", requireRespondent, async (req, res): Promise<void> => {
+  const r = req.respondent!;
+  const { perguntaIds, responsavelNome, responsavelEmail, prazo, observacoes, enviarConvite } =
+    req.body as {
+      perguntaIds?: string[];
+      responsavelNome?: string;
+      responsavelEmail?: string;
+      prazo?: string | null;
+      observacoes?: string | null;
+      enviarConvite?: boolean;
+    };
+
+  if (!Array.isArray(perguntaIds) || perguntaIds.length === 0) {
+    res.status(400).json({ error: "perguntaIds é obrigatório" });
+    return;
+  }
+  if (!responsavelEmail || !responsavelNome) {
+    res.status(400).json({ error: "Nome e e-mail do responsável são obrigatórios." });
+    return;
+  }
+  if (responsavelEmail.toLowerCase() === r.email.toLowerCase()) {
+    res.status(400).json({ error: "Você não pode delegar para o seu próprio e-mail." });
+    return;
+  }
+
+  const allowed = await allowedPerguntaIds(r);
+  for (const id of perguntaIds) {
+    if (!allowed.has(id)) {
+      res.status(403).json({ error: "Uma ou mais perguntas estão fora do seu escopo ou já foram delegadas." });
+      return;
+    }
+  }
+
+  // Carrega o pilar a partir das perguntas (já validadas como de um pilar via fluxo).
+  const [perguntaSample] = await db
+    .select({ pilarSlug: perguntasTable.pilarSlug, pilarNome: perguntasTable.pilarNome })
+    .from(perguntasTable)
+    .where(eq(perguntasTable.id, perguntaIds[0]))
+    .limit(1);
+  if (!perguntaSample) {
+    res.status(400).json({ error: "Pergunta inválida." });
+    return;
+  }
+
+  const [novaDeleg] = await db
+    .insert(delegacoesTable)
+    .values({
+      clinicId: r.clinicId,
+      pilarSlug: perguntaSample.pilarSlug,
+      pilarNome: perguntaSample.pilarNome,
+      nivel: 3,
+      responsavelNome,
+      responsavelEmail,
+      prazo: prazo ?? null,
+      status: "pendente",
+      questaoInicio: null,
+      questaoFim: null,
+      parentId: r.delegacaoId,
+      observacoes: observacoes ?? null,
+    })
+    .returning();
+
+  await db
+    .insert(delegacoesPerguntasTable)
+    .values(perguntaIds.map((pid) => ({ delegacaoId: novaDeleg.id, perguntaId: pid })));
+
+  let inviteLink: string | null = null;
+  if (enviarConvite) {
+    try {
+      const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+      const { code, hash } = generateInviteCode();
+      const expiresAt = new Date(Date.now() + TTL_MS);
+      await db
+        .update(delegacoesTable)
+        .set({
+          inviteCodeHash: hash,
+          inviteCodeExpiresAt: expiresAt,
+          inviteSentAt: new Date(),
+          inviteRedeemedAt: null,
+          inviteDiagnosticoId: r.diagnosticoId,
+          updatedAt: new Date(),
+        })
+        .where(eq(delegacoesTable.id, novaDeleg.id));
+      const appUrl = await resolveAppUrl(req);
+      inviteLink = `${appUrl}/responder?code=${encodeURIComponent(code)}`;
+      const [clinic] = await db
+        .select({ nome: clinicsTable.nome })
+        .from(clinicsTable)
+        .where(eq(clinicsTable.id, r.clinicId))
+        .limit(1);
+      const html = buildRespondentInviteEmail({
+        responsavelNome,
+        pilarNome: `${perguntaSample.pilarNome} (${perguntaIds.length} pergunta${perguntaIds.length > 1 ? "s" : ""})`,
+        clinicName: clinic?.nome ?? undefined,
+        prazo: prazo ?? null,
+        link: inviteLink,
+      });
+      sendEmail({
+        to: responsavelEmail,
+        subject: `[IONEX360] Convite — Diagnóstico 360°: ${perguntaSample.pilarNome}`,
+        html,
+      }).catch(() => {});
+    } catch (err) {
+      req.log?.error({ err }, "Falha ao enviar convite de sub-delegação");
+    }
+  }
+
+  res.status(201).json({
+    id: novaDeleg.id,
+    nivel: 3,
+    pilarSlug: novaDeleg.pilarSlug,
+    pilarNome: novaDeleg.pilarNome,
+    responsavelNome: novaDeleg.responsavelNome,
+    responsavelEmail: novaDeleg.responsavelEmail,
+    perguntaIds,
+    prazo: novaDeleg.prazo,
+    parentId: novaDeleg.parentId,
+    inviteLink,
+  });
+});
+
+// Lista as sub-delegações que ESTE respondente fez (para mostrar status na UI).
+router.get("/respondent/delegated-out", requireRespondent, async (req, res): Promise<void> => {
+  const r = req.respondent!;
+  const childDelegs = await db
+    .select()
+    .from(delegacoesTable)
+    .where(eq(delegacoesTable.parentId, r.delegacaoId));
+  if (childDelegs.length === 0) {
+    res.json([]);
+    return;
+  }
+  const childIds = childDelegs.map((d) => d.id);
+  const links = await db
+    .select()
+    .from(delegacoesPerguntasTable)
+    .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${childIds})`);
+  const byDeleg = new Map<string, string[]>();
+  for (const l of links) {
+    const arr = byDeleg.get(l.delegacaoId) ?? [];
+    arr.push(l.perguntaId);
+    byDeleg.set(l.delegacaoId, arr);
+  }
+  res.json(
+    childDelegs.map((d) => ({
+      id: d.id,
+      responsavelNome: d.responsavelNome,
+      responsavelEmail: d.responsavelEmail,
+      prazo: d.prazo,
+      status: d.status,
+      perguntaIds: byDeleg.get(d.id) ?? [],
+      inviteSentAt: d.inviteSentAt ? d.inviteSentAt.toISOString() : null,
+      inviteRedeemedAt: d.inviteRedeemedAt ? d.inviteRedeemedAt.toISOString() : null,
+    })),
+  );
 });
 
 export default router;
