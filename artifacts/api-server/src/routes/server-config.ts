@@ -230,6 +230,174 @@ async function handleTestEmail(req: import("express").Request, res: import("expr
 router.post("/admin/test-email", handleTestEmail);
 router.post("/admin/config/integrations/test-email", handleTestEmail);
 
+// ---------------------------------------------------------------------------
+// Resend domain verification status
+//
+// Surfaces the verification state of the sending domain in the admin panel
+// so the operator can see whether DNS (SPF/DKIM) is healthy without leaving
+// the app and clicking through to resend.com. The endpoint is a thin proxy
+// over Resend's `/domains/:id` API, plus a 30s in-memory cache to avoid
+// hammering the upstream when the panel polls.
+//
+// Domain id resolution (in order):
+//   1. RESEND_DOMAIN_ID env (explicit override)
+//   2. Domain whose `name` matches the host of `resend_from_address`
+//   3. First domain returned by the account (single-domain accounts)
+// ---------------------------------------------------------------------------
+
+interface ResendDomainRecord {
+  record: string;
+  name: string;
+  type: string;
+  status: string;
+  value?: string;
+  priority?: number;
+}
+
+interface ResendDomain {
+  id: string;
+  name: string;
+  status: string;
+  region?: string;
+  records?: ResendDomainRecord[];
+}
+
+interface DomainStatusCacheEntry {
+  fetchedAt: number;
+  payload: { name: string; status: string; region: string | null; records: ResendDomainRecord[] };
+}
+
+const DOMAIN_STATUS_CACHE_TTL_MS = 30_000;
+let domainStatusCache: DomainStatusCacheEntry | null = null;
+
+function invalidateDomainStatusCache(): void {
+  domainStatusCache = null;
+}
+
+async function getResendApiKey(): Promise<string | null> {
+  // Mirror sendEmail()/getConfig() precedence: db > env > integration.
+  const fromConfig = await getConfig("resend_api_key");
+  if (fromConfig) return fromConfig;
+  const connector = await getResendConnectorSettings();
+  return connector?.api_key ?? null;
+}
+
+async function resolveResendDomain(apiKey: string): Promise<ResendDomain | null> {
+  const explicitId = process.env.RESEND_DOMAIN_ID?.trim();
+  if (explicitId) {
+    const res = await fetch(`https://api.resend.com/domains/${explicitId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (res.ok) return (await res.json()) as ResendDomain;
+    logger.warn({ status: res.status }, "Resend domain lookup by RESEND_DOMAIN_ID failed");
+  }
+
+  const listRes = await fetch("https://api.resend.com/domains", {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!listRes.ok) {
+    logger.warn({ status: listRes.status }, "Resend /domains list failed");
+    return null;
+  }
+  const listBody = (await listRes.json()) as { data?: ResendDomain[] };
+  const domains = listBody.data ?? [];
+  if (domains.length === 0) return null;
+
+  const fromAddress = await getConfig("resend_from_address");
+  let targetName: string | null = null;
+  if (fromAddress) {
+    const m = fromAddress.match(/<?([^@<>\s]+)@([^>\s]+)>?\s*$/);
+    if (m) targetName = m[2].toLowerCase();
+  }
+
+  let pick = domains[0]!;
+  if (targetName) {
+    const match = domains.find(d => d.name.toLowerCase() === targetName);
+    if (match) pick = match;
+  }
+
+  // The list endpoint doesn't include `records`, so re-fetch by id to enrich.
+  const detailRes = await fetch(`https://api.resend.com/domains/${pick.id}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (detailRes.ok) return (await detailRes.json()) as ResendDomain;
+  return pick;
+}
+
+router.get("/admin/resend/domain-status", async (_req, res): Promise<void> => {
+  const now = Date.now();
+  if (domainStatusCache && now - domainStatusCache.fetchedAt < DOMAIN_STATUS_CACHE_TTL_MS) {
+    res.json(domainStatusCache.payload);
+    return;
+  }
+
+  const apiKey = await getResendApiKey();
+  if (!apiKey) {
+    res.status(400).json({ error: "Resend API Key não configurada" });
+    return;
+  }
+
+  try {
+    const domain = await resolveResendDomain(apiKey);
+    if (!domain) {
+      res.status(404).json({ error: "Nenhum domínio cadastrado no Resend para esta conta" });
+      return;
+    }
+
+    const payload = {
+      name: domain.name,
+      status: domain.status,
+      region: domain.region ?? null,
+      records: (domain.records ?? []).map(r => ({
+        record: r.record,
+        name: r.name,
+        type: r.type,
+        status: r.status,
+        ...(r.value !== undefined ? { value: r.value } : {}),
+        ...(r.priority !== undefined ? { priority: r.priority } : {}),
+      })),
+    };
+    domainStatusCache = { fetchedAt: now, payload };
+    res.json(payload);
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch Resend domain status");
+    res.status(502).json({ error: "Falha ao consultar status do domínio no Resend" });
+  }
+});
+
+router.post("/admin/resend/verify-domain", async (_req, res): Promise<void> => {
+  const apiKey = await getResendApiKey();
+  if (!apiKey) {
+    res.status(400).json({ error: "Resend API Key não configurada" });
+    return;
+  }
+
+  try {
+    const domain = await resolveResendDomain(apiKey);
+    if (!domain) {
+      res.status(404).json({ error: "Nenhum domínio cadastrado no Resend para esta conta" });
+      return;
+    }
+
+    const verifyRes = await fetch(`https://api.resend.com/domains/${domain.id}/verify`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!verifyRes.ok) {
+      const body = await verifyRes.text().catch(() => "");
+      logger.warn({ status: verifyRes.status, body: body.slice(0, 300) }, "Resend domain verify failed");
+      res.status(502).json({ error: "Resend recusou a verificação. Confirme se os registros DNS já propagaram." });
+      return;
+    }
+
+    invalidateDomainStatusCache();
+    res.json({ ok: true, domainId: domain.id, name: domain.name });
+  } catch (err) {
+    logger.error({ err }, "Failed to trigger Resend domain verification");
+    res.status(502).json({ error: "Falha ao acionar verificação no Resend" });
+  }
+});
+
 router.get("/admin/token-signing-secret/status", async (_req, res): Promise<void> => {
   const source = getTokenSigningSecretSource();
   // The `updated_at` column on the server_config row is bumped on every

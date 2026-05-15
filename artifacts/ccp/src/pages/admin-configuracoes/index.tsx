@@ -324,6 +324,122 @@ interface TestEmailResult {
   to?: string;
 }
 
+interface ResendDomainStatusResponse {
+  name: string;
+  status: string;
+  region: string | null;
+  records: Array<{ record: string; name: string; type: string; status: string }>;
+}
+
+function ResendDomainStatusCard({ disabled }: { disabled: boolean }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const query = useQuery<ResendDomainStatusResponse>({
+    queryKey: ["admin-resend-domain-status"],
+    queryFn: () => apiFetch<ResendDomainStatusResponse>("/api/admin/resend/domain-status"),
+    enabled: !disabled,
+    staleTime: 30_000,
+    // Poll while the domain is still in a non-terminal state so the operator
+    // sees verification flip to green without manually refreshing. Stops
+    // polling once verified (interval=false) — also skipped on errors so we
+    // don't hammer Resend if the API key is misconfigured.
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (q.state.error || !data) return false;
+      return data.status === "verified" ? false : 30_000;
+    },
+    retry: false,
+  });
+
+  const verifyMut = useMutation({
+    mutationFn: () =>
+      apiFetch<{ ok: boolean; name: string }>("/api/admin/resend/verify-domain", { method: "POST" }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["admin-resend-domain-status"] });
+      const fresh = await query.refetch();
+      if (fresh.data?.status === "verified") {
+        toast({ title: "Domínio verificado", description: `${fresh.data.name} está pronto para envio.` });
+      } else {
+        toast({
+          title: "Verificação solicitada",
+          description: "DNS ainda não confirmado. Aguarde a propagação (até algumas horas) e tente novamente.",
+        });
+      }
+    },
+    onError: (e: Error) => {
+      toast({ variant: "destructive", title: "Falha ao verificar domínio", description: e.message });
+    },
+  });
+
+  if (disabled) return null;
+
+  const status = query.data?.status;
+  const isVerified = status === "verified";
+  const isPending = status === "pending";
+  const isNotStarted = status === "not_started";
+
+  const recordsPending = (query.data?.records ?? []).filter(r => r.status !== "verified");
+
+  return (
+    <div className="mt-4 p-3 rounded-md border border-dashed bg-muted/30 space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Globe className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Domínio de envio</span>
+          {query.data?.name && <code className="text-xs font-mono text-muted-foreground">{query.data.name}</code>}
+        </div>
+        {query.isLoading ? (
+          <Badge variant="outline" className="gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" /> Carregando…
+          </Badge>
+        ) : query.isError ? (
+          <Badge variant="outline" className="bg-red-500/10 text-red-700 border-red-500/30 gap-1" data-testid="badge-resend-domain-status">
+            <XCircle className="h-3 w-3" /> Erro ao consultar
+          </Badge>
+        ) : isVerified ? (
+          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 gap-1" data-testid="badge-resend-domain-status">
+            <CheckCircle2 className="h-3 w-3" /> Domínio verificado
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30 gap-1" data-testid="badge-resend-domain-status">
+            <XCircle className="h-3 w-3" /> Domínio {isPending ? "aguardando DNS" : isNotStarted ? "não iniciado" : status ?? "desconhecido"}
+          </Badge>
+        )}
+      </div>
+
+      {query.isError && (
+        <p className="text-xs text-red-700">
+          {(query.error as Error)?.message ?? "Não foi possível consultar o status do domínio."}
+        </p>
+      )}
+
+      {!isVerified && !query.isLoading && !query.isError && (
+        <>
+          <p className="text-xs text-muted-foreground">
+            Os e-mails só serão enviados pelo domínio quando o Resend confirmar SPF e DKIM.
+            {recordsPending.length > 0 && (
+              <> Pendente: {recordsPending.map(r => `${r.type} ${r.name}`).join(", ")}.</>
+            )}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => verifyMut.mutate()}
+              disabled={verifyMut.isPending}
+              data-testid="button-resend-verify-domain"
+            >
+              {verifyMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+              Reverificar agora
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function EmailTestCard({ disabled }: { disabled: boolean }) {
   const { toast } = useToast();
   const [to, setTo] = useState("");
@@ -1037,6 +1153,7 @@ export default function AdminConfiguracoesPage() {
                   <li>Use o teste abaixo para validar o envio.</li>
                 </ol>
               </div>
+              <ResendDomainStatusCard disabled={!resendApiKeyConfigured} />
               <EmailTestCard disabled={!resendApiKeyConfigured} />
             </CardContent>
           </Card>

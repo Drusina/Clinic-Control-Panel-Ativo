@@ -96,6 +96,10 @@ Quando a chave vem da integração, o card no painel `/admin/configuracoes` most
    - **MX** (opcional, somente se for receber bounces): conforme instruções do Resend
 3. Aguarde a verificação (5min–algumas horas). Quando aparecer "Verified" no Resend, salve `noreply@clinionex.com.br` em **Endereço remetente (From)** no painel.
 
+## Status do domínio (Resend)
+
+`GET /api/admin/resend/domain-status` (super-admin) e `POST /api/admin/resend/verify-domain` (super-admin) — definidos em `routes/server-config.ts`. Usados pelo `ResendDomainStatusCard` em `/admin/configuracoes` para mostrar um badge **"Domínio verificado"** (verde) ou **"Domínio aguardando DNS / não iniciado"** (amarelo) com botão **"Reverificar agora"**. O endpoint resolve o `domain_id` em três níveis: (1) env `RESEND_DOMAIN_ID`, (2) match por host de `resend_from_address` na lista `GET /domains`, (3) primeiro domínio da conta. Cache em memória de 30s no `domain-status` para evitar rate-limit. A chave da Resend usada é a mesma resolvida por `getResendApiKey()` (db > env > integração).
+
 ## Endpoint de teste
 
 `POST /api/admin/test-email` (super-admin) — também acessível como `POST /api/admin/config/integrations/test-email` (alias usado pelo card de teste no painel).
