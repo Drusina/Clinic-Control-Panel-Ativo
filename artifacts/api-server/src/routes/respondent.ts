@@ -12,6 +12,7 @@ import {
 } from "@workspace/db";
 import { signToken, verifyToken, extractToken, generateInviteCode } from "../middleware/auth.js";
 import { sendEmail, buildRespondentInviteEmail, resolveAppUrl } from "../lib/email.js";
+import { resolveOwnedPerguntaIds } from "../lib/scope/delegation-ownership.js";
 // NOTE: respondents intentionally do NOT trigger recalculateScores. That helper
 // auto-promotes the diagnostic to status='concluido' when every question is
 // answered, which would let the *last* respondent to finish their pilar
@@ -329,33 +330,18 @@ async function assertPerguntaInPilar(perguntaId: string, pilarSlug: string): Pro
 }
 
 /**
- * Returns the set of perguntaIds the current respondent is allowed to answer:
- * the explicit perguntaIds claim (N3) ∩ pilar OR the entire pilar (N1) MINUS
- * questions already sub-delegated forward by this respondent.
+ * Returns the set of perguntaIds the current respondent is allowed to answer.
+ * Delega para o helper compartilhado `resolveOwnedPerguntaIds`, que implementa
+ * a regra de "deepest leaf" (escopo declarado MENOS perguntas já sub-delegadas
+ * adiante). Mesmo helper usado em qualquer caminho server-side que precise
+ * resolver propriedade efetiva dentro de uma cadeia indefinida.
  */
 async function allowedPerguntaIds(r: RespondentClaims): Promise<Set<string>> {
-  let base: string[];
-  if (r.perguntaIds && r.perguntaIds.length > 0) {
-    base = r.perguntaIds;
-  } else {
-    const rows = await db
-      .select({ id: perguntasTable.id })
-      .from(perguntasTable)
-      .where(eq(perguntasTable.pilarSlug, r.pilarSlug));
-    base = rows.map((p) => p.id);
-  }
-  const childDelegs = await db
-    .select({ id: delegacoesTable.id })
-    .from(delegacoesTable)
-    .where(eq(delegacoesTable.parentId, r.delegacaoId));
-  if (childDelegs.length === 0) return new Set(base);
-  const childIds = childDelegs.map((d) => d.id);
-  const child = await db
-    .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
-    .from(delegacoesPerguntasTable)
-    .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${childIds})`);
-  const excluded = new Set(child.map((c) => c.perguntaId));
-  return new Set(base.filter((id) => !excluded.has(id)));
+  return resolveOwnedPerguntaIds({
+    delegacaoId: r.delegacaoId,
+    explicitPerguntaIds: r.perguntaIds ?? null,
+    pilarSlug: r.pilarSlug,
+  });
 }
 
 router.put("/respondent/respostas/:perguntaId", requireRespondent, async (req, res): Promise<void> => {

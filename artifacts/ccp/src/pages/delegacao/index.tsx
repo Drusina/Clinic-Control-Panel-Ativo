@@ -720,7 +720,7 @@ function PilaresTable({
       }
       if (d.nivel === 1) bucket.n1 = d;
       else if (d.nivel === 2) bucket.n2s.push(d);
-      else if (d.nivel === 3) bucket.n3s.push(d);
+      else if (d.nivel >= 3) bucket.n3s.push(d);
     }
     return m;
   }, [delegacoes]);

@@ -118,8 +118,9 @@ router.get("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => {
     .where(eq(delegacoesTable.clinicId, clinicId))
     .orderBy(delegacoesTable.nivel, delegacoesTable.createdAt);
 
-  // Hidrata perguntaIds para nivel=3 (delegação ad-hoc por pergunta).
-  const n3Ids = delegacoes.filter((d) => d.nivel === 3).map((d) => d.id);
+  // Hidrata perguntaIds para QUALQUER delegação ad-hoc (qualquer nivel >= 3,
+  // incluindo sub-delegações profundas — cadeia indefinida).
+  const n3Ids = delegacoes.filter((d) => d.nivel >= 3).map((d) => d.id);
   const perguntasByDeleg = new Map<string, string[]>();
   if (n3Ids.length > 0) {
     const links = await db
