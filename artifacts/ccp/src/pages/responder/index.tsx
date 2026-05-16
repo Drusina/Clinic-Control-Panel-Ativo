@@ -92,7 +92,10 @@ export default function ResponderEntrypoint() {
           </div>
           <Button
             variant="outline"
-            onClick={() => navigate("/responder/saiu", { replace: true })}
+            onClick={() => {
+              clearRespondentSession();
+              navigate("/responder/saiu", { replace: true });
+            }}
           >
             Voltar
             <ArrowRight className="ml-2 h-4 w-4" />
