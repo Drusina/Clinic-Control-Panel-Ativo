@@ -90,7 +90,10 @@ export default function ResponderEntrypoint() {
             <Building2 className="h-3.5 w-3.5" />
             <span>IONEX360 — Diagnóstico 360°</span>
           </div>
-          <Button variant="outline" onClick={() => navigate("/")}>
+          <Button
+            variant="outline"
+            onClick={() => navigate("/responder/saiu", { replace: true })}
+          >
             Voltar
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>

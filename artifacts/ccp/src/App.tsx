@@ -36,6 +36,7 @@ import AdminConfiguracoesPage from "@/pages/admin-configuracoes/index";
 import ConvitePage from "@/pages/convite/index";
 import ResponderEntrypoint from "@/pages/responder/index";
 import ResponderWizard from "@/pages/responder/wizard";
+import ResponderSaiuPage from "@/pages/responder/saiu";
 import ClinicDocumentsPage from "@/pages/clinic-documents/index";
 import AssinarPage from "@/pages/assinar/index";
 import MeClinicasPage from "@/pages/me/clinicas";
@@ -121,6 +122,7 @@ function Router() {
       {/* Public per-pilar respondent flow (no AppLayout, no auth gate). */}
       <Route path="/responder" component={ResponderEntrypoint} />
       <Route path="/responder/wizard" component={ResponderWizard} />
+      <Route path="/responder/saiu" component={ResponderSaiuPage} />
 
       {/* Multi-clinic chooser for team members (post-login landing). */}
       <Route path="/me/clinicas">

@@ -342,8 +342,14 @@ export default function ResponderWizard() {
             <Button
               variant="outline"
               onClick={() => {
+                const clinic = ctx?.clinicNome;
                 clearRespondentSession();
-                navigate("/responder");
+                navigate(
+                  clinic
+                    ? `/responder/saiu?clinic=${encodeURIComponent(clinic)}`
+                    : "/responder/saiu",
+                  { replace: true },
+                );
               }}
             >
               Voltar
@@ -389,8 +395,14 @@ export default function ResponderWizard() {
               <Button
                 variant="ghost"
                 onClick={() => {
+                  const clinic = ctx?.clinicNome;
                   clearRespondentSession();
-                  navigate("/");
+                  navigate(
+                    clinic
+                      ? `/responder/saiu?clinic=${encodeURIComponent(clinic)}`
+                      : "/responder/saiu",
+                    { replace: true },
+                  );
                 }}
               >
                 Sair
@@ -418,8 +430,14 @@ export default function ResponderWizard() {
             variant="ghost"
             size="sm"
             onClick={() => {
+              const clinic = ctx?.clinicNome;
               clearRespondentSession();
-              navigate("/");
+              navigate(
+                clinic
+                  ? `/responder/saiu?clinic=${encodeURIComponent(clinic)}`
+                  : "/responder/saiu",
+                { replace: true },
+              );
             }}
           >
             <LogOut className="h-4 w-4 mr-1" /> Sair
