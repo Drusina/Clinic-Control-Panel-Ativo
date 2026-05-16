@@ -6,8 +6,13 @@ import { db, teamTable, clinicsTable } from "@workspace/db";
 import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
 import { generateInviteCode, assertClinicAccess, type AuthenticatedRequest as AuthRequest } from "../middleware/auth";
-import { sendEmail, buildInviteEmail, buildPushSetupEmail, resolveAppUrl } from "../lib/email.js";
+import { sendEmail, buildInviteEmail, buildPushSetupEmail, buildAcessoCriadoEmail, resolveAppUrl } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
+import {
+  generateProvisionalPassword,
+  hashPassword,
+  upsertCredential,
+} from "../lib/credentials.js";
 
 const BULK_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -83,42 +88,95 @@ export async function sendPushSetupEmail(member: typeof teamTable.$inferSelect, 
   });
 }
 
-async function dispatchPlatformInvite(member: typeof teamTable.$inferSelect, req?: Request): Promise<string> {
+/**
+ * Modelo NOVO (task #216): em vez do link mágico, geramos uma senha
+ * provisória, gravamos em `team_credentials` (por e-mail global) e enviamos
+ * "seu acesso: e-mail X, senha Y, login em /entrar". O usuário troca a
+ * senha no primeiro login. Mantemos o fallback legado (link mágico) apenas
+ * quando `?legacy=true` ou env `LEGACY_INVITE_EMAIL=true`.
+ */
+async function dispatchPlatformInvite(
+  member: typeof teamTable.$inferSelect,
+  req?: Request,
+  options?: { clinicName?: string; legacy?: boolean },
+): Promise<string> {
   if (!member.email) return "no_email";
 
-  const supabaseInvited = await dispatchSupabaseInvite(member.email);
+  const useLegacy = options?.legacy ?? process.env.LEGACY_INVITE_EMAIL === "true";
 
-  if (supabaseInvited) {
-    sendPushSetupEmail(member, req).catch(() => {});
-    return "sent";
+  if (useLegacy) {
+    // Caminho antigo — link mágico só. Mantém compat por ~30d.
+    const supabaseInvited = await dispatchSupabaseInvite(member.email);
+    if (supabaseInvited) {
+      sendPushSetupEmail(member, req).catch(() => {});
+      return "sent";
+    }
+    const appUrl = await resolveAppUrl(req);
+    const { code, hash, expiresAt } = generateInviteCode();
+    try {
+      await db.update(teamTable).set({
+        inviteCodeHash: hash,
+        inviteCodeExpiresAt: expiresAt,
+      }).where(eq(teamTable.id, member.id));
+    } catch {
+      return "pending";
+    }
+    const inviteLink = `${appUrl}/convite?code=${encodeURIComponent(code)}`;
+    const sent = await sendEmail({
+      to: member.email,
+      subject: `Você foi convidado para a plataforma IONEX360`,
+      html: buildInviteEmail({
+        email: member.email,
+        role: member.funcao ?? "colaborador",
+        magicLink: inviteLink,
+        clinicName: options?.clinicName,
+      }),
+    });
+    return sent ? "sent" : "pending";
   }
 
+  // Caminho NOVO — senha provisória + tela /entrar.
+  // Atomicidade: NUNCA rotacionamos a senha atual sem ter certeza que o
+  // e-mail saiu. Tenta enviar primeiro; só persiste o novo hash se o
+  // Resend aceitou. Caso contrário, devolve "pending" e a senha anterior
+  // continua válida — evita lockout operacional quando o provedor falha.
   const appUrl = await resolveAppUrl(req);
-  const { code, hash, expiresAt } = generateInviteCode();
-
-  try {
-    await db.update(teamTable).set({
-      inviteCodeHash: hash,
-      inviteCodeExpiresAt: expiresAt,
-    }).where(eq(teamTable.id, member.id));
-  } catch {
-    return "pending";
-  }
-
-  const inviteLink = `${appUrl}/convite?code=${encodeURIComponent(code)}`;
+  const loginLink = `${appUrl}/entrar`;
+  const provisionalPassword = generateProvisionalPassword();
 
   const sent = await sendEmail({
     to: member.email,
-    subject: `Você foi convidado para a plataforma IONEX360`,
-    html: buildInviteEmail({
+    subject: `[IONEX360] Seu acesso à plataforma`,
+    html: buildAcessoCriadoEmail({
+      nome: member.nome ?? "Usuário",
       email: member.email,
-      role: member.funcao ?? "colaborador",
-      magicLink: inviteLink,
+      senhaProvisoria: provisionalPassword,
+      loginLink,
+      clinicName: options?.clinicName,
     }),
   });
 
-  return sent ? "sent" : "pending";
+  if (!sent) {
+    logger.warn({ memberId: member.id }, "dispatchPlatformInvite: email send failed; keeping previous credential");
+    return "pending";
+  }
+
+  try {
+    const hash = await hashPassword(provisionalPassword);
+    await upsertCredential({
+      email: member.email,
+      passwordHash: hash,
+      provisional: true,
+    });
+  } catch (err) {
+    logger.error({ err, memberId: member.id }, "failed to upsert credential after email sent");
+    return "error";
+  }
+
+  return "sent";
 }
+
+export { dispatchPlatformInvite };
 
 // /team/all is a super-admin overview (it lists members across every clinic).
 // Mounted under requireAuth in routes/index.ts; we gate it inline because the

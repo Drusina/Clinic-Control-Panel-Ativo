@@ -540,6 +540,89 @@ export function buildOperatorSignatureNotificationEmail(params: {
   return baseTemplate(`[IONEX360] Termo assinado — ${params.clinicName}`, body);
 }
 
+export function buildAcessoCriadoEmail(params: {
+  nome: string;
+  email: string;
+  senhaProvisoria: string;
+  loginLink: string;
+  clinicName?: string;
+}): string {
+  const clinicLine = params.clinicName
+    ? `<tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Clínica</p>
+        <p style="margin:0;color:#3b82f6;font-weight:600;">${params.clinicName}</p>
+      </td></tr>`
+    : "";
+
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Seu acesso à plataforma IONEX360</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      Olá, <strong style="color:#e2e8f0;">${params.nome}</strong>. Seu acesso à plataforma foi habilitado.
+      Use as credenciais abaixo para entrar e, no primeiro login, será solicitado que você crie uma senha definitiva.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px;margin-bottom:24px;">
+      ${clinicLine}
+      <tr><td style="${params.clinicName ? "padding-top:16px;" : ""}">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">E-mail</p>
+        <p style="margin:0;color:#e2e8f0;font-weight:600;">${params.email}</p>
+      </td></tr>
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Senha provisória</p>
+        <p style="margin:0;"><code style="background:#1e2333;color:#fbbf24;font-size:16px;font-weight:700;padding:8px 14px;border-radius:6px;letter-spacing:2px;">${params.senhaProvisoria}</code></p>
+      </td></tr>
+    </table>
+
+    <p style="color:#94a3b8;font-size:14px;line-height:1.7;">
+      Acesse a plataforma e troque sua senha:
+    </p>
+
+    ${primaryButton(params.loginLink, "Acessar a plataforma →")}
+
+    <p style="color:#475569;font-size:12px;margin-top:8px;">
+      Ou copie e cole este link no navegador:<br/>
+      <span style="color:#3b82f6;word-break:break-all;">${params.loginLink}</span>
+    </p>
+
+    <p style="color:#475569;font-size:12px;margin-top:16px;">
+      Por segurança, esta senha é provisória e deve ser alterada no primeiro acesso.
+      Nunca compartilhe sua senha com terceiros.
+    </p>
+  `;
+  return baseTemplate("Seu acesso — IONEX360", body);
+}
+
+export function buildResetSenhaEmail(params: {
+  nome: string;
+  resetLink: string;
+}): string {
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Redefinir sua senha</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      Olá${params.nome ? `, <strong style="color:#e2e8f0;">${params.nome}</strong>` : ""}.
+      Recebemos um pedido para redefinir sua senha de acesso à plataforma IONEX360.
+    </p>
+
+    <p style="color:#94a3b8;font-size:14px;line-height:1.7;">
+      Clique no botão abaixo para escolher uma nova senha. Este link é válido por
+      <strong style="color:#e2e8f0;">1 hora</strong> e pode ser usado apenas uma vez.
+    </p>
+
+    ${primaryButton(params.resetLink, "Criar nova senha →")}
+
+    <p style="color:#475569;font-size:12px;margin-top:8px;">
+      Ou copie e cole este link no navegador:<br/>
+      <span style="color:#3b82f6;word-break:break-all;">${params.resetLink}</span>
+    </p>
+
+    <p style="color:#475569;font-size:12px;margin-top:16px;">
+      Se você não solicitou esta redefinição, pode ignorar este e-mail com segurança —
+      sua senha atual continuará valendo.
+    </p>
+  `;
+  return baseTemplate("Redefinir senha — IONEX360", body);
+}
+
 export function buildPushSetupEmail(params: { nome: string; activationLink: string }): string {
   const body = `
     <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Ative suas notificações push</h1>

@@ -9,6 +9,7 @@ export * from "./diagnostics";
 export * from "./actions";
 export * from "./risks";
 export * from "./team";
+export * from "./team_credentials";
 export * from "./faturas";
 export * from "./notifications";
 export * from "./perfil_operacional";

@@ -13,13 +13,17 @@ import EditClinic from "@/pages/clinics/edit";
 import ClinicDetail from "@/pages/clinics/detail";
 import Notifications from "@/pages/notifications/index";
 import AdminLogin from "@/pages/admin-login";
+import EntrarPage from "@/pages/entrar";
+import TrocarSenhaPage from "@/pages/trocar-senha";
+import EsqueciSenhaPage from "@/pages/esqueci-senha";
+import RedefinirSenhaPage from "@/pages/redefinir-senha";
 import KickoffPage from "@/pages/kickoff/index";
 import KickoffSelectPage from "@/pages/kickoff/select";
 import { SuperAdminGuard } from "@/components/super-admin-guard";
 import { ClinicAccessGuard } from "@/components/clinic-access-guard";
 import { TeamMemberToPortal } from "@/components/role-redirect";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
-import { getStoredToken, getActiveClinicId, useMyClinics } from "@/hooks/use-auth";
+import { getStoredToken, getActiveClinicId, useMyClinics, useCurrentRole } from "@/hooks/use-auth";
 import DiagnosticoSelectPage from "@/pages/diagnostico/select";
 import DiagnosticoWizard from "@/pages/diagnostico/wizard";
 import DiagnosticoResultado from "@/pages/diagnostico/resultado";
@@ -109,8 +113,44 @@ setAuthTokenGetter(getStoredToken);
 
 const queryClient = new QueryClient();
 
+/**
+ * Quando o team_member está com senha provisória, força redirecionamento
+ * para /trocar-senha (exceto se já estiver lá ou em telas públicas). Isso
+ * impede acesso ao app antes da troca de senha mesmo se ele navegar
+ * manualmente para qualquer URL interna.
+ */
+function ProvisionalPasswordGate({ children }: { children: React.ReactNode }) {
+  const [location, navigate] = useLocation();
+  const me = useCurrentRole();
+
+  const isAllowedWithoutSenha =
+    location === "/trocar-senha" ||
+    location === "/entrar" ||
+    location === "/esqueci-senha" ||
+    location === "/redefinir-senha" ||
+    location === "/admin/login" ||
+    location.startsWith("/convite") ||
+    location.startsWith("/assinar/") ||
+    location.startsWith("/responder");
+
+  useEffect(() => {
+    if (me.isLoading) return;
+    if (me.data?.role !== "team_member") return;
+    if (me.data?.senhaProvisoria === true && !isAllowedWithoutSenha) {
+      // Preserva o destino original (path + querystring) para que após a
+      // troca de senha o usuário volte exatamente onde tentou ir.
+      const search = typeof window !== "undefined" ? window.location.search : "";
+      const next = encodeURIComponent(`${location}${search}`);
+      navigate(`/trocar-senha?next=${next}`, { replace: true });
+    }
+  }, [me.isLoading, me.data?.role, me.data?.senhaProvisoria, isAllowedWithoutSenha, navigate, location]);
+
+  return <>{children}</>;
+}
+
 function Router() {
   return (
+    <ProvisionalPasswordGate>
     <Switch>
       <Route path="/admin/login" component={AdminLogin} />
 
@@ -118,6 +158,12 @@ function Router() {
       <Route path="/assinar/:token" component={AssinarPage} />
 
       <Route path="/convite" component={ConvitePage} />
+
+      {/* Login fixo por senha (task #216). */}
+      <Route path="/entrar" component={EntrarPage} />
+      <Route path="/esqueci-senha" component={EsqueciSenhaPage} />
+      <Route path="/redefinir-senha" component={RedefinirSenhaPage} />
+      <Route path="/trocar-senha" component={TrocarSenhaPage} />
 
       {/* Public per-pilar respondent flow (no AppLayout, no auth gate). */}
       <Route path="/responder" component={ResponderEntrypoint} />
@@ -715,6 +761,7 @@ function Router() {
       </Route>
       <Route component={NotFound} />
     </Switch>
+    </ProvisionalPasswordGate>
   );
 }
 

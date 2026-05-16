@@ -27,6 +27,8 @@ export interface CurrentUser {
   teamMemberId: string | null;
   /** Token version. v=1 (legacy) tokens carry clinicId/teamMemberId; v=2 are email-only. */
   v?: number;
+  /** true quando o team_member ainda está com senha provisória (precisa trocar antes de usar o app). */
+  senhaProvisoria?: boolean | null;
 }
 
 async function fetchCurrentRole(): Promise<CurrentUser> {
@@ -34,7 +36,7 @@ async function fetchCurrentRole(): Promise<CurrentUser> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${BASE}/api/auth/me`, { headers });
-  if (!res.ok) return { role: null, clinicId: null, nome: null, email: null, teamMemberId: null };
+  if (!res.ok) return { role: null, clinicId: null, nome: null, email: null, teamMemberId: null, senhaProvisoria: null };
   return res.json() as Promise<CurrentUser>;
 }
 

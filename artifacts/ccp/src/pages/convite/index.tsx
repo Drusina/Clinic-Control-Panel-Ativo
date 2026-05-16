@@ -181,9 +181,25 @@ export default function ConvitePage() {
           email: string | null;
           clinicId: string;
           teamMemberId: string;
+          senhaProvisoria?: boolean;
+          precisaCriarSenha?: boolean;
         };
 
         await switchSession(data.token);
+
+        // Task #216 — fluxo de migração do convite legado. Se este e-mail
+        // ainda não possui credencial (ou está marcado como provisório),
+        // mandamos direto para /trocar-senha (que detecta a flag e oferece o
+        // form "criar senha inicial"). Manteremos esse caminho até remover
+        // o convite mágico (~30 dias).
+        if (data.precisaCriarSenha || data.senhaProvisoria) {
+          if (data.precisaCriarSenha) {
+            sessionStorage.setItem("ccp_precisa_criar_senha", "1");
+          }
+          navigate("/trocar-senha", { replace: true });
+          return;
+        }
+
         setMemberInfo({
           nome: data.nome,
           funcao: data.funcao,

@@ -1,8 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
-import { sendEmail, sendEmailDetailed, buildInviteEmail, resolveAppUrl } from "../lib/email.js";
-import { generateInviteCode } from "../middleware/auth";
+import { dispatchPlatformInvite } from "./team.js";
 import { objectStorageClient } from "../lib/objectStorage";
 import { seedIcsData } from "../lib/ics-seed.js";
 import {
@@ -496,34 +495,33 @@ clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<vo
     memberId = newMember.id;
   }
 
-  const appUrl = await resolveAppUrl(req);
-  const { code, hash, expiresAt } = generateInviteCode();
-  await db.update(teamTable).set({
-    inviteCodeHash: hash,
-    inviteCodeExpiresAt: expiresAt,
-    inviteRedeemedAt: null,
-  }).where(eq(teamTable.id, memberId));
-  const inviteLink = `${appUrl}/convite?code=${encodeURIComponent(code)}`;
+  // Task #216: dispara o novo fluxo (senha provisória + tela /entrar) por
+  // padrão. Em caso de fallback legado define LEGACY_INVITE_EMAIL=true.
+  const [member] = await db.select().from(teamTable).where(eq(teamTable.id, memberId));
+  const status = member ? await dispatchPlatformInvite(member, req, { clinicName: clinic.nome ?? undefined }) : "error";
+  await db.update(teamTable).set({ inviteStatus: status }).where(eq(teamTable.id, memberId));
 
   await db.insert(clinicActivityTable).values({
     clinicId: id,
     tipo: "usuario_convidado",
-    titulo: `Convite enviado para ${email}`,
+    titulo: `Acesso enviado para ${email}`,
     descricao: `Perfil: ${role}`,
     autorNome: "Super Admin",
   });
 
-  const inviteHtml = buildInviteEmail({ email, role, magicLink: inviteLink, clinicName: clinic.nome ?? undefined });
-  sendEmail({
-    to: email,
-    subject: `[IONEX360] Você foi convidado para a plataforma — ${clinic.nome}`,
-    html: inviteHtml,
-  }).catch(() => {});
+  if (status !== "sent") {
+    req.log?.warn?.({ status, memberId }, "invite-user email send failed");
+    res.status(502).json({
+      error: "Não foi possível enviar o e-mail com a senha provisória. Verifique a configuração do Resend e tente novamente.",
+      status,
+    });
+    return;
+  }
 
   res.json({
     success: true,
-    message: `Convite enviado para ${email}. O usuário receberá um email com o link de acesso.`,
-    inviteLink,
+    message: `Acesso enviado para ${email}. O usuário receberá um e-mail com a senha provisória.`,
+    status,
   });
 });
 
@@ -560,57 +558,40 @@ clinicsAdminRouter.post(
       return;
     }
 
-    const appUrl = await resolveAppUrl(req);
-    const { code, hash, expiresAt } = generateInviteCode();
+    // Task #216: "Reenviar acesso" — gera nova senha provisória, grava em
+    // team_credentials e envia o e-mail "Seu acesso". O usuário será forçado
+    // a trocar a senha no próximo login. Quando LEGACY_INVITE_EMAIL=true,
+    // dispatchPlatformInvite cai no caminho antigo (link mágico).
+    const status = await dispatchPlatformInvite(member, req, {
+      clinicName: clinic.nome ?? undefined,
+    });
+
     await db
       .update(teamTable)
-      .set({
-        inviteCodeHash: hash,
-        inviteCodeExpiresAt: expiresAt,
-        inviteRedeemedAt: null,
-        inviteStatus: "pending",
-      })
+      .set({ inviteStatus: status, inviteRedeemedAt: null })
       .where(eq(teamTable.id, member.id));
-
-    const inviteLink = `${appUrl}/convite?code=${encodeURIComponent(code)}`;
 
     await db.insert(clinicActivityTable).values({
       clinicId: id,
       tipo: "usuario_convidado",
-      titulo: `Convite reenviado para ${member.email}`,
+      titulo: `Acesso reenviado para ${member.email}`,
       descricao: `Perfil: ${member.funcao ?? "colaborador"}`,
       autorNome: "Super Admin",
     });
 
-    const inviteHtml = buildInviteEmail({
-      email: member.email,
-      role: member.funcao ?? "colaborador",
-      magicLink: inviteLink,
-      clinicName: clinic.nome ?? undefined,
-    });
-    const sendResult = await sendEmailDetailed({
-      to: member.email,
-      subject: `[IONEX360] Convite reenviado — ${clinic.nome}`,
-      html: inviteHtml,
-    });
-
-    if (!sendResult.ok) {
-      req.log?.warn?.(
-        { err: sendResult.error, status: sendResult.status, memberId: member.id },
-        "resend-invite email send failed",
-      );
-      const detail = sendResult.error ?? "falha desconhecida no provedor de e-mail";
+    if (status !== "sent") {
+      req.log?.warn?.({ status, memberId: member.id }, "resend-invite email send failed");
       res.status(502).json({
-        error: `Não foi possível enviar o e-mail de convite (${detail}). O link foi gerado e pode ser copiado manualmente.`,
-        inviteLink,
+        error: "Não foi possível enviar o e-mail com a nova senha provisória. Verifique a configuração do Resend.",
+        status,
       });
       return;
     }
 
     res.json({
       success: true,
-      message: `Convite reenviado para ${member.email}.`,
-      inviteLink,
+      message: `Nova senha provisória enviada para ${member.email}.`,
+      status,
     });
   },
 );
