@@ -327,7 +327,7 @@ router.post("/auth/redefinir-senha", async (req, res): Promise<void> => {
     })
     .where(eq(teamCredentialsTable.id, credential.id));
 
-  res.json({ ok: true });
+  res.json({ ok: true, senhaProvisoria: false });
 });
 
 router.post("/auth/convite", async (req, res): Promise<void> => {
