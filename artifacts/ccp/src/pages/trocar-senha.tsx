@@ -67,7 +67,16 @@ export default function TrocarSenhaPage() {
         return;
       }
       sessionStorage.removeItem("ccp_precisa_criar_senha");
-      await qc.invalidateQueries({ queryKey: ["auth", "me"] });
+      // Atualiza o cache de /auth/me imediatamente (antes do navigate) para
+      // que o ProvisionalPasswordGate não veja `senhaProvisoria=true` stale
+      // e bounce o usuário de volta para /trocar-senha durante o refetch.
+      qc.setQueryData<{ senhaProvisoria: boolean | null } | undefined>(
+        ["auth", "me"],
+        (prev) => (prev ? { ...prev, senhaProvisoria: false } : prev),
+      );
+      // Dispara o refetch em background para sincronizar com o servidor,
+      // mas não bloqueia a navegação.
+      qc.invalidateQueries({ queryKey: ["auth", "me"] });
       // Respeita ?next= injetado pelo ProvisionalPasswordGate; fallback para
       // a lista de clínicas do usuário.
       let dest = "/me/clinicas";

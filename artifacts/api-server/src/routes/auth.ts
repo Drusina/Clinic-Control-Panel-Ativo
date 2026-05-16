@@ -220,7 +220,7 @@ router.post("/auth/trocar-senha", requireAuth, async (req, res): Promise<void> =
 
   const newHash = await hashPassword(novaSenha);
   await upsertCredential({ email, passwordHash: newHash, provisional: false });
-  res.json({ ok: true });
+  res.json({ ok: true, senhaProvisoria: false });
 });
 
 /**
@@ -445,7 +445,7 @@ router.post("/auth/criar-senha-inicial", requireAuth, async (req, res): Promise<
 
   const newHash = await hashPassword(novaSenha);
   await upsertCredential({ email, passwordHash: newHash, provisional: false });
-  res.json({ ok: true });
+  res.json({ ok: true, senhaProvisoria: false });
 });
 
 router.get("/auth/me", async (req, res): Promise<void> => {
