@@ -6,12 +6,13 @@ import { db, teamTable, clinicsTable } from "@workspace/db";
 import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
 import { generateInviteCode, assertClinicAccess, type AuthenticatedRequest as AuthRequest } from "../middleware/auth";
-import { sendEmail, buildInviteEmail, buildPushSetupEmail, buildAcessoCriadoEmail, resolveAppUrl } from "../lib/email.js";
+import { sendEmail, buildInviteEmail, buildPushSetupEmail, buildAcessoCriadoEmail, buildAcessoHabilitadoEmail, resolveAppUrl } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
 import {
   generateProvisionalPassword,
   hashPassword,
   upsertCredential,
+  findCredentialByEmail,
 } from "../lib/credentials.js";
 
 const BULK_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -98,7 +99,7 @@ export async function sendPushSetupEmail(member: typeof teamTable.$inferSelect, 
 async function dispatchPlatformInvite(
   member: typeof teamTable.$inferSelect,
   req?: Request,
-  options?: { clinicName?: string; legacy?: boolean },
+  options?: { clinicName?: string; legacy?: boolean; rotate?: boolean },
 ): Promise<string> {
   if (!member.email) return "no_email";
 
@@ -135,13 +136,41 @@ async function dispatchPlatformInvite(
     return sent ? "sent" : "pending";
   }
 
-  // Caminho NOVO — senha provisória + tela /entrar.
-  // Atomicidade: NUNCA rotacionamos a senha atual sem ter certeza que o
-  // e-mail saiu. Tenta enviar primeiro; só persiste o novo hash se o
-  // Resend aceitou. Caso contrário, devolve "pending" e a senha anterior
-  // continua válida — evita lockout operacional quando o provedor falha.
+  // Caminho NOVO — senha por IDENTIDADE (e-mail), não por clínica.
+  // Regra (task #216):
+  //   - Se já existe credencial para esse e-mail e o caller NÃO pediu
+  //     rotação explícita (rotate=false, default), mantemos a senha atual
+  //     e mandamos apenas o aviso "acesso habilitado para a nova clínica".
+  //   - Se não existe credencial (primeiro acesso) OU rotate=true (botão
+  //     "Reenviar acesso"), geramos uma nova senha provisória.
+  // Atomicidade: NUNCA rotacionamos sem confirmar entrega do e-mail —
+  // envia primeiro, persiste depois.
   const appUrl = await resolveAppUrl(req);
   const loginLink = `${appUrl}/entrar`;
+
+  const existing = await findCredentialByEmail(member.email);
+  const shouldRotate = options?.rotate === true || !existing;
+
+  if (!shouldRotate) {
+    // Identidade reaproveitada: apenas avisa que a nova clínica está
+    // disponível. Não toca em senha nem em flags.
+    const sent = await sendEmail({
+      to: member.email,
+      subject: `[IONEX360] Acesso habilitado${options?.clinicName ? ` — ${options.clinicName}` : ""}`,
+      html: buildAcessoHabilitadoEmail({
+        nome: member.nome ?? "Usuário",
+        email: member.email,
+        loginLink,
+        clinicName: options?.clinicName,
+      }),
+    });
+    if (!sent) {
+      logger.warn({ memberId: member.id }, "dispatchPlatformInvite(notice): email send failed");
+      return "pending";
+    }
+    return "sent";
+  }
+
   const provisionalPassword = generateProvisionalPassword();
 
   const sent = await sendEmail({

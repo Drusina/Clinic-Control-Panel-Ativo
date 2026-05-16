@@ -462,7 +462,8 @@ clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<vo
     return;
   }
 
-  const { email, role } = parsed.data;
+  const { email: emailRaw, role } = parsed.data;
+  const email = emailRaw.trim().toLowerCase();
 
   const [clinic] = await db.select().from(clinicsTable).where(eq(clinicsTable.id, id));
   if (!clinic) {
@@ -558,12 +559,16 @@ clinicsAdminRouter.post(
       return;
     }
 
-    // Task #216: "Reenviar acesso" — gera nova senha provisória, grava em
-    // team_credentials e envia o e-mail "Seu acesso". O usuário será forçado
-    // a trocar a senha no próximo login. Quando LEGACY_INVITE_EMAIL=true,
-    // dispatchPlatformInvite cai no caminho antigo (link mágico).
+    // Task #216: "Reenviar acesso" é a única operação que ROTACIONA a
+    // credencial intencionalmente — gera nova senha provisória, grava em
+    // team_credentials e envia "Seu acesso". O usuário será forçado a trocar
+    // a senha no próximo login. invite-user e habilitar acesso pela 1ª vez
+    // (PATCH /team/:id) NÃO rotacionam — preservam a senha por identidade.
+    // Quando LEGACY_INVITE_EMAIL=true, dispatchPlatformInvite cai no caminho
+    // antigo (link mágico).
     const status = await dispatchPlatformInvite(member, req, {
       clinicName: clinic.nome ?? undefined,
+      rotate: true,
     });
 
     await db

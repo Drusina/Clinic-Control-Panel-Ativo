@@ -592,6 +592,38 @@ export function buildAcessoCriadoEmail(params: {
   return baseTemplate("Seu acesso — IONEX360", body);
 }
 
+/**
+ * Task #216 — quando um e-mail já tem credencial e ganha acesso a uma nova
+ * clínica, NÃO rotacionamos a senha. Avisamos que a clínica está disponível
+ * no seletor com a senha que já existe.
+ */
+export function buildAcessoHabilitadoEmail(params: {
+  nome: string;
+  email: string;
+  loginLink: string;
+  clinicName?: string;
+}): string {
+  const clinicLine = params.clinicName
+    ? `<p style="margin:0 0 16px 0;color:#94a3b8;font-size:14px;">Nova clínica disponível: <strong style="color:#3b82f6;">${params.clinicName}</strong></p>`
+    : "";
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Acesso habilitado</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 16px 0;">
+      Olá, <strong style="color:#e2e8f0;">${params.nome}</strong>. Seu acesso à plataforma IONEX360 foi habilitado para uma nova clínica.
+    </p>
+    ${clinicLine}
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      Use seu e-mail (<strong style="color:#e2e8f0;">${params.email}</strong>) e a <strong style="color:#e2e8f0;">senha que você já usa</strong>
+      na plataforma. A nova clínica aparecerá no seletor após o login.
+    </p>
+    ${primaryButton(params.loginLink, "Acessar a plataforma →")}
+    <p style="color:#475569;font-size:12px;margin-top:16px;">
+      Esqueceu a senha? Use a opção "Esqueci minha senha" na tela de login.
+    </p>
+  `;
+  return baseTemplate("Acesso habilitado — IONEX360", body);
+}
+
 export function buildResetSenhaEmail(params: {
   nome: string;
   resetLink: string;

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import type { Request } from "express";
 import { createHash } from "crypto";
-import { and, eq, isNull, gt } from "drizzle-orm";
+import { and, eq, isNull, gt, sql } from "drizzle-orm";
 import { signToken, verifyToken, extractToken, requireAuth, type AuthenticatedRequest } from "../middleware/auth";
 import { db, teamTable, teamCredentialsTable } from "@workspace/db";
 import {
@@ -149,13 +149,12 @@ router.post("/auth/entrar", async (req, res): Promise<void> => {
     .where(eq(teamCredentialsTable.id, credential.id));
 
   // Atualiza lastAccessAt em todas as linhas equipe_interna desse e-mail.
-  await db
-    .update(teamTable)
-    .set({ lastAccessAt: new Date() })
-    .where(
-      // eq case-insensitive
-      eq(teamTable.email, email),
-    );
+  // Case-insensitive porque a coluna `email` em equipe_interna não tem
+  // normalização garantida (caminhos antigos podem ter persistido com
+  // case misto).
+  await db.execute(
+    sql`UPDATE equipe_interna SET last_access_at = NOW() WHERE LOWER(email) = ${email}`,
+  );
 
   clearThrottle(req);
 
