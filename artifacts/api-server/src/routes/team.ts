@@ -244,6 +244,12 @@ router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
     return;
   }
 
+  // Task #220: respondente_diagnostico NUNCA acessa a plataforma — força false
+  // mesmo se o frontend enviar true. O link real é tokenizado e sai pelo
+  // módulo Delegação, não pelo fluxo de senha provisória.
+  const isRespondente = parsed.data.funcao === "respondente_diagnostico";
+  const temAcessoEffective = isRespondente ? false : (parsed.data.temAcessoPlataforma ?? false);
+
   let member: typeof teamTable.$inferSelect;
   try {
     [member] = await db
@@ -261,7 +267,7 @@ router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
         dataAdmissao: parsed.data.dataAdmissao ?? null,
         respondeA: parsed.data.respondeA ?? null,
         observacoes: parsed.data.observacoes ?? null,
-        temAcessoPlataforma: parsed.data.temAcessoPlataforma ?? false,
+        temAcessoPlataforma: temAcessoEffective,
       })
       .returning();
   } catch (err) {
@@ -272,7 +278,9 @@ router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
     throw err;
   }
 
-  if (parsed.data.temAcessoPlataforma && parsed.data.email) {
+  // Task #220: usa o valor EFETIVO — respondente_diagnostico (temAcessoEffective=false)
+  // nunca dispara invite, mesmo se o cliente enviar temAcessoPlataforma=true.
+  if (temAcessoEffective && parsed.data.email) {
     try {
       const status = await dispatchPlatformInvite(member, req);
       await db.update(teamTable).set({ inviteStatus: status, inviteRedeemedAt: null }).where(eq(teamTable.id, member.id));
@@ -317,8 +325,27 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
   if (d.respondeA !== undefined) updates.respondeA = d.respondeA;
   if (d.observacoes !== undefined) updates.observacoes = d.observacoes;
 
-  const enablingAccess = d.temAcessoPlataforma === true && !existing.temAcessoPlataforma;
+  // Task #220: respondente_diagnostico NUNCA tem acesso à plataforma. Se a
+  // função final (após update) for respondente, sobrescrevemos qualquer
+  // tentativa de habilitar acesso e revogamos o acesso atual silenciosamente.
+  const funcaoFinal = d.funcao !== undefined ? d.funcao : existing.funcao;
+  const isRespondenteFinal = funcaoFinal === "respondente_diagnostico";
+
+  let enablingAccess = d.temAcessoPlataforma === true && !existing.temAcessoPlataforma;
   if (d.temAcessoPlataforma != null) updates.temAcessoPlataforma = d.temAcessoPlataforma;
+
+  if (isRespondenteFinal) {
+    updates.temAcessoPlataforma = false;
+    enablingAccess = false;
+    if (existing.temAcessoPlataforma) {
+      // "Rebaixou" um usuário com acesso para respondente — limpa convite.
+      updates.inviteStatus = null;
+      updates.inviteRedeemedAt = null;
+      updates.inviteCodeHash = null;
+      updates.inviteCodeExpiresAt = null;
+      await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.teamMemberId, id));
+    }
+  }
 
   if (enablingAccess) {
     const emailToUse = d.email ?? existing.email;
@@ -404,7 +431,7 @@ router.post("/clinics/:clinicId/team/bulk-invite", async (req, res): Promise<voi
     .where(and(eq(teamTable.clinicId, clinicId), inArray(teamTable.id, memberIds)));
 
   const foundIds = new Set(members.map((m) => m.id));
-  const results: { id: string; nome: string; status: "sent" | "pending" | "skipped_no_email" | "skipped_already_active" | "not_found" | "error"; reason?: string }[] = [];
+  const results: { id: string; nome: string; status: "sent" | "pending" | "skipped_no_email" | "skipped_already_active" | "skipped_respondente" | "not_found" | "error"; reason?: string }[] = [];
   let sent = 0;
   let skipped = 0;
   let failed = 0;
@@ -417,6 +444,13 @@ router.post("/clinics/:clinicId/team/bulk-invite", async (req, res): Promise<voi
   }
 
   for (const member of members) {
+    // Task #220: respondente_diagnostico nunca acessa a plataforma — jamais
+    // recebe invite, mesmo em lote.
+    if (member.funcao === "respondente_diagnostico") {
+      results.push({ id: member.id, nome: member.nome, status: "skipped_respondente" });
+      skipped++;
+      continue;
+    }
     const emailRaw = member.email?.trim().toLowerCase() ?? "";
     if (!emailRaw || !BULK_EMAIL_RE.test(emailRaw)) {
       results.push({ id: member.id, nome: member.nome, status: "skipped_no_email" });

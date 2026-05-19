@@ -465,6 +465,13 @@ clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<vo
   const { email: emailRaw, role } = parsed.data;
   const email = emailRaw.trim().toLowerCase();
 
+  const ALLOWED_ROLES = ["admin", "gestor", "colaborador", "respondente_diagnostico"];
+  if (!ALLOWED_ROLES.includes(role)) {
+    res.status(400).json({ error: "Perfil inválido." });
+    return;
+  }
+  const isRespondente = role === "respondente_diagnostico";
+
   const [clinic] = await db.select().from(clinicsTable).where(eq(clinicsTable.id, id));
   if (!clinic) {
     res.status(404).json({ error: "Clinic not found" });
@@ -482,7 +489,17 @@ clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<vo
     memberId = existingMember[0].id;
     await db
       .update(teamTable)
-      .set({ inviteStatus: "pending", temAcessoPlataforma: true, funcao: role, inviteRedeemedAt: null })
+      .set({
+        // Task #220: respondente_diagnostico NUNCA tem acesso à plataforma.
+        // Quando alguém já existia com acesso e é "rebaixado" para respondente,
+        // revogamos o acesso e limpamos o convite. O credential global (por
+        // e-mail) NÃO é deletado — outras clínicas podem usar.
+        inviteStatus: isRespondente ? null : "pending",
+        temAcessoPlataforma: !isRespondente,
+        funcao: role,
+        inviteRedeemedAt: null,
+        ...(isRespondente ? { inviteCodeHash: null, inviteCodeExpiresAt: null } : {}),
+      })
       .where(eq(teamTable.id, memberId));
   } else {
     const [newMember] = await db.insert(teamTable).values({
@@ -490,10 +507,29 @@ clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<vo
       nome: email.split("@")[0],
       email,
       funcao: role,
-      temAcessoPlataforma: true,
-      inviteStatus: "pending",
+      temAcessoPlataforma: !isRespondente,
+      inviteStatus: isRespondente ? null : "pending",
     }).returning({ id: teamTable.id });
     memberId = newMember.id;
+  }
+
+  // Task #220: para respondente_diagnostico não disparamos senha provisória
+  // nem habilitamos acesso à plataforma. O link real (tokenizado por
+  // delegação+pilar) é enviado depois, pelo módulo Delegação.
+  if (isRespondente) {
+    await db.insert(clinicActivityTable).values({
+      clinicId: id,
+      tipo: "usuario_convidado",
+      titulo: `Respondente cadastrado: ${email}`,
+      descricao: `Use a aba Delegação para enviar o link do diagnóstico.`,
+      autorNome: "Super Admin",
+    });
+    res.json({
+      success: true,
+      message: `Respondente ${email} cadastrado. Use a aba Delegação para enviar o link do diagnóstico.`,
+      status: "sent",
+    });
+    return;
   }
 
   // Task #216: dispara o novo fluxo (senha provisória + tela /entrar) por
@@ -551,6 +587,13 @@ clinicsAdminRouter.post(
 
     if (!member.email) {
       res.status(400).json({ error: "Este membro não possui e-mail cadastrado. Edite o cadastro antes de reenviar o convite." });
+      return;
+    }
+
+    if (member.funcao === "respondente_diagnostico") {
+      res.status(400).json({
+        error: "Respondentes de diagnóstico não recebem senha. Envie o link pelo módulo Delegação.",
+      });
       return;
     }
 

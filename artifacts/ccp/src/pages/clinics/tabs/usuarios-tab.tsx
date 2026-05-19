@@ -62,19 +62,21 @@ import { Loader2, Plus, MoreHorizontal, Mail, UserPlus, ShieldCheck, Clock, Copy
 
 const inviteSchema = z.object({
   email: z.string().email("Email inválido"),
-  role: z.enum(["admin", "gestor", "colaborador"]),
+  role: z.enum(["admin", "gestor", "colaborador", "respondente_diagnostico"]),
 });
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Administrador",
   gestor: "Gestor",
   colaborador: "Colaborador",
+  respondente_diagnostico: "Respondente de Diagnóstico",
 };
 
 const ROLE_COLORS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   admin: "default",
   gestor: "secondary",
   colaborador: "outline",
+  respondente_diagnostico: "outline",
 };
 
 export default function UsuariosTab({ clinicId }: { clinicId: string }) {
@@ -97,7 +99,10 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
     defaultValues: { email: "", role: "colaborador" },
   });
 
-  const platformUsers = members?.filter((m) => m.temAcessoPlataforma) ?? [];
+  const platformUsers = members?.filter(
+    (m) => m.temAcessoPlataforma && m.funcao !== "respondente_diagnostico",
+  ) ?? [];
+  const respondentes = members?.filter((m) => m.funcao === "respondente_diagnostico") ?? [];
 
   const onInvite = (values: z.infer<typeof inviteSchema>) => {
     inviteUser.mutate(
@@ -230,6 +235,7 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            {member.funcao !== "respondente_diagnostico" && (
                             <DropdownMenuItem
                               disabled={resendInvite.isPending}
                               onClick={() => {
@@ -273,6 +279,7 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
                               <Mail className="mr-2 h-4 w-4" />
                               Reenviar Convite
                             </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => handleRevoke(member)}
@@ -297,7 +304,75 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
         </CardContent>
       </Card>
 
-      {members && members.filter(m => !m.temAcessoPlataforma).length > 0 && (
+      {respondentes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Respondentes de Diagnóstico</CardTitle>
+            <CardDescription>
+              Pessoas que recebem apenas o link do diagnóstico por e-mail — sem acesso à plataforma.
+              Envie o link pela aba <strong>Delegação</strong>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Usuário</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {respondentes.map((member) => (
+                    <TableRow key={member.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-semibold">
+                            {member.nome.charAt(0).toUpperCase()}
+                          </div>
+                          <span>{member.nome}</span>
+                          <Badge variant="outline">Respondente</Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Mail className="h-3.5 w-3.5" />
+                          {member.email ?? "-"}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={() => {
+                            if (!confirm(`Remover respondente ${member.nome}?`)) return;
+                            deleteMember.mutate(
+                              { id: member.id },
+                              {
+                                onSuccess: () => {
+                                  toast({ title: "Respondente removido" });
+                                  queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
+                                },
+                                onError: () => toast({ variant: "destructive", title: "Erro ao remover" }),
+                              },
+                            );
+                          }}
+                        >
+                          Remover
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {members && members.filter(m => !m.temAcessoPlataforma && m.funcao !== "respondente_diagnostico").length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -307,7 +382,7 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {members
-                .filter((m) => !m.temAcessoPlataforma)
+                .filter((m) => !m.temAcessoPlataforma && m.funcao !== "respondente_diagnostico")
                 .map((member) => (
                   <Badge key={member.id} variant="outline" className="gap-1">
                     {member.nome}
@@ -406,8 +481,16 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
                         <SelectItem value="admin">Administrador</SelectItem>
                         <SelectItem value="gestor">Gestor</SelectItem>
                         <SelectItem value="colaborador">Colaborador</SelectItem>
+                        <SelectItem value="respondente_diagnostico">Respondente de Diagnóstico</SelectItem>
                       </SelectContent>
                     </Select>
+                    {field.value === "respondente_diagnostico" && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Este perfil <strong>não acessa a plataforma</strong>. O usuário receberá
+                        apenas o link do diagnóstico por e-mail quando você delegar um pilar para ele
+                        na aba <strong>Delegação</strong>. Nenhuma senha é gerada.
+                      </p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
