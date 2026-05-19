@@ -84,6 +84,7 @@ type BulkInviteStatus =
   | "pending"
   | "skipped_no_email"
   | "skipped_already_active"
+  | "skipped_respondente"
   | "not_found"
   | "error";
 
@@ -100,6 +101,7 @@ const STATUS_LABELS: Record<BulkInviteStatus, string> = {
   pending: "Pendente (e-mail não enviou)",
   skipped_no_email: "Sem e-mail válido",
   skipped_already_active: "Já tem acesso ativo",
+  skipped_respondente: "Respondente de diagnóstico (sem login)",
   not_found: "Não encontrado",
   error: "Erro",
 };

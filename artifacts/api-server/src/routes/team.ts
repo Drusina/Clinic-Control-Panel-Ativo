@@ -411,6 +411,21 @@ router.post("/clinics/:clinicId/team", async (req, res): Promise<void> => {
     } catch {
       member.inviteStatus = "error";
     }
+  } else if (isRespondente && parsed.data.email) {
+    // Cadastrou direto como respondente — dispara o link de diagnóstico
+    // para as delegações abertas em (clinic, email).
+    try {
+      const dispatch = await dispatchRespondentInvitesForEmail(
+        clinicId,
+        parsed.data.email,
+        parsed.data.nome,
+        req,
+      );
+      await db.update(teamTable).set({ inviteStatus: dispatch.status }).where(eq(teamTable.id, member.id));
+      member.inviteStatus = dispatch.status;
+    } catch {
+      member.inviteStatus = "pending";
+    }
   }
 
   res.status(201).json(mapTeamMember(member));
@@ -512,6 +527,28 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
       return;
     }
     throw err;
+  }
+
+  // Task #220: se o resultado final é respondente_diagnostico e há e-mail,
+  // dispara/redispara o link de diagnóstico (cobre criação de respondente
+  // via PATCH e troca de perfil para respondente).
+  if (member && isRespondenteFinal && member.email) {
+    try {
+      const dispatch = await dispatchRespondentInvitesForEmail(
+        member.clinicId,
+        member.email,
+        member.nome,
+        req,
+      );
+      const [updated] = await db
+        .update(teamTable)
+        .set({ inviteStatus: dispatch.status })
+        .where(eq(teamTable.id, member.id))
+        .returning();
+      if (updated) member = updated;
+    } catch (err) {
+      logger.warn({ err, memberId: member.id }, "PATCH /team: respondent dispatch failed");
+    }
   }
   if (!member) {
     res.status(404).json({ error: "Team member not found" });

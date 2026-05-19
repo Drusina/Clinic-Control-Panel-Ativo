@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
-import { dispatchPlatformInvite, dispatchRespondentInvitesForEmail } from "./team.js";
+import { dispatchPlatformInvite, dispatchRespondentInvitesForEmail, revokeRespondentDelegationInvites } from "./team.js";
 import { objectStorageClient } from "../lib/objectStorage";
 import { seedIcsData } from "../lib/ics-seed.js";
 import {
@@ -487,6 +487,7 @@ clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<vo
 
   if (existingMember.length > 0) {
     memberId = existingMember[0].id;
+    const wasRespondente = existingMember[0].funcao === "respondente_diagnostico";
     await db
       .update(teamTable)
       .set({
@@ -501,6 +502,11 @@ clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<vo
         ...(isRespondente ? { inviteCodeHash: null, inviteCodeExpiresAt: null } : {}),
       })
       .where(eq(teamTable.id, memberId));
+    // Task #220: se estava respondente e está mudando para outro perfil,
+    // invalida os tokens de delegação para revogar acesso ao questionário.
+    if (wasRespondente && !isRespondente) {
+      await revokeRespondentDelegationInvites(id, email);
+    }
   } else {
     const [newMember] = await db.insert(teamTable).values({
       clinicId: id,
