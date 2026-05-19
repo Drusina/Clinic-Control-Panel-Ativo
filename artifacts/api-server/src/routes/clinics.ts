@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
-import { dispatchPlatformInvite } from "./team.js";
+import { dispatchPlatformInvite, dispatchRespondentInvitesForEmail } from "./team.js";
 import { objectStorageClient } from "../lib/objectStorage";
 import { seedIcsData } from "../lib/ics-seed.js";
 import {
@@ -514,20 +514,47 @@ clinicsAdminRouter.post("/clinics/:id/invite-user", async (req, res): Promise<vo
   }
 
   // Task #220: para respondente_diagnostico não disparamos senha provisória
-  // nem habilitamos acesso à plataforma. O link real (tokenizado por
-  // delegação+pilar) é enviado depois, pelo módulo Delegação.
+  // nem habilitamos acesso à plataforma. O link real é o token de respondente
+  // escopado por delegação+pilar (routes/respondent.ts) — reaproveitamos o
+  // helper `dispatchRespondentInvitesForEmail` para enviar/reenviar o link
+  // em TODAS as delegações abertas registradas para esse e-mail+clínica.
   if (isRespondente) {
+    const dispatch = await dispatchRespondentInvitesForEmail(
+      id,
+      email,
+      null,
+      req,
+      { clinicName: clinic.nome ?? undefined },
+    );
+    await db.update(teamTable)
+      .set({ inviteStatus: dispatch.status })
+      .where(eq(teamTable.id, memberId));
     await db.insert(clinicActivityTable).values({
       clinicId: id,
       tipo: "usuario_convidado",
       titulo: `Respondente cadastrado: ${email}`,
-      descricao: `Use a aba Delegação para enviar o link do diagnóstico.`,
+      descricao:
+        dispatch.status === "sent"
+          ? `Link de diagnóstico enviado (${dispatch.sent}/${dispatch.total} delegações).`
+          : dispatch.status === "no_delegations"
+          ? `Crie uma delegação na aba Delegação para enviar o link do diagnóstico.`
+          : `Falha ao enviar e-mail — verifique a configuração do Resend.`,
       autorNome: "Super Admin",
     });
+    if (dispatch.status === "pending") {
+      res.status(502).json({
+        error: "Não foi possível enviar o link do diagnóstico por e-mail. Verifique a configuração do Resend.",
+        status: dispatch.status,
+      });
+      return;
+    }
     res.json({
       success: true,
-      message: `Respondente ${email} cadastrado. Use a aba Delegação para enviar o link do diagnóstico.`,
-      status: "sent",
+      message:
+        dispatch.status === "sent"
+          ? `Respondente ${email} cadastrado e link enviado (${dispatch.sent} delegação${dispatch.sent === 1 ? "" : "s"}).`
+          : `Respondente ${email} cadastrado. Crie uma delegação na aba Delegação para enviar o link do diagnóstico.`,
+      status: dispatch.status,
     });
     return;
   }
@@ -590,9 +617,47 @@ clinicsAdminRouter.post(
       return;
     }
 
+    // Task #220: respondente_diagnostico recebe o LINK do diagnóstico
+    // (não senha). Reaproveitamos o helper que regenera o invite_code de
+    // cada delegação registrada para o e-mail dele e reenvia o link.
     if (member.funcao === "respondente_diagnostico") {
-      res.status(400).json({
-        error: "Respondentes de diagnóstico não recebem senha. Envie o link pelo módulo Delegação.",
+      const dispatch = await dispatchRespondentInvitesForEmail(
+        id,
+        member.email,
+        member.nome,
+        req,
+        { clinicName: clinic.nome ?? undefined },
+      );
+      await db
+        .update(teamTable)
+        .set({ inviteStatus: dispatch.status })
+        .where(eq(teamTable.id, member.id));
+      await db.insert(clinicActivityTable).values({
+        clinicId: id,
+        tipo: "usuario_convidado",
+        titulo: `Link de diagnóstico reenviado para ${member.email}`,
+        descricao: `Delegações: ${dispatch.sent}/${dispatch.total} enviadas.`,
+        autorNome: "Super Admin",
+      });
+      if (dispatch.status === "no_delegations") {
+        res.status(422).json({
+          error:
+            "Este respondente ainda não tem delegação registrada. Crie uma delegação para o e-mail dele na aba Delegação antes de reenviar o link.",
+          status: dispatch.status,
+        });
+        return;
+      }
+      if (dispatch.status === "pending") {
+        res.status(502).json({
+          error: "Não foi possível enviar o link do diagnóstico. Verifique a configuração do Resend.",
+          status: dispatch.status,
+        });
+        return;
+      }
+      res.json({
+        success: true,
+        message: `Link de diagnóstico reenviado para ${member.email} (${dispatch.sent} delegação${dispatch.sent === 1 ? "" : "s"}).`,
+        status: dispatch.status,
       });
       return;
     }

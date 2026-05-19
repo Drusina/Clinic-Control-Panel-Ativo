@@ -1,12 +1,12 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql, desc, ne, isNotNull } from "drizzle-orm";
 import multer, { MulterError } from "multer";
 import * as XLSX from "xlsx";
-import { db, teamTable, clinicsTable } from "@workspace/db";
+import { db, teamTable, clinicsTable, delegacoesTable, diagnosticsTable } from "@workspace/db";
 import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
 import { generateInviteCode, assertClinicAccess, type AuthenticatedRequest as AuthRequest } from "../middleware/auth";
-import { sendEmail, buildInviteEmail, buildPushSetupEmail, buildAcessoCriadoEmail, buildAcessoHabilitadoEmail, resolveAppUrl } from "../lib/email.js";
+import { sendEmail, buildInviteEmail, buildPushSetupEmail, buildAcessoCriadoEmail, buildAcessoHabilitadoEmail, buildRespondentInviteEmail, resolveAppUrl } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
 import {
   generateProvisionalPassword,
@@ -207,6 +207,129 @@ async function dispatchPlatformInvite(
 
 export { dispatchPlatformInvite };
 
+/**
+ * Task #220: invalida os tokens de delegação de um respondente (clinic + email).
+ * Chamado quando o respondente é removido ou tem o perfil alterado.
+ */
+export async function revokeRespondentDelegationInvites(
+  clinicId: string,
+  rawEmail: string | null | undefined,
+): Promise<void> {
+  if (!rawEmail || !rawEmail.trim()) return;
+  const email = rawEmail.trim().toLowerCase();
+  await db
+    .update(delegacoesTable)
+    .set({
+      inviteCodeHash: null,
+      inviteCodeExpiresAt: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(delegacoesTable.clinicId, clinicId),
+        sql`lower(${delegacoesTable.responsavelEmail}) = ${email}`,
+        isNotNull(delegacoesTable.inviteCodeHash),
+      ),
+    );
+}
+
+/**
+ * Task #220: dispara o link de respondente para TODAS as delegações abertas
+ * (`(clinic_id, lower(responsavel_email))`) — regenera o invite_code de cada
+ * uma e manda um e-mail por delegação usando `buildRespondentInviteEmail`.
+ *
+ * Retorna `{ status, sent, total }`:
+ *   - status="sent"           → pelo menos 1 e-mail entregue com sucesso
+ *   - status="no_delegations" → não há delegação registrada para esse e-mail
+ *   - status="no_email"       → membro sem e-mail
+ *   - status="pending"        → existe delegação mas todos os envios falharam
+ */
+export async function dispatchRespondentInvitesForEmail(
+  clinicId: string,
+  rawEmail: string | null | undefined,
+  responsavelNome: string | null | undefined,
+  req?: Request,
+  options?: { clinicName?: string },
+): Promise<{ status: "sent" | "no_delegations" | "no_email" | "pending"; sent: number; total: number }> {
+  if (!rawEmail || !rawEmail.trim()) return { status: "no_email", sent: 0, total: 0 };
+  const email = rawEmail.trim().toLowerCase();
+
+  // Filtra delegações ABERTAS (status != "concluido") cujo responsavel_email
+  // bate case-insensitive com o email do respondente. Usamos sql lower() porque
+  // delegações antigas podem ter sido gravadas sem normalização consistente.
+  const delegs = await db
+    .select()
+    .from(delegacoesTable)
+    .where(
+      and(
+        eq(delegacoesTable.clinicId, clinicId),
+        sql`lower(${delegacoesTable.responsavelEmail}) = ${email}`,
+        ne(delegacoesTable.status, "concluido"),
+      ),
+    );
+
+  if (delegs.length === 0) {
+    return { status: "no_delegations", sent: 0, total: 0 };
+  }
+
+  // O redeem em /auth/responder exige inviteDiagnosticoId. Resolvemos o
+  // diagnóstico mais recente da clínica (preferindo o que não está concluído)
+  // para amarrar o convite a um ciclo válido. Sem diagnóstico → não há onde
+  // gravar respostas, então pulamos.
+  const [activeDiag] = await db
+    .select({ id: diagnosticsTable.id })
+    .from(diagnosticsTable)
+    .where(eq(diagnosticsTable.clinicId, clinicId))
+    .orderBy(desc(diagnosticsTable.iniciadoEm))
+    .limit(1);
+  if (!activeDiag) {
+    logger.warn({ clinicId, email }, "dispatchRespondentInvites: sem diagnóstico na clínica");
+    return { status: "no_delegations", sent: 0, total: delegs.length };
+  }
+
+  const appUrl = await resolveAppUrl(req);
+  const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  let sent = 0;
+  for (const deleg of delegs) {
+    try {
+      const { code, hash } = generateInviteCode();
+      const expiresAt = new Date(Date.now() + TTL_MS);
+      await db
+        .update(delegacoesTable)
+        .set({
+          inviteCodeHash: hash,
+          inviteCodeExpiresAt: expiresAt,
+          inviteSentAt: new Date(),
+          inviteRedeemedAt: null,
+          inviteDiagnosticoId: activeDiag.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(delegacoesTable.id, deleg.id));
+      const link = `${appUrl}/responder?code=${encodeURIComponent(code)}`;
+      const ok = await sendEmail({
+        to: email,
+        subject: `[IONEX360] Convite — Diagnóstico 360°: ${deleg.pilarNome}`,
+        html: buildRespondentInviteEmail({
+          responsavelNome: responsavelNome ?? deleg.responsavelNome ?? "Respondente",
+          pilarNome: deleg.pilarNome,
+          clinicName: options?.clinicName,
+          prazo: deleg.prazo ?? null,
+          link,
+        }),
+      });
+      if (ok) sent++;
+    } catch (err) {
+      logger.error({ err, delegacaoId: deleg.id }, "dispatchRespondentInvites: failed for delegacao");
+    }
+  }
+
+  return {
+    status: sent > 0 ? "sent" : "pending",
+    sent,
+    total: delegs.length,
+  };
+}
+
 // /team/all is a super-admin overview (it lists members across every clinic).
 // Mounted under requireAuth in routes/index.ts; we gate it inline because the
 // router also serves clinic-scoped paths that any team_member with access can use.
@@ -345,6 +468,17 @@ router.patch("/team/:id", async (req, res): Promise<void> => {
       updates.inviteCodeExpiresAt = null;
       await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.teamMemberId, id));
     }
+  } else if (existing.funcao === "respondente_diagnostico") {
+    // Estava como respondente e agora virou outro perfil — invalida os
+    // tokens de delegação para esse e-mail/clínica (revogação de acesso).
+    // Sempre revoga o e-mail ANTIGO; se o e-mail também mudou no mesmo
+    // PATCH, revoga o novo também defensivamente.
+    if (existing.email) {
+      await revokeRespondentDelegationInvites(existing.clinicId, existing.email);
+    }
+    if (d.email && d.email.toLowerCase() !== (existing.email ?? "").toLowerCase()) {
+      await revokeRespondentDelegationInvites(existing.clinicId, d.email);
+    }
   }
 
   if (enablingAccess) {
@@ -401,6 +535,12 @@ router.delete("/team/:id", async (req, res): Promise<void> => {
   if (!member) {
     res.status(404).json({ error: "Team member not found" });
     return;
+  }
+
+  // Task #220: removeu um respondente — invalida tokens de delegação para
+  // esse e-mail nessa clínica (revogação efetiva do perfil).
+  if (member.funcao === "respondente_diagnostico" && member.email) {
+    await revokeRespondentDelegationInvites(member.clinicId, member.email);
   }
 
   res.sendStatus(204);

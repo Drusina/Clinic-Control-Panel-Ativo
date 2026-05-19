@@ -342,26 +342,72 @@ export default function UsuariosTab({ clinicId }: { clinicId: string }) {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={() => {
-                            if (!confirm(`Remover respondente ${member.nome}?`)) return;
-                            deleteMember.mutate(
-                              { id: member.id },
-                              {
-                                onSuccess: () => {
-                                  toast({ title: "Respondente removido" });
-                                  queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
+                        <div className="flex items-center justify-end gap-2">
+                          {member.inviteStatus === "sent" && (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                              Link enviado
+                            </Badge>
+                          )}
+                          {(member.inviteStatus === "no_delegations" || member.inviteStatus == null) && (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                              Sem delegação
+                            </Badge>
+                          )}
+                          {member.inviteStatus === "pending" && (
+                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                              Falha no envio
+                            </Badge>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={resendInvite.isPending}
+                            onClick={() => {
+                              resendInvite.mutate(
+                                { id: clinicId, teamMemberId: member.id },
+                                {
+                                  onSuccess: () => {
+                                    toast({ title: "Link reenviado", description: `Enviado para ${member.email ?? member.nome}.` });
+                                    queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
+                                  },
+                                  onError: (err: unknown) => {
+                                    let description: string | undefined;
+                                    if (err instanceof ApiError) {
+                                      const data = err.data as { error?: string } | null;
+                                      description = data?.error ?? err.message;
+                                    } else if (err instanceof Error) {
+                                      description = err.message;
+                                    }
+                                    toast({ variant: "destructive", title: "Erro ao reenviar link", description });
+                                  },
                                 },
-                                onError: () => toast({ variant: "destructive", title: "Erro ao remover" }),
-                              },
-                            );
-                          }}
-                        >
-                          Remover
-                        </Button>
+                              );
+                            }}
+                          >
+                            <Mail className="mr-2 h-4 w-4" />
+                            Reenviar link
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive"
+                            onClick={() => {
+                              if (!confirm(`Remover respondente ${member.nome}?`)) return;
+                              deleteMember.mutate(
+                                { id: member.id },
+                                {
+                                  onSuccess: () => {
+                                    toast({ title: "Respondente removido" });
+                                    queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
+                                  },
+                                  onError: () => toast({ variant: "destructive", title: "Erro ao remover" }),
+                                },
+                              );
+                            }}
+                          >
+                            Remover
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
