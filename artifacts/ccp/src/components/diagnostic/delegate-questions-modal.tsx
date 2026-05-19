@@ -68,19 +68,22 @@ export function DelegateQuestionsModal(props: DelegateQuestionsModalProps) {
 
   const mut = useMutation<DelegateResponse, Error>({
     mutationFn: async () => {
-      const body = {
+      const nome = form.nome.trim();
+      const email = form.email.trim();
+      const prazo = form.prazo.trim();
+      const observacoes = form.observacoes.trim();
+
+      // Omite campos vazios em vez de enviar null/"" — o backend aceita ambos,
+      // mas omitir é mais limpo e mantém compatibilidade caso o schema fique
+      // estrito de novo.
+      const baseBody: Record<string, unknown> = {
         perguntaIds,
-        pilarSlug,
-        pilarNome,
-        nivel: 3,
-        responsavelNome: form.nome.trim(),
-        responsavelEmail: form.email.trim(),
-        prazo: form.prazo || null,
-        observacoes: form.observacoes.trim() || null,
-        diagnosticoId,
+        responsavelNome: nome,
+        responsavelEmail: email,
         enviarConvite: form.enviarConvite,
-        status: "pendente" as const,
       };
+      if (prazo) baseBody.prazo = prazo;
+      if (observacoes) baseBody.observacoes = observacoes;
 
       if (mode === "admin") {
         if (!clinicId) throw new Error("clinicId é obrigatório no modo admin.");
@@ -91,7 +94,14 @@ export function DelegateQuestionsModal(props: DelegateQuestionsModalProps) {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            ...baseBody,
+            pilarSlug,
+            pilarNome,
+            nivel: 3,
+            diagnosticoId,
+            status: "pendente" as const,
+          }),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -108,14 +118,7 @@ export function DelegateQuestionsModal(props: DelegateQuestionsModalProps) {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          perguntaIds,
-          responsavelNome: form.nome.trim(),
-          responsavelEmail: form.email.trim(),
-          prazo: form.prazo || null,
-          observacoes: form.observacoes.trim() || null,
-          enviarConvite: form.enviarConvite,
-        }),
+        body: JSON.stringify(baseBody),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));

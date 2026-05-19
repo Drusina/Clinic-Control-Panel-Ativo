@@ -58,35 +58,69 @@ function deriveInviteStatus(d: typeof delegacoesTable.$inferSelect):
   return "enviado";
 }
 
+// Helper: aceita string, null e undefined nos campos opcionais. Strings vazias
+// e nulls são normalizados para `undefined` para que o INSERT use NULL via
+// `?? null` e o resto da lógica trate "campo em branco" uniformemente.
+const optionalString = () =>
+  z
+    .string()
+    .nullish()
+    .transform((v) => (v == null || v === "" ? undefined : v));
+
+const optionalEmail = () =>
+  z
+    .string()
+    .nullish()
+    .transform((v) => (v == null || v === "" ? undefined : v))
+    .refine((v) => v === undefined || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), {
+      message: "E-mail inválido.",
+    });
+
+const optionalUuid = () =>
+  z
+    .string()
+    .nullish()
+    .transform((v) => (v == null || v === "" ? undefined : v))
+    .refine((v) => v === undefined || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v), {
+      message: "UUID inválido.",
+    });
+
 const CreateDelegacaoBody = z.object({
   pilarSlug: z.string(),
   pilarNome: z.string(),
   nivel: z.number().int().min(1).max(3).optional().default(1),
-  responsavelNome: z.string().optional(),
-  responsavelEmail: z.string().email().optional(),
-  responsavelWhatsapp: z.string().optional(),
-  prazo: z.string().optional(),
+  responsavelNome: optionalString(),
+  responsavelEmail: optionalEmail(),
+  responsavelWhatsapp: optionalString(),
+  prazo: optionalString(),
   status: z.enum(["nao_delegado", "pendente", "andamento", "concluido", "atrasado"]).optional().default("pendente"),
-  questaoInicio: z.number().int().optional(),
-  questaoFim: z.number().int().optional(),
-  parentId: z.string().uuid().optional(),
-  observacoes: z.string().optional(),
-  diagnosticoId: z.string().uuid().optional(),
+  questaoInicio: z.number().int().nullish().transform((v) => v ?? undefined),
+  questaoFim: z.number().int().nullish().transform((v) => v ?? undefined),
+  parentId: optionalUuid(),
+  observacoes: optionalString(),
+  diagnosticoId: optionalUuid(),
   // Nível 3: perguntas individuais ad-hoc (lote ou unitária)
-  perguntaIds: z.array(z.string().uuid()).optional(),
+  perguntaIds: z.array(z.string().uuid()).nullish().transform((v) => v ?? undefined),
   // Quando true, gera invite code e dispara e-mail imediatamente.
   enviarConvite: z.boolean().optional().default(false),
 });
 
 const UpdateDelegacaoBody = z.object({
-  responsavelNome: z.string().optional(),
-  responsavelEmail: z.string().email().optional(),
-  prazo: z.string().optional(),
+  responsavelNome: optionalString(),
+  responsavelEmail: optionalEmail(),
+  prazo: optionalString(),
   status: z.enum(["nao_delegado", "pendente", "andamento", "concluido", "atrasado"]).optional(),
-  questaoInicio: z.number().int().optional(),
-  questaoFim: z.number().int().optional(),
-  observacoes: z.string().optional(),
+  questaoInicio: z.number().int().nullish().transform((v) => v ?? undefined),
+  questaoFim: z.number().int().nullish().transform((v) => v ?? undefined),
+  observacoes: optionalString(),
 });
+
+function formatZodError(err: z.ZodError): string {
+  const first = err.issues[0];
+  if (!first) return "Dados inválidos.";
+  const path = first.path.length > 0 ? `${first.path.join(".")}: ` : "";
+  return `${path}${first.message}`;
+}
 
 router.get("/clinics/:clinicId/ics-status", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
@@ -141,7 +175,7 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   const parsed = CreateDelegacaoBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: formatZodError(parsed.error) });
     return;
   }
 
@@ -359,7 +393,7 @@ router.patch("/delegacoes/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const parsed = UpdateDelegacaoBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: formatZodError(parsed.error) });
     return;
   }
 
