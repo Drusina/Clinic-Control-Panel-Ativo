@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   db,
   delegacoesTable,
@@ -47,7 +47,7 @@ export async function resolveOwnedPerguntaIds(args: {
   const child = await db
     .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
     .from(delegacoesPerguntasTable)
-    .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${childIds})`);
+    .where(inArray(delegacoesPerguntasTable.delegacaoId, childIds));
   const excluded = new Set(child.map((c) => c.perguntaId));
   return new Set(base.filter((id) => !excluded.has(id)));
 }

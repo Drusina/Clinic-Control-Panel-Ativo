@@ -239,7 +239,7 @@ router.get("/respondent/questions", requireRespondent, async (req, res): Promise
     const childPerguntas = await db
       .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
       .from(delegacoesPerguntasTable)
-      .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${childIds})`);
+      .where(inArray(delegacoesPerguntasTable.delegacaoId, childIds));
     excluded = new Set(childPerguntas.map((p) => p.perguntaId));
   }
 
@@ -247,8 +247,8 @@ router.get("/respondent/questions", requireRespondent, async (req, res): Promise
     .select()
     .from(perguntasTable)
     .where(
-      baseIds
-        ? sql`${perguntasTable.id} = ANY(${baseIds})`
+      baseIds && baseIds.length > 0
+        ? inArray(perguntasTable.id, baseIds)
         : eq(perguntasTable.pilarSlug, r.pilarSlug),
     )
     .orderBy(perguntasTable.ordem);
@@ -461,7 +461,7 @@ router.get("/respondent/progress", requireRespondent, async (req, res): Promise<
     const child = await db
       .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
       .from(delegacoesPerguntasTable)
-      .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${childIds})`);
+      .where(inArray(delegacoesPerguntasTable.delegacaoId, childIds));
     delegatedIds = new Set(child.map((c) => c.perguntaId).filter((id) => scopeIds.includes(id)));
   }
 
@@ -471,7 +471,7 @@ router.get("/respondent/progress", requireRespondent, async (req, res): Promise<
     .where(
       and(
         eq(respostasTable.diagnosticoId, r.diagnosticoId),
-        sql`${respostasTable.perguntaId} = ANY(${scopeIds})`,
+        inArray(respostasTable.perguntaId, scopeIds),
       ),
     );
   const answeredIds = new Set(answeredRows.map((r) => r.perguntaId));
@@ -496,6 +496,7 @@ router.get("/respondent/progress", requireRespondent, async (req, res): Promise<
 // delegação é nivel=3, parent_id = sua delegação, herda o pilar e (se quiser)
 // dispara um convite por e-mail para o sub-respondente.
 router.post("/respondent/delegate", requireRespondent, async (req, res): Promise<void> => {
+  try {
   const r = req.respondent!;
   const { perguntaIds, responsavelNome, responsavelEmail, prazo, observacoes, enviarConvite } =
     req.body as {
@@ -532,7 +533,7 @@ router.post("/respondent/delegate", requireRespondent, async (req, res): Promise
   const perguntasInfo = await db
     .select({ id: perguntasTable.id, pilarSlug: perguntasTable.pilarSlug, pilarNome: perguntasTable.pilarNome })
     .from(perguntasTable)
-    .where(sql`${perguntasTable.id} = ANY(${perguntaIds})`);
+    .where(inArray(perguntasTable.id, perguntaIds));
   if (perguntasInfo.length !== perguntaIds.length) {
     res.status(400).json({ error: "Uma ou mais perguntas inválidas." });
     return;
@@ -629,6 +630,12 @@ router.post("/respondent/delegate", requireRespondent, async (req, res): Promise
     inviteLink,
     inviteEnviadoPara: enviarConvite ? responsavelEmail : null,
   });
+  } catch (err) {
+    req.log?.error({ err }, "Falha inesperada em POST /respondent/delegate");
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Erro interno ao criar a delegação. Tente novamente." });
+    }
+  }
 });
 
 // Lista as sub-delegações que ESTE respondente fez (para mostrar status na UI).
@@ -646,7 +653,7 @@ router.get("/respondent/delegated-out", requireRespondent, async (req, res): Pro
   const links = await db
     .select()
     .from(delegacoesPerguntasTable)
-    .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${childIds})`);
+    .where(inArray(delegacoesPerguntasTable.delegacaoId, childIds));
   const byDeleg = new Map<string, string[]>();
   for (const l of links) {
     const arr = byDeleg.get(l.delegacaoId) ?? [];

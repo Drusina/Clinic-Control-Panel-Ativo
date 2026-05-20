@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, count, sql } from "drizzle-orm";
+import { eq, and, count, inArray, sql } from "drizzle-orm";
 import { db, delegacoesTable, delegacoesPerguntasTable, perguntasTable, clinicsTable, risksTable, actionsTable, teamTable, diagnosticsTable } from "@workspace/db";
 import { assertClinicAccess } from "../middleware/auth";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
@@ -160,7 +160,7 @@ router.get("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => {
     const links = await db
       .select()
       .from(delegacoesPerguntasTable)
-      .where(sql`${delegacoesPerguntasTable.delegacaoId} = ANY(${n3Ids})`);
+      .where(inArray(delegacoesPerguntasTable.delegacaoId, n3Ids));
     for (const l of links) {
       const arr = perguntasByDeleg.get(l.delegacaoId) ?? [];
       arr.push(l.perguntaId);
@@ -213,7 +213,7 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
     const found = await db
       .select({ id: perguntasTable.id, pilarSlug: perguntasTable.pilarSlug, pilarNome: perguntasTable.pilarNome })
       .from(perguntasTable)
-      .where(sql`${perguntasTable.id} = ANY(${perguntaIds})`);
+      .where(inArray(perguntasTable.id, perguntaIds));
     if (found.length !== perguntaIds.length) {
       res.status(400).json({ error: "Uma ou mais perguntas não existem." });
       return;
