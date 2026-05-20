@@ -53,7 +53,16 @@ function deriveInviteStatus(d: typeof delegacoesTable.$inferSelect):
   | "enviado"
   | "aceito"
   | "expirado" {
-  if (!d.inviteCodeHash || !d.inviteSentAt) return "nao_enviado";
+  // Task #225: "acesso herdado" — quando uma nova delegação é criada para uma
+  // identidade que já tem invite_code válido em outras delegações do mesmo
+  // diagnóstico, NÃO mintamos código novo (o helper consolidado faz bind sem
+  // mintar). Marcamos com inviteSentAt + inviteDiagnosticoId. Esses casos devem
+  // reportar "enviado" — o acesso já está válido via outro código da identidade.
+  if (!d.inviteCodeHash) {
+    if (d.inviteSentAt && d.inviteDiagnosticoId) return "enviado";
+    return "nao_enviado";
+  }
+  if (!d.inviteSentAt) return "nao_enviado";
   // Redemption wins over expiry — once accepted, the invite stays "aceito"
   // even after the code's TTL has lapsed (the JWT keeps working until its
   // own expiry).

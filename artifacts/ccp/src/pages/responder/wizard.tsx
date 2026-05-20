@@ -721,7 +721,20 @@ export default function ResponderWizard() {
             <div />
           )}
           {completed && diagnosticoStatus !== "concluido" && (
-            <Button onClick={() => setShowThanks(true)}>
+            <Button
+              onClick={async () => {
+                // Task #225: flush de respostas pendentes ANTES de concluir.
+                // Se o usuário clicar logo após editar a última resposta, o
+                // debounce de 800ms pode não ter disparado ainda — salvamos
+                // sincronamente para evitar perda silenciosa.
+                Object.values(autoSaveTimers.current).forEach((t) => clearTimeout(t));
+                autoSaveTimers.current = {};
+                if (Object.keys(pendingAnswers.current).length > 0) {
+                  await batchSave({ ...pendingAnswers.current });
+                }
+                setShowThanks(true);
+              }}
+            >
               Concluir pilar
               <CheckCircle2 className="h-4 w-4 ml-1" />
             </Button>

@@ -323,6 +323,9 @@ router.get("/respondent/hub", requireRespondent, async (req, res): Promise<void>
   // Aceitamos delegações que: (a) têm inviteDiagnosticoId === r.diagnosticoId,
   // OU (b) ainda não foram vinculadas mas foram criadas dentro da clínica
   // (caso de delegações herdadas — sem invite_code emitido ainda).
+  // Task #225: incluímos TODOS os status (pendente, em_andamento, concluido).
+  // O frontend renderiza o card com badge de status — esconder "concluido" do
+  // hub confunde o respondente que quer revisar o que já fechou.
   const delegs = await db
     .select()
     .from(delegacoesTable)
@@ -330,7 +333,6 @@ router.get("/respondent/hub", requireRespondent, async (req, res): Promise<void>
       and(
         eq(delegacoesTable.clinicId, r.clinicId),
         sql`lower(${delegacoesTable.responsavelEmail}) = ${r.email.toLowerCase()}`,
-        ne(delegacoesTable.status, "concluido"),
       ),
     )
     .orderBy(delegacoesTable.createdAt);
