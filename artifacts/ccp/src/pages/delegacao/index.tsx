@@ -810,6 +810,8 @@ function PilaresTable({
               : null
           }
           pilarQuestions={questionsByPilar.get(delegateContext.pilar.slug) ?? []}
+          allPilares={hydrated.pillars}
+          delegacoesByPilar={delegacoesByPilar}
           onClose={() => setDelegateContext(null)}
         />
       )}
@@ -1417,6 +1419,8 @@ function DelegacaoDialog({
   team,
   parentDelegacao,
   pilarQuestions,
+  allPilares,
+  delegacoesByPilar,
   onClose,
 }: {
   clinicId: string;
@@ -1431,11 +1435,33 @@ function DelegacaoDialog({
   team: TeamMember[];
   parentDelegacao: Delegacao | null;
   pilarQuestions: PerguntaTipo[];
+  allPilares: PilarSummary[];
+  delegacoesByPilar: Map<string, { n1?: Delegacao; n2s: Delegacao[]; n3s: Delegacao[] }>;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const isReatribuir = !!context.existing;
+  const isMultiPilarMode = context.nivel === 1 && !isReatribuir;
+
+  // Multi-select de pilares (task #225) — só faz sentido ao CRIAR uma
+  // delegação nivel=1. Em reatribuição/sub-delegação seguimos com 1 pilar.
+  // O pilar clicado já vem marcado por padrão; o operador pode incluir mais
+  // (apenas pilares ainda sem delegação nivel=1 para evitar conflito visual).
+  const [selectedPilarSlugs, setSelectedPilarSlugs] = useState<Set<string>>(
+    () => new Set([context.pilar.slug]),
+  );
+  const togglePilar = (slug: string) =>
+    setSelectedPilarSlugs((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) {
+        if (slug === context.pilar.slug) return prev; // não permite desmarcar o original
+        next.delete(slug);
+      } else {
+        next.add(slug);
+      }
+      return next;
+    });
 
   const [form, setForm] = useState({
     responsavelNome: context.existing?.responsavelNome ?? "",
@@ -1480,6 +1506,32 @@ function DelegacaoDialog({
     onError: () => toast({ variant: "destructive", title: "Erro ao salvar" }),
   });
 
+  // Multi-pilar (bulk): cria N delegações + 1 e-mail consolidado.
+  const bulkMut = useMutation({
+    mutationFn: async (data: object) => {
+      const res = await authFetch(`/api/clinics/${clinicId}/delegacoes/bulk-pillar`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error();
+      return res.json() as Promise<{ created: number; inviteStatus: string | null }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["delegacao-hydrated", clinicId] });
+      const inheritedMsg = data.inviteStatus === "inherited"
+        ? "Acesso herdado — sem e-mail novo."
+        : data.inviteStatus === "sent"
+          ? "Um e-mail consolidado foi enviado."
+          : undefined;
+      toast({
+        title: `${data.created} pilar${data.created === 1 ? "" : "es"} delegado${data.created === 1 ? "" : "s"}`,
+        description: inheritedMsg,
+      });
+      onClose();
+    },
+    onError: () => toast({ variant: "destructive", title: "Erro ao delegar pilares" }),
+  });
+
   const updateMut = useMutation({
     mutationFn: async (data: object) => {
       const res = await authFetch(`/api/delegacoes/${context.existing!.id}`, {
@@ -1508,6 +1560,23 @@ function DelegacaoDialog({
       return;
     }
     const member = team.find((m) => m.email === form.responsavelEmail);
+
+    // Task #225 — multi-select de pilares: se o operador marcou ≥2 pilares,
+    // usa o endpoint /bulk-pillar (1 chamada, e-mail consolidado).
+    if (isMultiPilarMode && selectedPilarSlugs.size > 1) {
+      const selected = allPilares.filter((p) => selectedPilarSlugs.has(p.slug));
+      bulkMut.mutate({
+        diagnosticoId,
+        responsavelNome: form.responsavelNome || undefined,
+        responsavelEmail: form.responsavelEmail || undefined,
+        prazo: form.prazo || undefined,
+        observacoes: form.observacoes || undefined,
+        enviarConvite: true,
+        pilares: selected.map((p) => ({ slug: p.slug, nome: p.nome })),
+      });
+      return;
+    }
+
     createMut.mutate({
       pilarSlug: context.pilar.slug,
       pilarNome: context.pilar.nome,
@@ -1521,6 +1590,7 @@ function DelegacaoDialog({
       questaoFim: form.questaoFim ? parseInt(form.questaoFim) : undefined,
       observacoes: form.observacoes || undefined,
       diagnosticoId,
+      enviarConvite: context.nivel === 1, // dispara invite no caso single-pilar
       // Link sub-delegations to their parent N1 when one exists.
       parentId: context.nivel === 2 ? parentDelegacao?.id ?? undefined : undefined,
     });
@@ -1535,7 +1605,7 @@ function DelegacaoDialog({
       ? `Delegar pergunta Q${context.questaoInicio} — ${context.pilar.nome}`
       : `Sub-delegar módulo — ${context.pilar.nome}`;
 
-  const pending = createMut.isPending || updateMut.isPending;
+  const pending = createMut.isPending || updateMut.isPending || bulkMut.isPending;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -1543,7 +1613,56 @@ function DelegacaoDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
+          {isMultiPilarMode && allPilares.length > 1 && (
+            <div>
+              <label className="text-sm font-medium mb-1 block">
+                Pilares a delegar
+                <span className="ml-2 text-xs text-muted-foreground font-normal">
+                  {selectedPilarSlugs.size} selecionado{selectedPilarSlugs.size === 1 ? "" : "s"}
+                </span>
+              </label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Marque vários para criar todas as delegações de uma vez —
+                envia um único e-mail consolidado para o responsável.
+              </p>
+              <div className="border rounded-md max-h-40 overflow-y-auto divide-y">
+                {allPilares.map((p) => {
+                  const alreadyDelegated = !!delegacoesByPilar.get(p.slug)?.n1;
+                  const isOriginal = p.slug === context.pilar.slug;
+                  const checked = selectedPilarSlugs.has(p.slug);
+                  const disabled = (alreadyDelegated && !isOriginal) || isOriginal;
+                  return (
+                    <label
+                      key={p.slug}
+                      className={`flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer ${
+                        disabled && !isOriginal ? "opacity-50 cursor-not-allowed" : "hover:bg-muted/50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={checked}
+                        disabled={disabled && !isOriginal}
+                        onChange={() => togglePilar(p.slug)}
+                      />
+                      <span className="flex-1 truncate">{p.nome}</span>
+                      {isOriginal && (
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          (clicado)
+                        </span>
+                      )}
+                      {alreadyDelegated && !isOriginal && (
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          já delegado
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div>
             <label className="text-sm font-medium mb-1 block">Responsável</label>
             {team.length > 0 ? (

@@ -13,6 +13,7 @@ import {
 import { signToken, verifyToken, extractToken, generateInviteCode } from "../middleware/auth.js";
 import { sendEmail, buildRespondentInviteEmail, resolveAppUrl } from "../lib/email.js";
 import { resolveOwnedPerguntaIds } from "../lib/scope/delegation-ownership.js";
+import { ne, desc } from "drizzle-orm";
 // NOTE: respondents intentionally do NOT trigger recalculateScores. That helper
 // auto-promotes the diagnostic to status='concluido' when every question is
 // answered, which would let the *last* respondent to finish their pilar
@@ -24,18 +25,29 @@ const router: IRouter = Router();
 
 const RESPONDENT_TTL_SECONDS = 30 * 24 * 60 * 60;
 
+/**
+ * Claims do token de respondente.
+ *
+ *  - v:1 (legado): amarrado a UMA delegação fixa via `delegacaoId` + `pilarSlug`
+ *    (e opcionalmente `perguntaIds` para N3+). Continuam válidos até expirarem
+ *    e seguem sendo aceitos pelo middleware.
+ *  - v:2 (atual, task #225): amarrado à IDENTIDADE (`email + clinicId +
+ *    diagnosticoId`). Sem `delegacaoId` fixo — cada endpoint que opera sobre
+ *    uma delegação específica recebe `delegacaoId` por query/body e a
+ *    propriedade é validada server-side via `resolveDelegacaoScope`.
+ */
 interface RespondentClaims {
   role: "diagnostic_respondent";
-  delegacaoId: string;
   clinicId: string;
   diagnosticoId: string;
-  pilarSlug: string;
   email: string;
   nome?: string;
-  // Quando presente, o respondente está restrito a este conjunto de perguntas
-  // (delegação nível 3 — perguntas ad-hoc, possivelmente sub-delegada por outro
-  // respondente). Quando ausente, o escopo é o pilar inteiro (N1).
+  // v:1 apenas:
+  delegacaoId?: string;
+  pilarSlug?: string;
   perguntaIds?: string[];
+  // v ausente == v:1.
+  v?: number;
 }
 
 declare global {
@@ -59,12 +71,115 @@ function requireRespondent(req: Request, res: Response, next: NextFunction): voi
     return;
   }
   const claims = payload as unknown as RespondentClaims;
-  if (!claims.delegacaoId || !claims.diagnosticoId || !claims.pilarSlug) {
+  if (!claims.email || !claims.clinicId || !claims.diagnosticoId) {
     res.status(401).json({ error: "Token de respondente incompleto" });
+    return;
+  }
+  // v:1 tokens carregam delegacaoId/pilarSlug fixos. v:2 nÃO carrega — o
+  // escopo é resolvido por requisição via resolveDelegacaoScope.
+  const isV2 = claims.v === 2;
+  if (!isV2 && (!claims.delegacaoId || !claims.pilarSlug)) {
+    res.status(401).json({ error: "Token de respondente legado incompleto" });
     return;
   }
   req.respondent = claims;
   next();
+}
+
+/**
+ * Escopo resolvido por requisição. Equivalente em forma a um claim v:1, mas
+ * derivado da combinação (token de identidade) + (delegacaoId vinda da
+ * query/body), validado contra o banco.
+ */
+interface ResolvedScope {
+  delegacaoId: string;
+  clinicId: string;
+  diagnosticoId: string;
+  pilarSlug: string;
+  email: string;
+  nome?: string;
+  perguntaIds?: string[];
+}
+
+/**
+ * Resolve a delegação alvo da requisição atual. Retorna `null` (e envia 4xx
+ * em `res`) quando faltar `delegacaoId` ou quando a delegação não pertencer
+ * à identidade do token. Usa o `delegacaoId` do token quando v:1 e a query
+ * vier vazia (compat).
+ */
+async function resolveDelegacaoScope(
+  req: Request,
+  res: Response,
+): Promise<ResolvedScope | null> {
+  const r = req.respondent!;
+  const fromQuery =
+    (typeof req.query.delegacaoId === "string" ? req.query.delegacaoId : undefined) ??
+    (typeof (req.body as { delegacaoId?: unknown })?.delegacaoId === "string"
+      ? ((req.body as { delegacaoId?: string }).delegacaoId as string)
+      : undefined);
+
+  // v:1 está amarrado: query override só é aceita quando bate com o token.
+  let delegacaoId: string | undefined;
+  if (r.delegacaoId) {
+    if (fromQuery && fromQuery !== r.delegacaoId) {
+      res.status(403).json({ error: "Token v:1 não autoriza outra delegação." });
+      return null;
+    }
+    delegacaoId = r.delegacaoId;
+  } else {
+    delegacaoId = fromQuery;
+  }
+  if (!delegacaoId) {
+    res.status(400).json({ error: "delegacaoId é obrigatório" });
+    return null;
+  }
+
+  const [deleg] = await db
+    .select()
+    .from(delegacoesTable)
+    .where(eq(delegacoesTable.id, delegacaoId))
+    .limit(1);
+  if (!deleg) {
+    res.status(404).json({ error: "Delegação não encontrada." });
+    return null;
+  }
+  // Validação de propriedade por identidade.
+  if (deleg.clinicId !== r.clinicId) {
+    res.status(403).json({ error: "Delegação fora do escopo." });
+    return null;
+  }
+  if (
+    !deleg.responsavelEmail ||
+    deleg.responsavelEmail.toLowerCase() !== r.email.toLowerCase()
+  ) {
+    res.status(403).json({ error: "Delegação não pertence a esta identidade." });
+    return null;
+  }
+  // O ciclo de diagnóstico do token e o vínculo da delegação devem bater
+  // (quando a delegação tem inviteDiagnosticoId definido). Delegações sem
+  // vínculo (criadas no fluxo de sub-delegação interna que ainda não emitiu
+  // convite) ficam liberadas — o pai já validou identidade.
+  if (deleg.inviteDiagnosticoId && deleg.inviteDiagnosticoId !== r.diagnosticoId) {
+    res.status(403).json({ error: "Delegação pertence a outro ciclo de diagnóstico." });
+    return null;
+  }
+
+  // Resolve perguntaIds da chain (N3+).
+  const perguntaRows = await db
+    .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
+    .from(delegacoesPerguntasTable)
+    .where(eq(delegacoesPerguntasTable.delegacaoId, deleg.id));
+  const perguntaIds = perguntaRows.length > 0 ? perguntaRows.map((p) => p.perguntaId) : undefined;
+
+  return {
+    delegacaoId: deleg.id,
+    clinicId: r.clinicId,
+    diagnosticoId: r.diagnosticoId,
+    pilarSlug: deleg.pilarSlug,
+    email: r.email,
+    nome: r.nome ?? deleg.responsavelNome ?? undefined,
+    perguntaIds,
+  };
 }
 
 /**
@@ -150,37 +265,177 @@ router.post("/auth/responder", async (req, res): Promise<void> => {
   const perguntaIds: string[] | undefined =
     perguntaRows.length > 0 ? perguntaRows.map((r) => r.perguntaId) : undefined;
 
+  // task #225: token v:2 — por identidade (email + clinic + diagnostico),
+  // SEM delegacaoId/pilarSlug fixos. A delegação alvo é resolvida por
+  // requisição via resolveDelegacaoScope. perguntaIds não fazem mais parte
+  // do token (consultados via delegacoes_perguntas no escopo resolvido).
+  void perguntaIds; // silencia warning; mantido a leitura por intenção/diagnóstico.
   const token = signToken(
     {
       role: "diagnostic_respondent",
-      delegacaoId: deleg.id,
       clinicId: deleg.clinicId,
       diagnosticoId: activeDiag.id,
-      pilarSlug: deleg.pilarSlug,
       email: deleg.responsavelEmail,
       nome: deleg.responsavelNome ?? undefined,
-      ...(perguntaIds && perguntaIds.length > 0 ? { perguntaIds } : {}),
+      v: 2,
     },
     RESPONDENT_TTL_SECONDS,
   );
 
   res.json({
     token,
-    delegacaoId: deleg.id,
+    // Identidade resolvida — usada pelo hub no client.
     clinicId: deleg.clinicId,
     clinicNome: clinic?.nome ?? null,
     diagnosticoId: activeDiag.id,
     diagnosticoStatus: activeDiag.status,
-    pilarSlug: deleg.pilarSlug,
-    pilarNome: deleg.pilarNome,
     responsavelNome: deleg.responsavelNome,
     responsavelEmail: deleg.responsavelEmail,
+    // Compatibilidade com clients antigos que esperavam a delegação inicial
+    // no payload do redeem. O frontend novo usa o hub.
+    delegacaoId: deleg.id,
+    pilarSlug: deleg.pilarSlug,
+    pilarNome: deleg.pilarNome,
     prazo: deleg.prazo,
   });
 });
 
-router.get("/respondent/context", requireRespondent, async (req, res): Promise<void> => {
+/**
+ * Hub do respondente — lista TODAS as delegações ativas para a identidade
+ * autenticada (mesmo e-mail + clínica + ciclo de diagnóstico). Cada item traz
+ * progresso por pilar/escopo, prazo e status, para o frontend renderizar
+ * cards.
+ */
+router.get("/respondent/hub", requireRespondent, async (req, res): Promise<void> => {
   const r = req.respondent!;
+  const [clinic] = await db
+    .select({ nome: clinicsTable.nome })
+    .from(clinicsTable)
+    .where(eq(clinicsTable.id, r.clinicId))
+    .limit(1);
+  const [diag] = await db
+    .select({ id: diagnosticsTable.id, status: diagnosticsTable.status })
+    .from(diagnosticsTable)
+    .where(eq(diagnosticsTable.id, r.diagnosticoId))
+    .limit(1);
+
+  // Delegações ativas (não concluídas) para esta identidade neste diagnóstico.
+  // Aceitamos delegações que: (a) têm inviteDiagnosticoId === r.diagnosticoId,
+  // OU (b) ainda não foram vinculadas mas foram criadas dentro da clínica
+  // (caso de delegações herdadas — sem invite_code emitido ainda).
+  const delegs = await db
+    .select()
+    .from(delegacoesTable)
+    .where(
+      and(
+        eq(delegacoesTable.clinicId, r.clinicId),
+        sql`lower(${delegacoesTable.responsavelEmail}) = ${r.email.toLowerCase()}`,
+        ne(delegacoesTable.status, "concluido"),
+      ),
+    )
+    .orderBy(delegacoesTable.createdAt);
+
+  const filtered = delegs.filter(
+    (d) => !d.inviteDiagnosticoId || d.inviteDiagnosticoId === r.diagnosticoId,
+  );
+
+  if (filtered.length === 0) {
+    res.json({
+      clinicId: r.clinicId,
+      clinicNome: clinic?.nome ?? null,
+      diagnosticoId: r.diagnosticoId,
+      diagnosticoStatus: diag?.status ?? null,
+      responsavelNome: r.nome ?? null,
+      responsavelEmail: r.email,
+      delegacoes: [],
+    });
+    return;
+  }
+
+  const delegIds = filtered.map((d) => d.id);
+  const allPerguntaLinks = await db
+    .select()
+    .from(delegacoesPerguntasTable)
+    .where(inArray(delegacoesPerguntasTable.delegacaoId, delegIds));
+  const perguntasByDeleg = new Map<string, string[]>();
+  for (const l of allPerguntaLinks) {
+    const arr = perguntasByDeleg.get(l.delegacaoId) ?? [];
+    arr.push(l.perguntaId);
+    perguntasByDeleg.set(l.delegacaoId, arr);
+  }
+
+  // Contadores de progresso por delegação.
+  const cards = await Promise.all(
+    filtered.map(async (d) => {
+      const explicit = perguntasByDeleg.get(d.id);
+      let scopeIds: string[];
+      if (explicit && explicit.length > 0) {
+        scopeIds = explicit;
+      } else {
+        const rows = await db
+          .select({ id: perguntasTable.id })
+          .from(perguntasTable)
+          .where(eq(perguntasTable.pilarSlug, d.pilarSlug));
+        scopeIds = rows.map((p) => p.id);
+      }
+      const total = scopeIds.length;
+      const answered = total === 0 ? 0 : await db
+        .select({ value: count() })
+        .from(respostasTable)
+        .where(
+          and(
+            eq(respostasTable.diagnosticoId, r.diagnosticoId),
+            inArray(respostasTable.perguntaId, scopeIds),
+          ),
+        ).then((rows) => rows[0]?.value ?? 0);
+
+      // Perguntas sub-delegadas adiante por ESTA delegação (filhos diretos).
+      const childDelegs = await db
+        .select({ id: delegacoesTable.id })
+        .from(delegacoesTable)
+        .where(eq(delegacoesTable.parentId, d.id));
+      let delegated = 0;
+      if (childDelegs.length > 0) {
+        const childIds = childDelegs.map((c) => c.id);
+        const childLinks = await db
+          .select({ perguntaId: delegacoesPerguntasTable.perguntaId })
+          .from(delegacoesPerguntasTable)
+          .where(inArray(delegacoesPerguntasTable.delegacaoId, childIds));
+        const scopeSet = new Set(scopeIds);
+        delegated = childLinks.filter((l) => scopeSet.has(l.perguntaId)).length;
+      }
+      const pending = Math.max(0, total - answered - delegated);
+
+      return {
+        delegacaoId: d.id,
+        pilarSlug: d.pilarSlug,
+        pilarNome: d.pilarNome,
+        nivel: d.nivel,
+        prazo: d.prazo,
+        status: d.status,
+        kind: explicit && explicit.length > 0 ? ("perguntas" as const) : ("pilar" as const),
+        total,
+        answered,
+        delegated,
+        pending,
+      };
+    }),
+  );
+
+  res.json({
+    clinicId: r.clinicId,
+    clinicNome: clinic?.nome ?? null,
+    diagnosticoId: r.diagnosticoId,
+    diagnosticoStatus: diag?.status ?? null,
+    responsavelNome: r.nome ?? null,
+    responsavelEmail: r.email,
+    delegacoes: cards,
+  });
+});
+
+router.get("/respondent/context", requireRespondent, async (req, res): Promise<void> => {
+  const scope = await resolveDelegacaoScope(req, res);
+  if (!scope) return;
   const [diag] = await db
     .select({
       id: diagnosticsTable.id,
@@ -188,17 +443,17 @@ router.get("/respondent/context", requireRespondent, async (req, res): Promise<v
       iniciadoEm: diagnosticsTable.iniciadoEm,
     })
     .from(diagnosticsTable)
-    .where(eq(diagnosticsTable.id, r.diagnosticoId))
+    .where(eq(diagnosticsTable.id, scope.diagnosticoId))
     .limit(1);
   const [clinic] = await db
     .select({ nome: clinicsTable.nome })
     .from(clinicsTable)
-    .where(eq(clinicsTable.id, r.clinicId))
+    .where(eq(clinicsTable.id, scope.clinicId))
     .limit(1);
   const [deleg] = await db
     .select()
     .from(delegacoesTable)
-    .where(eq(delegacoesTable.id, r.delegacaoId))
+    .where(eq(delegacoesTable.id, scope.delegacaoId))
     .limit(1);
   if (!diag || !deleg) {
     res.status(404).json({ error: "Contexto não encontrado" });
@@ -206,7 +461,7 @@ router.get("/respondent/context", requireRespondent, async (req, res): Promise<v
   }
   res.json({
     delegacaoId: deleg.id,
-    clinicId: r.clinicId,
+    clinicId: scope.clinicId,
     clinicNome: clinic?.nome ?? null,
     diagnosticoId: diag.id,
     diagnosticoStatus: diag.status,
@@ -216,12 +471,13 @@ router.get("/respondent/context", requireRespondent, async (req, res): Promise<v
     responsavelEmail: deleg.responsavelEmail,
     prazo: deleg.prazo,
     nivel: deleg.nivel,
-    perguntaIds: r.perguntaIds ?? null,
+    perguntaIds: scope.perguntaIds ?? null,
   });
 });
 
 router.get("/respondent/questions", requireRespondent, async (req, res): Promise<void> => {
-  const r = req.respondent!;
+  const r = await resolveDelegacaoScope(req, res);
+  if (!r) return;
   // Base set: pilar inteiro OU subset ad-hoc (N3).
   let baseIds: string[] | null = null;
   if (r.perguntaIds && r.perguntaIds.length > 0) {
@@ -273,7 +529,8 @@ router.get("/respondent/questions", requireRespondent, async (req, res): Promise
 });
 
 router.get("/respondent/respostas", requireRespondent, async (req, res): Promise<void> => {
-  const r = req.respondent!;
+  const r = await resolveDelegacaoScope(req, res);
+  if (!r) return;
   // Only return answers for questions in this respondent's allowed scope
   // (pillar minus questions delegated forward, or — for N3 tokens — only
   // the explicitly assigned perguntaIds).
@@ -336,7 +593,7 @@ async function assertPerguntaInPilar(perguntaId: string, pilarSlug: string): Pro
  * adiante). Mesmo helper usado em qualquer caminho server-side que precise
  * resolver propriedade efetiva dentro de uma cadeia indefinida.
  */
-async function allowedPerguntaIds(r: RespondentClaims): Promise<Set<string>> {
+async function allowedPerguntaIds(r: ResolvedScope): Promise<Set<string>> {
   return resolveOwnedPerguntaIds({
     delegacaoId: r.delegacaoId,
     explicitPerguntaIds: r.perguntaIds ?? null,
@@ -345,7 +602,8 @@ async function allowedPerguntaIds(r: RespondentClaims): Promise<Set<string>> {
 }
 
 router.put("/respondent/respostas/:perguntaId", requireRespondent, async (req, res): Promise<void> => {
-  const r = req.respondent!;
+  const r = await resolveDelegacaoScope(req, res);
+  if (!r) return;
   const perguntaId = Array.isArray(req.params.perguntaId) ? req.params.perguntaId[0] : req.params.perguntaId;
   const { valor } = req.body as { valor?: unknown };
   if (valor === undefined || valor === null) {
@@ -385,7 +643,8 @@ router.put("/respondent/respostas/:perguntaId", requireRespondent, async (req, r
 });
 
 router.post("/respondent/respostas/batch", requireRespondent, async (req, res): Promise<void> => {
-  const r = req.respondent!;
+  const r = await resolveDelegacaoScope(req, res);
+  if (!r) return;
   const { respostas } = req.body as { respostas?: Array<{ perguntaId: string; valor: string }> };
   if (!Array.isArray(respostas) || respostas.length === 0) {
     res.status(400).json({ error: "respostas array é obrigatório" });
@@ -429,7 +688,8 @@ router.post("/respondent/respostas/batch", requireRespondent, async (req, res): 
 });
 
 router.get("/respondent/progress", requireRespondent, async (req, res): Promise<void> => {
-  const r = req.respondent!;
+  const r = await resolveDelegacaoScope(req, res);
+  if (!r) return;
   const [{ value: totalGlobal }] = await db.select({ value: count() }).from(perguntasTable);
   const [{ value: answeredGlobal }] = await db
     .select({ value: count() })
@@ -497,7 +757,8 @@ router.get("/respondent/progress", requireRespondent, async (req, res): Promise<
 // dispara um convite por e-mail para o sub-respondente.
 router.post("/respondent/delegate", requireRespondent, async (req, res): Promise<void> => {
   try {
-  const r = req.respondent!;
+  const r = await resolveDelegacaoScope(req, res);
+  if (!r) return;
   const { perguntaIds, responsavelNome, responsavelEmail, prazo, observacoes, enviarConvite } =
     req.body as {
       perguntaIds?: string[];
@@ -640,7 +901,8 @@ router.post("/respondent/delegate", requireRespondent, async (req, res): Promise
 
 // Lista as sub-delegações que ESTE respondente fez (para mostrar status na UI).
 router.get("/respondent/delegated-out", requireRespondent, async (req, res): Promise<void> => {
-  const r = req.respondent!;
+  const r = await resolveDelegacaoScope(req, res);
+  if (!r) return;
   const childDelegs = await db
     .select()
     .from(delegacoesTable)

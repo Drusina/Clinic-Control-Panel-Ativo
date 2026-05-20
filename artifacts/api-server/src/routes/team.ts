@@ -6,7 +6,7 @@ import { db, teamTable, clinicsTable, delegacoesTable, diagnosticsTable } from "
 import { pushSubscriptionsTable } from "@workspace/db/schema";
 import { CreateTeamMemberBody, UpdateTeamMemberBody, UpdateTeamMemberResponse } from "@workspace/api-zod";
 import { generateInviteCode, assertClinicAccess, type AuthenticatedRequest as AuthRequest } from "../middleware/auth";
-import { sendEmail, buildInviteEmail, buildPushSetupEmail, buildAcessoCriadoEmail, buildAcessoHabilitadoEmail, buildRespondentInviteEmail, resolveAppUrl } from "../lib/email.js";
+import { sendEmail, buildInviteEmail, buildPushSetupEmail, buildAcessoCriadoEmail, buildAcessoHabilitadoEmail, buildRespondentInviteEmail, buildRespondentInviteEmailConsolidado, resolveAppUrl } from "../lib/email.js";
 import { logger } from "../lib/logger.js";
 import {
   generateProvisionalPassword,
@@ -249,10 +249,14 @@ export async function dispatchRespondentInvitesForEmail(
   rawEmail: string | null | undefined,
   responsavelNome: string | null | undefined,
   req?: Request,
-  options?: { clinicName?: string },
-): Promise<{ status: "sent" | "no_delegations" | "no_email" | "pending"; sent: number; total: number }> {
+  options?: { clinicName?: string; mode?: "single-per-deleg" | "consolidated" },
+): Promise<{ status: "sent" | "no_delegations" | "no_email" | "pending" | "inherited"; sent: number; total: number }> {
   if (!rawEmail || !rawEmail.trim()) return { status: "no_email", sent: 0, total: 0 };
   const email = rawEmail.trim().toLowerCase();
+  // Task #225: default agora é "consolidated" (1 e-mail por identidade).
+  // O modo "single-per-deleg" continua disponível para o botão futuro
+  // "Reenviar link individual por pilar".
+  const mode = options?.mode ?? "consolidated";
 
   // Filtra delegações ABERTAS (status != "concluido") cujo responsavel_email
   // bate case-insensitive com o email do respondente. Usamos sql lower() porque
@@ -289,6 +293,108 @@ export async function dispatchRespondentInvitesForEmail(
 
   const appUrl = await resolveAppUrl(req);
   const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  const now = new Date();
+
+  // ── Modo CONSOLIDADO (task #225) ────────────────────────────────────────
+  //
+  // Usado quando o gestor convida um respondente pela 1ª vez ou cria várias
+  // delegações em lote. Regra:
+  //   1. Considere SÓ as delegações no diagnóstico ativo (bound ou unbound).
+  //   2. Se já existe ≥1 delegação com invite_code válido nesse diag → o
+  //      acesso da identidade já está ativo. As novas delegações sem código
+  //      apenas herdam (bind + inviteSentAt = now, sem mintar nem enviar
+  //      email). Retorna "inherited".
+  //   3. Senão, mintar code em TODAS as que precisam, enviar UM e-mail
+  //      consolidado listando todos os pilares pendentes para essa identidade.
+  if (mode === "consolidated") {
+    const inDiag = delegs.filter(
+      (d) => !d.inviteDiagnosticoId || d.inviteDiagnosticoId === activeDiag.id,
+    );
+    if (inDiag.length === 0) {
+      return { status: "no_delegations", sent: 0, total: delegs.length };
+    }
+    const hasValidInvite = inDiag.some(
+      (d) =>
+        !!d.inviteCodeHash &&
+        !!d.inviteCodeExpiresAt &&
+        d.inviteCodeExpiresAt > now &&
+        d.inviteDiagnosticoId === activeDiag.id,
+    );
+
+    if (hasValidInvite) {
+      // Herança: apenas amarra as novas (sem código) ao ciclo atual e marca
+      // inviteSentAt. O hub já vai listar todos os pilares para o usuário
+      // quando ele logar.
+      const needsBind = inDiag.filter(
+        (d) =>
+          !d.inviteCodeHash ||
+          (d.inviteCodeExpiresAt && d.inviteCodeExpiresAt <= now) ||
+          d.inviteDiagnosticoId !== activeDiag.id,
+      );
+      for (const d of needsBind) {
+        await db
+          .update(delegacoesTable)
+          .set({
+            inviteSentAt: now,
+            inviteDiagnosticoId: activeDiag.id,
+            updatedAt: now,
+          })
+          .where(eq(delegacoesTable.id, d.id));
+      }
+      return { status: "inherited", sent: 0, total: inDiag.length };
+    }
+
+    // Mint code em cada delegação e envia 1 email consolidado.
+    let consolidatedLink: string | null = null;
+    const pilaresList: Array<{ nome: string; prazo: string | null }> = [];
+    for (const deleg of inDiag) {
+      try {
+        const { code, hash } = generateInviteCode();
+        const expiresAt = new Date(Date.now() + TTL_MS);
+        await db
+          .update(delegacoesTable)
+          .set({
+            inviteCodeHash: hash,
+            inviteCodeExpiresAt: expiresAt,
+            inviteSentAt: now,
+            inviteRedeemedAt: null,
+            inviteDiagnosticoId: activeDiag.id,
+            updatedAt: now,
+          })
+          .where(eq(delegacoesTable.id, deleg.id));
+        if (!consolidatedLink) {
+          consolidatedLink = `${appUrl}/responder?code=${encodeURIComponent(code)}`;
+        }
+        pilaresList.push({ nome: deleg.pilarNome, prazo: deleg.prazo ?? null });
+      } catch (err) {
+        logger.error({ err, delegacaoId: deleg.id }, "dispatchRespondentInvites(consolidated): mint failed");
+      }
+    }
+
+    if (!consolidatedLink) {
+      return { status: "pending", sent: 0, total: inDiag.length };
+    }
+
+    const ok = await sendEmail({
+      to: email,
+      subject: `[IONEX360] Convite — Diagnóstico 360° (${pilaresList.length} pilar${pilaresList.length === 1 ? "" : "es"})`,
+      html: buildRespondentInviteEmailConsolidado({
+        responsavelNome: responsavelNome ?? inDiag[0].responsavelNome ?? "Respondente",
+        clinicName: options?.clinicName,
+        link: consolidatedLink,
+        pilares: pilaresList,
+      }),
+    });
+    return {
+      status: ok ? "sent" : "pending",
+      sent: ok ? 1 : 0,
+      total: inDiag.length,
+    };
+  }
+
+  // ── Modo SINGLE-PER-DELEG (legado / botão "Reenviar link") ──────────────
+  // Comportamento atual: 1 e-mail por delegação. Mantido para o botão
+  // individual de Reenvio no painel do gestor.
   let sent = 0;
   for (const deleg of delegs) {
     try {
@@ -328,6 +434,36 @@ export async function dispatchRespondentInvitesForEmail(
     sent,
     total: delegs.length,
   };
+}
+
+/**
+ * Helper compartilhado: identidade tem ≥1 delegação com invite_code válido
+ * no diagnóstico informado? Usado por delegacoes.ts para decidir entre
+ * "herdar" e "enviar e-mail novo" ao criar UMA delegação.
+ */
+export async function identityHasValidInvite(
+  clinicId: string,
+  rawEmail: string,
+  diagnosticoId: string,
+): Promise<boolean> {
+  const email = rawEmail.trim().toLowerCase();
+  if (!email) return false;
+  const now = new Date();
+  const rows = await db
+    .select({ id: delegacoesTable.id })
+    .from(delegacoesTable)
+    .where(
+      and(
+        eq(delegacoesTable.clinicId, clinicId),
+        sql`lower(${delegacoesTable.responsavelEmail}) = ${email}`,
+        eq(delegacoesTable.inviteDiagnosticoId, diagnosticoId),
+        isNotNull(delegacoesTable.inviteCodeHash),
+        sql`${delegacoesTable.inviteCodeExpiresAt} > ${now}`,
+        ne(delegacoesTable.status, "concluido"),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 // /team/all is a super-admin overview (it lists members across every clinic).

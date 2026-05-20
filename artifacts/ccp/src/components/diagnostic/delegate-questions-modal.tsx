@@ -29,6 +29,11 @@ export interface DelegateQuestionsModalProps {
   diagnosticoId: string;
   /** Required when mode === "admin". */
   clinicId?: string;
+  /**
+   * Required when mode === "respondent" e o token é v:2 — identifica de qual
+   * delegação a sub-delegação está saindo (o backend valida ownership).
+   */
+  delegacaoId?: string;
   /** E-mail do operador atual (admin) — usado para impedir auto-delegação. */
   selfEmail?: string | null;
   /** Optional summary lines (e.g. ["Q12: …", "Q15: …"]) shown above the form. */
@@ -42,7 +47,7 @@ interface DelegateResponse {
 }
 
 export function DelegateQuestionsModal(props: DelegateQuestionsModalProps) {
-  const { mode, open, onClose, perguntaIds, pilarSlug, pilarNome, diagnosticoId, clinicId, selfEmail, preview, onSuccess } = props;
+  const { mode, open, onClose, perguntaIds, pilarSlug, pilarNome, diagnosticoId, clinicId, delegacaoId, selfEmail, preview, onSuccess } = props;
   const { toast } = useToast();
   const qc = useQueryClient();
   const [form, setForm] = useState({
@@ -110,7 +115,7 @@ export function DelegateQuestionsModal(props: DelegateQuestionsModalProps) {
         return res.json() as Promise<DelegateResponse>;
       }
 
-      // respondent mode
+      // respondent mode — task #225: token v:2 requer delegacaoId no body.
       const token = getRespondentToken();
       const res = await fetch(`${BASE}/api/respondent/delegate`, {
         method: "POST",
@@ -118,7 +123,10 @@ export function DelegateQuestionsModal(props: DelegateQuestionsModalProps) {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(baseBody),
+        body: JSON.stringify({
+          ...baseBody,
+          ...(delegacaoId ? { delegacaoId } : {}),
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));

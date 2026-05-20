@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, AlertTriangle, CheckCircle2, WifiOff, Building2, LogOut, PartyPopper, UserCheck, X } from "lucide-react";
+import {
+  Loader2,
+  AlertTriangle,
+  CheckCircle2,
+  WifiOff,
+  Building2,
+  LogOut,
+  PartyPopper,
+  UserCheck,
+  X,
+  ArrowLeft,
+} from "lucide-react";
 import { DelegateQuestionsModal } from "@/components/diagnostic/delegate-questions-modal";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -12,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import {
   getRespondentToken,
-  getRespondentContext,
+  getRespondentIdentity,
   clearRespondentSession,
 } from "./index";
 
@@ -60,6 +71,21 @@ interface DelegatedOut {
   inviteRedeemedAt: string | null;
 }
 
+interface ContextResponse {
+  delegacaoId: string;
+  clinicId: string;
+  clinicNome: string | null;
+  diagnosticoId: string;
+  diagnosticoStatus: string;
+  pilarSlug: string;
+  pilarNome: string;
+  responsavelNome: string | null;
+  responsavelEmail: string | null;
+  prazo: string | null;
+  nivel: number;
+  perguntaIds: string[] | null;
+}
+
 const ESCALA_LABELS: Record<number, { label: string; color: string }> = {
   1: { label: "Crítico", color: "bg-red-100 border-red-400 text-red-800 hover:bg-red-200" },
   2: { label: "Ruim", color: "bg-orange-100 border-orange-400 text-orange-800 hover:bg-orange-200" },
@@ -74,6 +100,25 @@ const ESCALA_SELECTED: Record<number, string> = {
   4: "bg-blue-500 border-blue-500 text-white",
   5: "bg-green-500 border-green-500 text-white",
 };
+
+/**
+ * Lê delegacaoId da query (`?delegacaoId=...`).
+ * Compat v:1: se a URL não trouxer, cai pro delegacaoId herdado da
+ * identidade (que veio no payload do redeem antigo).
+ */
+function readDelegacaoId(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = params.get("delegacaoId");
+  if (fromUrl) return fromUrl;
+  const ident = getRespondentIdentity();
+  return ident?.delegacaoId ?? null;
+}
+
+function withDelegacao(path: string, delegacaoId: string | null): string {
+  if (!delegacaoId) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}delegacaoId=${encodeURIComponent(delegacaoId)}`;
+}
 
 function respFetch(path: string, init?: RequestInit) {
   const token = getRespondentToken();
@@ -186,12 +231,21 @@ export default function ResponderWizard() {
   const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
-  const ctx = getRespondentContext();
+
   const token = getRespondentToken();
+  const identity = getRespondentIdentity();
+  // Lido uma única vez por montagem (URL não muda enquanto este componente
+  // está montado — a navegação entre delegações desmonta e remonta).
+  const [delegacaoId] = useState<string | null>(() => readDelegacaoId());
 
   useEffect(() => {
-    if (!token || !ctx) navigate("/responder", { replace: true });
-  }, [token, ctx, navigate]);
+    if (!token || !identity) navigate("/responder", { replace: true });
+  }, [token, identity, navigate]);
+
+  // Sem delegacaoId não há o que carregar — volta pro hub.
+  useEffect(() => {
+    if (token && identity && !delegacaoId) navigate("/responder", { replace: true });
+  }, [token, identity, delegacaoId, navigate]);
 
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState(false);
@@ -212,29 +266,39 @@ export default function ResponderWizard() {
   }, []);
   const clearSelection = useCallback(() => setSelectedQs(new Set()), []);
 
+  // task #225: o contexto agora vem do servidor (não da sessionStorage),
+  // já que o token v:2 é por identidade e o pilar é determinado pela
+  // delegacaoId da URL.
+  const contextQuery = useQuery<ContextResponse>({
+    queryKey: ["respondent-context", delegacaoId],
+    queryFn: () => respJson<ContextResponse>(withDelegacao("/respondent/context", delegacaoId)),
+    enabled: !!token && !!delegacaoId,
+  });
+
   const questionsQuery = useQuery<Pergunta[]>({
-    queryKey: ["respondent-questions"],
-    queryFn: () => respJson<Pergunta[]>("/respondent/questions"),
-    enabled: !!token,
+    queryKey: ["respondent-questions", delegacaoId],
+    queryFn: () => respJson<Pergunta[]>(withDelegacao("/respondent/questions", delegacaoId)),
+    enabled: !!token && !!delegacaoId,
   });
 
   const respostasQuery = useQuery<Resposta[]>({
-    queryKey: ["respondent-respostas"],
-    queryFn: () => respJson<Resposta[]>("/respondent/respostas"),
-    enabled: !!token,
+    queryKey: ["respondent-respostas", delegacaoId],
+    queryFn: () => respJson<Resposta[]>(withDelegacao("/respondent/respostas", delegacaoId)),
+    enabled: !!token && !!delegacaoId,
   });
 
   const progressQuery = useQuery<Progress>({
-    queryKey: ["respondent-progress"],
-    queryFn: () => respJson<Progress>("/respondent/progress"),
-    enabled: !!token,
+    queryKey: ["respondent-progress", delegacaoId],
+    queryFn: () => respJson<Progress>(withDelegacao("/respondent/progress", delegacaoId)),
+    enabled: !!token && !!delegacaoId,
     refetchInterval: 30000,
   });
 
   const delegatedOutQuery = useQuery<DelegatedOut[]>({
-    queryKey: ["respondent-delegated-out"],
-    queryFn: () => respJson<DelegatedOut[]>("/respondent/delegated-out"),
-    enabled: !!token,
+    queryKey: ["respondent-delegated-out", delegacaoId],
+    queryFn: () =>
+      respJson<DelegatedOut[]>(withDelegacao("/respondent/delegated-out", delegacaoId)),
+    enabled: !!token && !!delegacaoId,
     refetchInterval: 30000,
   });
 
@@ -259,9 +323,9 @@ export default function ResponderWizard() {
       if (respostas.length === 0) return;
       setIsSaving(true);
       try {
-        const res = await respFetch("/respondent/respostas/batch", {
+        const res = await respFetch(withDelegacao("/respondent/respostas/batch", delegacaoId), {
           method: "POST",
-          body: JSON.stringify({ respostas }),
+          body: JSON.stringify({ respostas, delegacaoId }),
         });
         if (!res.ok) {
           if (res.status === 409) {
@@ -275,7 +339,7 @@ export default function ResponderWizard() {
         }
         setSaveError(false);
         pendingAnswers.current = {};
-        qc.invalidateQueries({ queryKey: ["respondent-progress"] });
+        qc.invalidateQueries({ queryKey: ["respondent-progress", delegacaoId] });
       } catch {
         setSaveError(true);
         toast({
@@ -287,7 +351,7 @@ export default function ResponderWizard() {
         setIsSaving(false);
       }
     },
-    [qc, toast],
+    [qc, toast, delegacaoId],
   );
 
   const handleAnswer = useCallback(
@@ -303,6 +367,7 @@ export default function ResponderWizard() {
   );
 
   const questions = questionsQuery.data ?? [];
+  const ctx = contextQuery.data;
   const progress = progressQuery.data;
   const pilarAnswered = useMemo(
     () => questions.filter((q) => localAnswers[q.id] !== undefined && localAnswers[q.id] !== "").length,
@@ -315,9 +380,13 @@ export default function ResponderWizard() {
       ? Math.round((progress.answeredGlobal / progress.totalGlobal) * 100)
       : 0;
 
-  if (!token || !ctx) return null;
+  if (!token || !identity || !delegacaoId) return null;
 
-  if (questionsQuery.isLoading || respostasQuery.isLoading) {
+  if (
+    questionsQuery.isLoading ||
+    respostasQuery.isLoading ||
+    contextQuery.isLoading
+  ) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -325,7 +394,7 @@ export default function ResponderWizard() {
     );
   }
 
-  if (questionsQuery.isError) {
+  if (questionsQuery.isError || contextQuery.isError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <Card className="max-w-md">
@@ -333,27 +402,27 @@ export default function ResponderWizard() {
             <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
               <AlertTriangle className="h-6 w-6 text-destructive" />
             </div>
-            <CardTitle>Sessão expirada</CardTitle>
+            <CardTitle>Pilar indisponível</CardTitle>
           </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-sm text-muted-foreground mb-4">
-              Seu link pode ter expirado. Solicite um novo convite ao gestor.
+          <CardContent className="text-center space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Este pilar não está mais disponível. Pode ter sido removido ou
+              reatribuído pelo gestor.
             </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const clinic = ctx?.clinicNome;
-                clearRespondentSession();
-                navigate(
-                  clinic
-                    ? `/responder/saiu?clinic=${encodeURIComponent(clinic)}`
-                    : "/responder/saiu",
-                  { replace: true },
-                );
-              }}
-            >
-              Voltar
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button onClick={() => navigate("/responder", { replace: true })}>
+                <ArrowLeft className="h-4 w-4 mr-1" /> Voltar aos meus pilares
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  clearRespondentSession();
+                  navigate("/responder/saiu", { replace: true });
+                }}
+              >
+                Sair
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -382,20 +451,20 @@ export default function ResponderWizard() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Suas respostas foram enviadas. O gestor da clínica receberá os
-              resultados deste pilar e dará sequência ao diagnóstico.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Você pode fechar esta página com tranquilidade.
+              Suas respostas foram enviadas. Você pode voltar para escolher
+              outro pilar ou sair com tranquilidade.
             </p>
             <div className="flex flex-col gap-2 pt-2">
+              <Button onClick={() => navigate("/responder", { replace: true })}>
+                <ArrowLeft className="h-4 w-4 mr-1" /> Voltar aos meus pilares
+              </Button>
               <Button variant="outline" onClick={() => setShowThanks(false)}>
                 Revisar minhas respostas
               </Button>
               <Button
                 variant="ghost"
                 onClick={() => {
-                  const clinic = ctx?.clinicNome;
+                  const clinic = ctx?.clinicNome ?? identity.clinicNome;
                   clearRespondentSession();
                   navigate(
                     clinic
@@ -414,34 +483,50 @@ export default function ResponderWizard() {
     );
   }
 
+  const clinicNome = ctx?.clinicNome ?? identity.clinicNome;
+  const pilarNome = ctx?.pilarNome ?? identity.pilarNome ?? "Pilar";
+  const responsavelNome = ctx?.responsavelNome ?? identity.responsavelNome;
+  const diagnosticoStatus = ctx?.diagnosticoStatus ?? identity.diagnosticoStatus;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-border/40 bg-background/95 backdrop-blur">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary" />
-            <div>
+          <div className="flex items-center gap-2 min-w-0">
+            <Building2 className="h-5 w-5 text-primary shrink-0" />
+            <div className="min-w-0">
               <p className="text-xs text-muted-foreground leading-none">IONEX360</p>
-              <p className="text-sm font-semibold leading-tight">{ctx.clinicNome ?? "Diagnóstico"}</p>
+              <p className="text-sm font-semibold leading-tight truncate">
+                {clinicNome ?? "Diagnóstico"}
+              </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              const clinic = ctx?.clinicNome;
-              clearRespondentSession();
-              navigate(
-                clinic
-                  ? `/responder/saiu?clinic=${encodeURIComponent(clinic)}`
-                  : "/responder/saiu",
-                { replace: true },
-              );
-            }}
-          >
-            <LogOut className="h-4 w-4 mr-1" /> Sair
-          </Button>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/responder", { replace: false })}
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" /> Meus pilares
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const clinic = clinicNome;
+                clearRespondentSession();
+                navigate(
+                  clinic
+                    ? `/responder/saiu?clinic=${encodeURIComponent(clinic)}`
+                    : "/responder/saiu",
+                  { replace: true },
+                );
+              }}
+            >
+              <LogOut className="h-4 w-4 mr-1" /> Sair
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -461,10 +546,10 @@ export default function ResponderWizard() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <Badge variant="secondary" className="mb-2">Seu pilar</Badge>
-                <CardTitle className="text-xl">{ctx.pilarNome}</CardTitle>
-                {ctx.responsavelNome && (
+                <CardTitle className="text-xl">{pilarNome}</CardTitle>
+                {responsavelNome && (
                   <p className="text-sm text-muted-foreground mt-1">
-                    Respondendo como <strong>{ctx.responsavelNome}</strong>
+                    Respondendo como <strong>{responsavelNome}</strong>
                   </p>
                 )}
               </div>
@@ -502,7 +587,7 @@ export default function ResponderWizard() {
           </CardContent>
         </Card>
 
-        {ctx.diagnosticoStatus === "concluido" && (
+        {diagnosticoStatus === "concluido" && (
           <div className="rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900 flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
@@ -556,7 +641,7 @@ export default function ResponderWizard() {
           {questions.filter((q) => !delegByPergunta.has(q.id)).map((q, idx) => {
             const deleg = delegByPergunta.get(q.id);
             const isSelected = selectedQs.has(q.id);
-            const canDelegate = ctx.diagnosticoStatus !== "concluido" && !deleg;
+            const canDelegate = diagnosticoStatus !== "concluido" && !deleg;
             return (
               <Card
                 key={q.id}
@@ -606,8 +691,8 @@ export default function ResponderWizard() {
                   <QuestionControl
                     pergunta={q}
                     value={localAnswers[q.id]}
-                    onChange={(v) => handleAnswer(q.id, v)}
-                    disabled={ctx.diagnosticoStatus === "concluido"}
+                    onChange={(val) => handleAnswer(q.id, val)}
+                    disabled={diagnosticoStatus === "concluido"}
                   />
                 </CardContent>
               </Card>
@@ -615,65 +700,51 @@ export default function ResponderWizard() {
           })}
         </div>
 
-        {selectedQs.size > 0 && ctx.diagnosticoStatus !== "concluido" && (
-          <div className="sticky bottom-4 z-20 mx-auto flex items-center gap-3 rounded-full border bg-background/95 backdrop-blur shadow-lg px-4 py-2">
-            <span className="text-sm font-medium">
-              {selectedQs.size} selecionada{selectedQs.size === 1 ? "" : "s"}
-            </span>
-            <Button
-              size="sm"
-              onClick={() => setDelegateModal({ perguntaIds: Array.from(selectedQs) })}
-            >
-              <UserCheck className="h-4 w-4 mr-1" /> Sub-delegar
+        {/* Footer actions */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+          {selectedQs.size > 0 ? (
+            <div className="flex items-center gap-2 text-sm">
+              <Badge variant="secondary" className="gap-1">
+                {selectedQs.size} selecionada{selectedQs.size === 1 ? "" : "s"}
+              </Badge>
+              <Button variant="ghost" size="sm" onClick={clearSelection}>
+                <X className="h-3 w-3 mr-1" /> Limpar
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setDelegateModal({ perguntaIds: Array.from(selectedQs) })}
+              >
+                <UserCheck className="h-3 w-3 mr-1" /> Delegar selecionadas
+              </Button>
+            </div>
+          ) : (
+            <div />
+          )}
+          {completed && diagnosticoStatus !== "concluido" && (
+            <Button onClick={() => setShowThanks(true)}>
+              Concluir pilar
+              <CheckCircle2 className="h-4 w-4 ml-1" />
             </Button>
-            <Button size="sm" variant="ghost" onClick={clearSelection}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-
-        {delegateModal && (
-          <DelegateQuestionsModal
-            mode="respondent"
-            open
-            onClose={() => setDelegateModal(null)}
-            perguntaIds={delegateModal.perguntaIds}
-            pilarSlug={ctx.pilarSlug}
-            pilarNome={ctx.pilarNome}
-            diagnosticoId={ctx.diagnosticoId}
-            selfEmail={ctx.responsavelEmail}
-            preview={delegateModal.perguntaIds.map((pid) => {
-              const q = questions.find((x) => x.id === pid);
-              const idx = questions.findIndex((x) => x.id === pid);
-              return q ? `Q${idx + 1}: ${q.texto}` : pid;
-            })}
-            onSuccess={clearSelection}
-          />
-        )}
-
-        <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground text-center">
-          Suas respostas são salvas automaticamente. Você pode fechar a página e voltar pelo mesmo link.
+          )}
         </div>
-
-        {completed && ctx.diagnosticoStatus !== "concluido" && (
-          <div className="sticky bottom-4 flex justify-center">
-            <Button
-              size="lg"
-              className="shadow-lg gap-2"
-              onClick={async () => {
-                // Flush any pending answers before showing thank-you.
-                if (Object.keys(pendingAnswers.current).length > 0) {
-                  await batchSave(pendingAnswers.current);
-                }
-                setShowThanks(true);
-              }}
-            >
-              <CheckCircle2 className="h-5 w-5" />
-              Concluir e enviar respostas
-            </Button>
-          </div>
-        )}
       </main>
+
+      {delegateModal && ctx && (
+        <DelegateQuestionsModal
+          mode="respondent"
+          open
+          onClose={() => setDelegateModal(null)}
+          perguntaIds={delegateModal.perguntaIds}
+          pilarSlug={ctx.pilarSlug}
+          pilarNome={ctx.pilarNome}
+          diagnosticoId={ctx.diagnosticoId}
+          delegacaoId={delegacaoId}
+          onSuccess={() => {
+            clearSelection();
+            setDelegateModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }

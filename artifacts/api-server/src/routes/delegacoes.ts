@@ -15,6 +15,10 @@ import { generateInviteCode } from "../middleware/auth.js";
 import { sendDelegationWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
 import { sendPushToClinic, sendPushToEmail } from "../lib/push.js";
+import {
+  dispatchRespondentInvitesForEmail,
+  identityHasValidInvite,
+} from "./team.js";
 
 const router: IRouter = Router();
 
@@ -254,46 +258,77 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
   }
 
   // Se enviarConvite=true e tiver e-mail + diagnostico, gera invite imediatamente.
+  //
+  // Task #225 — comportamento "acesso por identidade":
+  //   - Se a identidade (email+clinic+diagnostico) JÁ tem um invite_code
+  //     válido em outra delegação no mesmo ciclo, NÃO mintamos novo código
+  //     nem enviamos e-mail: a delegação nova é apenas amarrada ao ciclo e
+  //     marcada inviteSentAt=now (status="sent"). O respondente verá o card
+  //     no hub na próxima vez que abrir o link.
+  //   - Caso contrário, mintamos código e enviamos 1 e-mail focado neste
+  //     pilar (comportamento original — mantido para o caso "1ª delegação do
+  //     responsável" criada pela UI single-pilar atual). A criação em lote
+  //     (multi-select de pilares) usa o endpoint /bulk-pillar abaixo, que
+  //     dispara o e-mail consolidado.
   let inviteLink: string | null = null;
+  let inheritedAccess = false;
   if (enviarConvite && responsavelEmail && diagnosticoId) {
     try {
-      const TTL_MS = 30 * 24 * 60 * 60 * 1000;
-      const { code, hash } = generateInviteCode();
-      const expiresAt = new Date(Date.now() + TTL_MS);
-      await db
-        .update(delegacoesTable)
-        .set({
-          inviteCodeHash: hash,
-          inviteCodeExpiresAt: expiresAt,
-          inviteSentAt: new Date(),
-          inviteRedeemedAt: null,
-          inviteDiagnosticoId: diagnosticoId,
-          updatedAt: new Date(),
-        })
-        .where(eq(delegacoesTable.id, delegacao.id));
-      const appUrl = await resolveAppUrl(req);
-      inviteLink = `${appUrl}/responder?code=${encodeURIComponent(code)}`;
-      const [clinicRow] = await db
-        .select({ nome: clinicsTable.nome })
-        .from(clinicsTable)
-        .where(eq(clinicsTable.id, clinicId))
-        .limit(1);
-      const html = buildRespondentInviteEmail({
-        responsavelNome: responsavelNome ?? "Responsável",
-        pilarNome,
-        clinicName: clinicRow?.nome ?? undefined,
-        prazo: prazo ?? null,
-        link: inviteLink,
-      });
-      sendEmail({
-        to: responsavelEmail,
-        subject: `[IONEX360] Convite — Diagnóstico 360°: ${pilarNome}`,
-        html,
-      }).catch(() => {});
+      const alreadyHasInvite = await identityHasValidInvite(
+        clinicId,
+        responsavelEmail,
+        diagnosticoId,
+      );
+      if (alreadyHasInvite) {
+        await db
+          .update(delegacoesTable)
+          .set({
+            inviteSentAt: new Date(),
+            inviteDiagnosticoId: diagnosticoId,
+            updatedAt: new Date(),
+          })
+          .where(eq(delegacoesTable.id, delegacao.id));
+        inheritedAccess = true;
+      } else {
+        const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+        const { code, hash } = generateInviteCode();
+        const expiresAt = new Date(Date.now() + TTL_MS);
+        await db
+          .update(delegacoesTable)
+          .set({
+            inviteCodeHash: hash,
+            inviteCodeExpiresAt: expiresAt,
+            inviteSentAt: new Date(),
+            inviteRedeemedAt: null,
+            inviteDiagnosticoId: diagnosticoId,
+            updatedAt: new Date(),
+          })
+          .where(eq(delegacoesTable.id, delegacao.id));
+        const appUrl = await resolveAppUrl(req);
+        inviteLink = `${appUrl}/responder?code=${encodeURIComponent(code)}`;
+        const [clinicRow] = await db
+          .select({ nome: clinicsTable.nome })
+          .from(clinicsTable)
+          .where(eq(clinicsTable.id, clinicId))
+          .limit(1);
+        const html = buildRespondentInviteEmail({
+          responsavelNome: responsavelNome ?? "Responsável",
+          pilarNome,
+          clinicName: clinicRow?.nome ?? undefined,
+          prazo: prazo ?? null,
+          link: inviteLink,
+        });
+        sendEmail({
+          to: responsavelEmail,
+          subject: `[IONEX360] Convite — Diagnóstico 360°: ${pilarNome}`,
+          html,
+        }).catch(() => {});
+      }
     } catch (err) {
       req.log?.error({ err }, "Falha ao auto-enviar convite de delegação");
     }
   }
+  void inheritedAccess;
 
   const escopoLabel = describeDelegationScope({ nivel, questaoInicio, questaoFim });
 
@@ -541,6 +576,91 @@ router.post(
     });
   },
 );
+
+/**
+ * Bulk create N delegações nível=1 (pilares) para o MESMO responsável.
+ * Usado pelo multi-select da tela de Delegação. Dispara UM e-mail
+ * consolidado via dispatchRespondentInvitesForEmail({mode:"consolidated"}).
+ */
+router.post("/clinics/:clinicId/delegacoes/bulk-pillar", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  const body = req.body as {
+    diagnosticoId?: string;
+    responsavelNome?: string;
+    responsavelEmail?: string;
+    responsavelWhatsapp?: string;
+    prazo?: string;
+    observacoes?: string;
+    enviarConvite?: boolean;
+    pilares?: Array<{ slug: string; nome: string }>;
+  };
+  const {
+    diagnosticoId,
+    responsavelNome,
+    responsavelEmail,
+    prazo,
+    observacoes,
+    enviarConvite,
+    pilares,
+  } = body;
+
+  if (!diagnosticoId) {
+    res.status(400).json({ error: "diagnosticoId é obrigatório." });
+    return;
+  }
+  if (!responsavelNome || !responsavelEmail) {
+    res.status(400).json({ error: "responsavelNome e responsavelEmail são obrigatórios." });
+    return;
+  }
+  if (!Array.isArray(pilares) || pilares.length === 0) {
+    res.status(400).json({ error: "pilares (array) é obrigatório." });
+    return;
+  }
+
+  const created: typeof delegacoesTable.$inferSelect[] = [];
+  for (const p of pilares) {
+    if (!p?.slug || !p?.nome) continue;
+    const [row] = await db
+      .insert(delegacoesTable)
+      .values({
+        clinicId,
+        pilarSlug: p.slug,
+        pilarNome: p.nome,
+        nivel: 1,
+        responsavelNome,
+        responsavelEmail,
+        prazo: prazo ?? null,
+        status: "pendente",
+        observacoes: observacoes ?? null,
+        inviteDiagnosticoId: diagnosticoId,
+      })
+      .returning();
+    created.push(row);
+  }
+
+  let inviteStatus: string | null = null;
+  if (enviarConvite !== false) {
+    const [clinicRow] = await db
+      .select({ nome: clinicsTable.nome })
+      .from(clinicsTable)
+      .where(eq(clinicsTable.id, clinicId))
+      .limit(1);
+    const result = await dispatchRespondentInvitesForEmail(
+      clinicId,
+      responsavelEmail,
+      responsavelNome,
+      req,
+      { clinicName: clinicRow?.nome ?? undefined, mode: "consolidated" },
+    );
+    inviteStatus = result.status;
+  }
+
+  res.status(201).json({
+    created: created.length,
+    inviteStatus,
+    delegacoes: created.map((d) => mapDelegacao(d)),
+  });
+});
 
 router.post("/clinics/:clinicId/delegacoes/seed", async (req, res): Promise<void> => {
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
