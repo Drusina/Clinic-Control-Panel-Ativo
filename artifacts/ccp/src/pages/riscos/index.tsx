@@ -6,7 +6,7 @@ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, ArrowLeft, Search, ChevronRight, ChevronDown, Sparkles, ListChecks, Trash2 } from "lucide-react";
+import { Loader2, Plus, ArrowLeft, Search, ChevronRight, ChevronDown, Sparkles, ListChecks, Trash2, History, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -82,6 +82,23 @@ async function fetchRiscos(clinicId: string): Promise<Risk[]> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error("Failed to fetch");
+  return res.json();
+}
+
+type DiagnosticSummary = {
+  id: string;
+  versao: number;
+  status: string;
+  concluidoEm: string | null;
+  iniciadoEm: string;
+};
+
+async function fetchDiagnostics(clinicId: string): Promise<DiagnosticSummary[]> {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE}/api/clinics/${clinicId}/diagnostics`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch diagnostics");
   return res.json();
 }
 
@@ -237,6 +254,57 @@ function getSeverityLabel(sev: number): { label: string; variant: "default" | "s
   return { label: "Alto", variant: "destructive" };
 }
 
+const DATE_TIME_FMT = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const DATE_FMT = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+type RiskGeneration = {
+  diagnosticoId: string;
+  generatedAt: string;
+  count: number;
+  versao: number | null;
+  concluidoEm: string | null;
+};
+
+function computeGenerations(risks: Risk[], diagnostics: DiagnosticSummary[]): RiskGeneration[] {
+  const diagById = new Map(diagnostics.map((d) => [d.id, d]));
+  const groups = new Map<string, { generatedAt: string; count: number }>();
+  for (const r of risks) {
+    if (r.origem !== "diagnostico" || !r.diagnosticoId) continue;
+    const prev = groups.get(r.diagnosticoId);
+    if (!prev) {
+      groups.set(r.diagnosticoId, { generatedAt: r.createdAt, count: 1 });
+    } else {
+      prev.count += 1;
+      if (new Date(r.createdAt).getTime() > new Date(prev.generatedAt).getTime()) {
+        prev.generatedAt = r.createdAt;
+      }
+    }
+  }
+  return [...groups.entries()]
+    .map(([diagnosticoId, g]) => {
+      const diag = diagById.get(diagnosticoId);
+      return {
+        diagnosticoId,
+        generatedAt: g.generatedAt,
+        count: g.count,
+        versao: diag?.versao ?? null,
+        concluidoEm: diag?.concluidoEm ?? null,
+      };
+    })
+    .sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
+}
+
 export default function RiscosPage() {
   const params = useParams<{ clinicId: string }>();
   const clinicId = params.clinicId;
@@ -272,6 +340,12 @@ export default function RiscosPage() {
     },
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
+  });
+
+  const { data: diagnostics = [] } = useQuery({
+    queryKey: ["riscos-diagnostics", clinicId],
+    queryFn: () => fetchDiagnostics(clinicId!),
+    enabled: !!clinicId,
   });
 
   const createMut = useMutation({
@@ -378,6 +452,7 @@ export default function RiscosPage() {
   }
 
   const sortedRiscos = [...riscos].sort((a, b) => b.severidade - a.severidade);
+  const generations = computeGenerations(riscos, diagnostics);
 
   const handleSubmit = () => {
     if (!form.nome) return;
@@ -414,6 +489,39 @@ export default function RiscosPage() {
           </Button>
         </div>
       </div>
+
+      {generations.length > 0 && (
+        <div className="rounded-xl border bg-indigo-50/60 border-indigo-200 p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-indigo-900">
+            <History className="h-4 w-4" /> Histórico de geração automática
+          </div>
+          <ul className="space-y-2">
+            {generations.map((g) => (
+              <li
+                key={g.diagnosticoId}
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-indigo-900/90"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                <span className="font-medium">{g.count} risco(s)</span>
+                <span className="text-indigo-900/70">gerados em</span>
+                <span className="font-medium">{DATE_TIME_FMT.format(new Date(g.generatedAt))}</span>
+                <span className="text-indigo-900/70">a partir do</span>
+                <span className="font-medium">
+                  {g.versao != null ? `Diagnóstico v${g.versao}` : "diagnóstico"}
+                  {g.concluidoEm ? ` (concluído em ${DATE_FMT.format(new Date(g.concluidoEm))})` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <span>
+              Ao regenerar a partir de um diagnóstico, os riscos automáticos gerados anteriormente
+              desse mesmo diagnóstico são substituídos. Riscos cadastrados manualmente não são afetados.
+            </span>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>

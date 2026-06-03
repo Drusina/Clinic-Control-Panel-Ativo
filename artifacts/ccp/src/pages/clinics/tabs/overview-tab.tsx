@@ -93,8 +93,6 @@ export default function OverviewTab({ clinic }: { clinic: Clinic }) {
         await queryClient.invalidateQueries();
       }
 
-      const token = getStoredToken();
-      const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
       fetch(`${BASE}/api/clinics/${clinic.id}/ics-status`, { headers: authHeaders })
         .then((r) => r.ok ? r.json() : null)
         .then((data: IcsStatus | null) => { if (data) setIcsStatus(data); })
