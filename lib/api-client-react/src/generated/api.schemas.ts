@@ -762,8 +762,14 @@ export interface Action {
   prazo?: string | null;
   /** @nullable */
   prioridade?: ActionPrioridade;
+  /** @nullable */
+  pilarSlug?: string | null;
+  /** @nullable */
+  evidencias?: string | null;
   coluna: ActionColuna;
   ordem: number;
+  /** @nullable */
+  riscoOrigemId?: string | null;
   /** @nullable */
   concluidoEm?: string | null;
   createdAt: string;
@@ -828,6 +834,31 @@ export const RiskStatus = {
   aceito: "aceito",
 } as const;
 
+export type RiskOrigem = (typeof RiskOrigem)[keyof typeof RiskOrigem];
+
+export const RiskOrigem = {
+  manual: "manual",
+  diagnostico: "diagnostico",
+} as const;
+
+/**
+ * @nullable
+ */
+export type RiskNivel = (typeof RiskNivel)[keyof typeof RiskNivel] | null;
+
+export const RiskNivel = {
+  baixo: "baixo",
+  medio: "medio",
+  alto: "alto",
+} as const;
+
+export interface PerguntaFonte {
+  pergunta: string;
+  resposta: string;
+  /** @nullable */
+  pilarSlug?: string | null;
+}
+
 export interface Risk {
   id: string;
   clinicId: string;
@@ -842,7 +873,23 @@ export interface Risk {
   /** @nullable */
   acoesMitigadoras?: string | null;
   status: RiskStatus;
+  /** @nullable */
+  pilarSlug?: string | null;
+  origem: RiskOrigem;
+  /** @nullable */
+  nivel?: RiskNivel;
+  /** @nullable */
+  diagnosticoId?: string | null;
+  /** @nullable */
+  perguntasFonte?: PerguntaFonte[] | null;
   createdAt: string;
+}
+
+export interface GenerateRisksResponse {
+  created: number;
+  cardsCreated: number;
+  message: string;
+  risks: Risk[];
 }
 
 export interface CreateRiskBody {

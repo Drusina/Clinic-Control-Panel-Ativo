@@ -1134,8 +1134,11 @@ export const ListActionsResponseItem = zod.object({
       zod.literal(null),
     ])
     .nullish(),
+  pilarSlug: zod.string().nullish(),
+  evidencias: zod.string().nullish(),
   coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]),
   ordem: zod.number(),
+  riscoOrigemId: zod.string().nullish(),
   concluidoEm: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -1194,8 +1197,11 @@ export const UpdateActionResponse = zod.object({
       zod.literal(null),
     ])
     .nullish(),
+  pilarSlug: zod.string().nullish(),
+  evidencias: zod.string().nullish(),
   coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]),
   ordem: zod.number(),
+  riscoOrigemId: zod.string().nullish(),
   concluidoEm: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -1226,6 +1232,26 @@ export const ListRisksResponseItem = zod.object({
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
   status: zod.enum(["identificado", "em_mitigacao", "mitigado", "aceito"]),
+  pilarSlug: zod.string().nullish(),
+  origem: zod.enum(["manual", "diagnostico"]),
+  nivel: zod
+    .union([
+      zod.literal("baixo"),
+      zod.literal("medio"),
+      zod.literal("alto"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  diagnosticoId: zod.string().nullish(),
+  perguntasFonte: zod
+    .array(
+      zod.object({
+        pergunta: zod.string(),
+        resposta: zod.string(),
+        pilarSlug: zod.string().nullish(),
+      }),
+    )
+    .nullish(),
   createdAt: zod.string(),
 });
 export const ListRisksResponse = zod.array(ListRisksResponseItem);
@@ -1276,6 +1302,26 @@ export const UpdateRiskResponse = zod.object({
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
   status: zod.enum(["identificado", "em_mitigacao", "mitigado", "aceito"]),
+  pilarSlug: zod.string().nullish(),
+  origem: zod.enum(["manual", "diagnostico"]),
+  nivel: zod
+    .union([
+      zod.literal("baixo"),
+      zod.literal("medio"),
+      zod.literal("alto"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  diagnosticoId: zod.string().nullish(),
+  perguntasFonte: zod
+    .array(
+      zod.object({
+        pergunta: zod.string(),
+        resposta: zod.string(),
+        pilarSlug: zod.string().nullish(),
+      }),
+    )
+    .nullish(),
   createdAt: zod.string(),
 });
 
@@ -1284,6 +1330,55 @@ export const UpdateRiskResponse = zod.object({
  */
 export const DeleteRiskParams = zod.object({
   id: zod.coerce.string(),
+});
+
+/**
+ * @summary Generate thematic risks from a diagnostic's weak answers
+ */
+export const GenerateRisksFromDiagnosticParams = zod.object({
+  clinicId: zod.coerce.string(),
+  diagnosticId: zod.coerce.string(),
+});
+
+export const GenerateRisksFromDiagnosticResponse = zod.object({
+  created: zod.number(),
+  cardsCreated: zod.number(),
+  message: zod.string(),
+  risks: zod.array(
+    zod.object({
+      id: zod.string(),
+      clinicId: zod.string(),
+      nome: zod.string(),
+      descricao: zod.string().nullish(),
+      probabilidade: zod.number(),
+      impacto: zod.number(),
+      severidade: zod.number(),
+      responsavel: zod.string().nullish(),
+      acoesMitigadoras: zod.string().nullish(),
+      status: zod.enum(["identificado", "em_mitigacao", "mitigado", "aceito"]),
+      pilarSlug: zod.string().nullish(),
+      origem: zod.enum(["manual", "diagnostico"]),
+      nivel: zod
+        .union([
+          zod.literal("baixo"),
+          zod.literal("medio"),
+          zod.literal("alto"),
+          zod.literal(null),
+        ])
+        .nullish(),
+      diagnosticoId: zod.string().nullish(),
+      perguntasFonte: zod
+        .array(
+          zod.object({
+            pergunta: zod.string(),
+            resposta: zod.string(),
+            pilarSlug: zod.string().nullish(),
+          }),
+        )
+        .nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
 });
 
 /**

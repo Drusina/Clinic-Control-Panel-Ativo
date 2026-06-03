@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plus, ArrowLeft, Search, ChevronRight, Calendar, GripVertical } from "lucide-react";
+import { Loader2, Plus, ArrowLeft, Search, ChevronRight, Calendar, GripVertical, ShieldAlert } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -88,6 +88,7 @@ type Action = {
   evidencias: string | null;
   coluna: string;
   ordem: number;
+  riscoOrigemId: string | null;
   concluidoEm: string | null;
   createdAt: string;
   updatedAt: string;
@@ -204,6 +205,11 @@ function KanbanCard({ action, onEdit }: { action: Action; onEdit: (a: Action) =>
           {pilarNome && pilarColorClass && (
             <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-medium", pilarColorClass)}>
               {pilarNome.split(" ")[0]}
+            </span>
+          )}
+          {action.riscoOrigemId && (
+            <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded font-medium bg-red-100 text-red-700">
+              <ShieldAlert className="h-2.5 w-2.5" /> Risco
             </span>
           )}
         </div>

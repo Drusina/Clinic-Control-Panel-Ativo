@@ -44,6 +44,7 @@ import type {
   DiagnosticResposta,
   DiagnosticsOverviewItem,
   Fatura,
+  GenerateRisksResponse,
   GetSocietaryDocSignedUrl200,
   HealthStatus,
   HydratedDiagnostic,
@@ -4480,6 +4481,97 @@ export const useDeleteRisk = <
   TContext
 > => {
   return useMutation(getDeleteRiskMutationOptions(options));
+};
+
+/**
+ * @summary Generate thematic risks from a diagnostic's weak answers
+ */
+export const getGenerateRisksFromDiagnosticUrl = (
+  clinicId: string,
+  diagnosticId: string,
+) => {
+  return `/api/clinics/${clinicId}/diagnostics/${diagnosticId}/generate-risks`;
+};
+
+export const generateRisksFromDiagnostic = async (
+  clinicId: string,
+  diagnosticId: string,
+  options?: RequestInit,
+): Promise<GenerateRisksResponse> => {
+  return customFetch<GenerateRisksResponse>(
+    getGenerateRisksFromDiagnosticUrl(clinicId, diagnosticId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getGenerateRisksFromDiagnosticMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+    TError,
+    { clinicId: string; diagnosticId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+  TError,
+  { clinicId: string; diagnosticId: string },
+  TContext
+> => {
+  const mutationKey = ["generateRisksFromDiagnostic"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+    { clinicId: string; diagnosticId: string }
+  > = (props) => {
+    const { clinicId, diagnosticId } = props ?? {};
+
+    return generateRisksFromDiagnostic(clinicId, diagnosticId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateRisksFromDiagnosticMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateRisksFromDiagnostic>>
+>;
+
+export type GenerateRisksFromDiagnosticMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate thematic risks from a diagnostic's weak answers
+ */
+export const useGenerateRisksFromDiagnostic = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+    TError,
+    { clinicId: string; diagnosticId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+  TError,
+  { clinicId: string; diagnosticId: string },
+  TContext
+> => {
+  return useMutation(getGenerateRisksFromDiagnosticMutationOptions(options));
 };
 
 /**

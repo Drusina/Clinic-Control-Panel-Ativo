@@ -6,7 +6,7 @@ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, ArrowLeft, Search, ChevronRight } from "lucide-react";
+import { Loader2, Plus, ArrowLeft, Search, ChevronRight, ChevronDown, Sparkles, ListChecks } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +50,12 @@ const PILAR_COLORS: Record<string, string> = {
   compliance: "bg-red-100 text-red-700",
 };
 
+type PerguntaFonte = {
+  pergunta: string;
+  resposta: string;
+  pilarSlug?: string | null;
+};
+
 type Risk = {
   id: string;
   clinicId: string;
@@ -62,6 +68,10 @@ type Risk = {
   responsavel: string | null;
   acoesMitigadoras: string | null;
   status: string;
+  origem: string;
+  nivel: string | null;
+  diagnosticoId: string | null;
+  perguntasFonte: PerguntaFonte[] | null;
   createdAt: string;
 };
 
@@ -96,6 +106,46 @@ async function updateRisco(id: string, data: object): Promise<Risk> {
   return res.json();
 }
 
+type GenerateRisksResult = {
+  created: number;
+  cardsCreated: number;
+  message: string;
+  risks: Risk[];
+};
+
+async function generateRisksFromDiagnostico(clinicId: string): Promise<GenerateRisksResult> {
+  const token = getStoredToken();
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const listRes = await fetch(`${BASE}/api/clinics/${clinicId}/diagnostics`, { headers });
+  if (!listRes.ok) throw new Error("Não foi possível carregar os diagnósticos.");
+  const list: { id: string; status: string; concluidoEm: string | null; iniciadoEm: string }[] = await listRes.json();
+
+  const concluidos = Array.isArray(list) ? list.filter(d => d.status === "concluido") : [];
+  if (concluidos.length === 0) {
+    throw new Error("NO_DIAGNOSTIC");
+  }
+  const chosen = [...concluidos].sort((a, b) => {
+    const aDate = new Date(a.concluidoEm ?? a.iniciadoEm).getTime();
+    const bDate = new Date(b.concluidoEm ?? b.iniciadoEm).getTime();
+    return bDate - aDate;
+  })[0];
+
+  const res = await fetch(
+    `${BASE}/api/clinics/${clinicId}/diagnostics/${chosen.id}/generate-risks`,
+    { method: "POST", headers },
+  );
+  if (!res.ok) {
+    let msg = "Falha ao gerar os riscos.";
+    try {
+      const body = await res.json();
+      if (body?.error) msg = body.error;
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 function getCellColor(prob: number, impact: number): string {
   const sev = prob * impact;
   if (sev <= 6) return "bg-green-100 hover:bg-green-200";
@@ -124,6 +174,8 @@ export default function RiscosPage() {
   const queryClient = useQueryClient();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [genDialogOpen, setGenDialogOpen] = useState(false);
+  const [expandedRisk, setExpandedRisk] = useState<string | null>(null);
   const [hoveredRisk, setHoveredRisk] = useState<string | null>(null);
   const [highlightedRisk, setHighlightedRisk] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -165,6 +217,39 @@ export default function RiscosPage() {
     onError: () => toast({ variant: "destructive", title: "Erro ao atualizar" }),
   });
 
+  const generateMut = useMutation({
+    mutationFn: () => generateRisksFromDiagnostico(clinicId!),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["riscos", clinicId] });
+      setGenDialogOpen(false);
+      if (result.created === 0) {
+        toast({
+          title: "Nenhum risco gerado",
+          description: "O diagnóstico não apontou respostas frágeis o suficiente para gerar riscos.",
+        });
+      } else {
+        toast({
+          title: `${result.created} risco(s) gerado(s) a partir do diagnóstico`,
+          description: result.cardsCreated > 0
+            ? `${result.cardsCreated} risco(s) de nível alto viraram cards no Plano de Ação.`
+            : undefined,
+        });
+      }
+    },
+    onError: (err: Error) => {
+      setGenDialogOpen(false);
+      if (err.message === "NO_DIAGNOSTIC") {
+        toast({
+          variant: "destructive",
+          title: "Sem diagnóstico disponível",
+          description: "Conclua um diagnóstico desta clínica antes de gerar riscos automaticamente.",
+        });
+      } else {
+        toast({ variant: "destructive", title: "Erro ao gerar riscos", description: err.message });
+      }
+    },
+  });
+
   if (!clinicId) {
     return <ClinicSelector />;
   }
@@ -196,9 +281,15 @@ export default function RiscosPage() {
             <p className="text-sm text-muted-foreground">Visualize e gerencie os riscos identificados no diagnóstico ICS.</p>
           </div>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" /> Novo Risco
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setGenDialogOpen(true)} disabled={generateMut.isPending}>
+            {generateMut.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            Gerar do diagnóstico
+          </Button>
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" /> Novo Risco
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -283,53 +374,108 @@ export default function RiscosPage() {
               {sortedRiscos.map((risk, i) => {
                 const sev = getSeverityLabel(risk.severidade);
                 const isHighlighted = highlightedRisk === risk.id;
+                const isExpanded = expandedRisk === risk.id;
+                const fromDiag = risk.origem === "diagnostico";
+                const hasFonte = !!(risk.perguntasFonte && risk.perguntasFonte.length > 0);
+                const hasDetail = hasFonte || !!risk.acoesMitigadoras || !!risk.descricao;
                 return (
-                  <button
+                  <div
                     key={risk.id}
-                    onClick={() => setHighlightedRisk(isHighlighted ? null : risk.id)}
                     className={cn(
-                      "w-full text-left p-3 rounded-lg border transition-all hover:bg-muted/50",
+                      "rounded-lg border transition-all",
                       isHighlighted ? "border-primary bg-primary/5" : "border-border bg-card"
                     )}
                   >
-                    <div className="flex items-start gap-2">
-                      <span className={cn(
-                        "h-6 w-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white mt-0.5",
-                        risk.severidade <= 6 ? "bg-green-600" : risk.severidade <= 14 ? "bg-yellow-500" : "bg-red-600"
-                      )}>
-                        {i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm leading-tight">{risk.nome}</div>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <Badge variant={sev.variant} className="text-[10px] px-1.5 py-0">{sev.label}</Badge>
-                          <span className="text-[10px] text-muted-foreground">Sev: {risk.severidade}</span>
-                          {risk.pilarSlug && (
-                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", PILAR_COLORS[risk.pilarSlug] ?? "bg-gray-100 text-gray-700")}>
-                              {PILARES.find(p => p.slug === risk.pilarSlug)?.nome.split(" ")[0] ?? risk.pilarSlug}
-                            </span>
+                    <button
+                      onClick={() => setHighlightedRisk(isHighlighted ? null : risk.id)}
+                      className="w-full text-left p-3 hover:bg-muted/50 rounded-lg"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className={cn(
+                          "h-6 w-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white mt-0.5",
+                          risk.severidade <= 6 ? "bg-green-600" : risk.severidade <= 14 ? "bg-yellow-500" : "bg-red-600"
+                        )}>
+                          {i + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm leading-tight">{risk.nome}</div>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <Badge variant={sev.variant} className="text-[10px] px-1.5 py-0">{sev.label}</Badge>
+                            <span className="text-[10px] text-muted-foreground">Sev: {risk.severidade}</span>
+                            {fromDiag && (
+                              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-indigo-100 text-indigo-700">
+                                <Sparkles className="h-2.5 w-2.5" /> Diagnóstico
+                              </span>
+                            )}
+                            {risk.pilarSlug && (
+                              <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", PILAR_COLORS[risk.pilarSlug] ?? "bg-gray-100 text-gray-700")}>
+                                {PILARES.find(p => p.slug === risk.pilarSlug)?.nome.split(" ")[0] ?? risk.pilarSlug}
+                              </span>
+                            )}
+                          </div>
+                          {fromDiag && risk.nivel === "alto" && (
+                            <div className="flex items-center gap-1 text-[10px] text-red-600 mt-1">
+                              <ListChecks className="h-3 w-3" /> Card criado no Plano de Ação
+                            </div>
+                          )}
+                          {risk.responsavel && (
+                            <div className="text-xs text-muted-foreground mt-1 truncate">{risk.responsavel}</div>
                           )}
                         </div>
-                        {risk.responsavel && (
-                          <div className="text-xs text-muted-foreground mt-1 truncate">{risk.responsavel}</div>
+                        <Select
+                          value={risk.status}
+                          onValueChange={(val) => updateMut.mutate({ id: risk.id, data: { status: val } })}
+                        >
+                          <SelectTrigger className="h-6 w-[90px] text-[10px]" onClick={e => e.stopPropagation()}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="identificado">Identificado</SelectItem>
+                            <SelectItem value="em_mitigacao">Em Mitigação</SelectItem>
+                            <SelectItem value="mitigado">Mitigado</SelectItem>
+                            <SelectItem value="aceito">Aceito</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </button>
+                    {hasDetail && (
+                      <div className="px-3 pb-2">
+                        <button
+                          onClick={() => setExpandedRisk(isExpanded ? null : risk.id)}
+                          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                        >
+                          <ChevronDown className={cn("h-3 w-3 transition-transform", isExpanded && "rotate-180")} />
+                          {isExpanded ? "Ocultar detalhes" : "Ver detalhes"}
+                        </button>
+                        {isExpanded && (
+                          <div className="mt-2 space-y-3 text-xs">
+                            {risk.descricao && (
+                              <p className="text-muted-foreground leading-relaxed">{risk.descricao}</p>
+                            )}
+                            {risk.acoesMitigadoras && (
+                              <div>
+                                <div className="font-semibold text-foreground mb-1">Ações mitigadoras</div>
+                                <p className="text-muted-foreground whitespace-pre-line leading-relaxed">{risk.acoesMitigadoras}</p>
+                              </div>
+                            )}
+                            {hasFonte && (
+                              <div>
+                                <div className="font-semibold text-foreground mb-1">Respostas do diagnóstico que originaram este risco</div>
+                                <ul className="space-y-1.5">
+                                  {risk.perguntasFonte!.map((pf, idx) => (
+                                    <li key={idx} className="border-l-2 border-indigo-200 pl-2">
+                                      <div className="text-foreground">{pf.pergunta}</div>
+                                      <div className="text-muted-foreground">Resposta: {pf.resposta}</div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <Select
-                        value={risk.status}
-                        onValueChange={(val) => updateMut.mutate({ id: risk.id, data: { status: val } })}
-                      >
-                        <SelectTrigger className="h-6 w-[90px] text-[10px]" onClick={e => e.stopPropagation()}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="identificado">Identificado</SelectItem>
-                          <SelectItem value="em_mitigacao">Em Mitigação</SelectItem>
-                          <SelectItem value="mitigado">Mitigado</SelectItem>
-                          <SelectItem value="aceito">Aceito</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </button>
+                    )}
+                  </div>
                 );
               })}
               {sortedRiscos.length === 0 && (
@@ -421,6 +567,39 @@ export default function RiscosPage() {
             <Button onClick={handleSubmit} disabled={createMut.isPending || !form.nome}>
               {createMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Salvar Risco
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={genDialogOpen} onOpenChange={(o) => { if (!generateMut.isPending) setGenDialogOpen(o); }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-indigo-600" /> Gerar riscos do diagnóstico
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2 text-sm text-muted-foreground">
+            <p>
+              A IA analisa as respostas mais frágeis do diagnóstico mais recente desta clínica
+              e cria riscos temáticos com descrição, probabilidade, impacto e ações sugeridas.
+            </p>
+            <p>
+              Riscos de <span className="font-medium text-foreground">nível alto</span> viram
+              automaticamente cards no <span className="font-medium text-foreground">Plano de Ação</span>.
+            </p>
+            <p className="text-amber-600">
+              Os riscos gerados anteriormente a partir do diagnóstico serão substituídos.
+              Riscos cadastrados manualmente não são afetados.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGenDialogOpen(false)} disabled={generateMut.isPending}>
+              Cancelar
+            </Button>
+            <Button onClick={() => generateMut.mutate()} disabled={generateMut.isPending}>
+              {generateMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+              Gerar riscos
             </Button>
           </DialogFooter>
         </DialogContent>

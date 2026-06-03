@@ -25,6 +25,7 @@ function mapAction(a: typeof actionsTable.$inferSelect) {
     evidencias: a.evidencias,
     coluna: a.coluna,
     ordem: a.ordem,
+    riscoOrigemId: a.riscoOrigemId,
     concluidoEm: a.concluidoEm?.toISOString() ?? null,
     createdAt: a.createdAt.toISOString(),
     updatedAt: a.updatedAt.toISOString(),

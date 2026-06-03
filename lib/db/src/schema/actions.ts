@@ -2,6 +2,7 @@ import { pgTable, text, uuid, integer, date, timestamp } from "drizzle-orm/pg-co
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { clinicsTable } from "./clinics";
+import { risksTable } from "./risks";
 
 export const actionsTable = pgTable("acoes", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -17,6 +18,9 @@ export const actionsTable = pgTable("acoes", {
   evidencias: text("evidencias"),
   coluna: text("coluna").notNull().default("backlog"),
   ordem: integer("ordem").notNull().default(0),
+  riscoOrigemId: uuid("risco_origem_id").references(() => risksTable.id, {
+    onDelete: "set null",
+  }),
   concluidoEm: timestamp("concluido_em", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

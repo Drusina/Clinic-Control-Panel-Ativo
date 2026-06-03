@@ -12,7 +12,7 @@ const PILARES_DEFINIDOS = [
   "compliance",
 ] as const;
 
-function calcAnswerValue(resposta: { valor: string }, pergunta: {
+export function calcAnswerValue(resposta: { valor: string }, pergunta: {
   tipo: string;
   valorMin: string | null;
   valorMax: string | null;

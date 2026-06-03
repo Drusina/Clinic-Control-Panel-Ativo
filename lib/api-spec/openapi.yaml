@@ -1073,6 +1073,36 @@ paths:
         "204":
           description: Deleted
 
+  /clinics/{clinicId}/diagnostics/{diagnosticId}/generate-risks:
+    post:
+      operationId: generateRisksFromDiagnostic
+      tags: [risks]
+      summary: Generate thematic risks from a diagnostic's weak answers
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: diagnosticId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: No risks generated (no weak answers or AI returned none)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateRisksResponse"
+        "201":
+          description: Risks generated from the diagnostic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateRisksResponse"
+
   # ─── TEAM ───────────────────────────────────────────────────────────────────
   /clinics/{clinicId}/team:
     get:
@@ -2708,11 +2738,17 @@ components:
         prioridade:
           type: ["string", "null"]
           enum: [alta, media, baixa, null]
+        pilarSlug:
+          type: ["string", "null"]
+        evidencias:
+          type: ["string", "null"]
         coluna:
           type: string
           enum: [backlog, todo, doing, review, done]
         ordem:
           type: integer
+        riscoOrigemId:
+          type: ["string", "null"]
         concluidoEm:
           type: ["string", "null"]
         createdAt:
@@ -2798,6 +2834,20 @@ components:
         status:
           type: string
           enum: [identificado, em_mitigacao, mitigado, aceito]
+        pilarSlug:
+          type: ["string", "null"]
+        origem:
+          type: string
+          enum: [manual, diagnostico]
+        nivel:
+          type: ["string", "null"]
+          enum: [baixo, medio, alto, null]
+        diagnosticoId:
+          type: ["string", "null"]
+        perguntasFonte:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/PerguntaFonte"
         createdAt:
           type: string
       required:
@@ -2808,7 +2858,40 @@ components:
         - impacto
         - severidade
         - status
+        - origem
         - createdAt
+
+    PerguntaFonte:
+      type: object
+      properties:
+        pergunta:
+          type: string
+        resposta:
+          type: string
+        pilarSlug:
+          type: ["string", "null"]
+      required:
+        - pergunta
+        - resposta
+
+    GenerateRisksResponse:
+      type: object
+      properties:
+        created:
+          type: integer
+        cardsCreated:
+          type: integer
+        message:
+          type: string
+        risks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Risk"
+      required:
+        - created
+        - cardsCreated
+        - message
+        - risks
 
     CreateRiskBody:
       type: object
