@@ -2,12 +2,19 @@ import { Router, type IRouter } from "express";
 import { eq, and, inArray, desc, sql } from "drizzle-orm";
 import { db, risksTable, clinicsTable, diagnosticsTable, actionsTable } from "@workspace/db";
 import { assertClinicAccess } from "../middleware/auth";
-import { CreateRiskBody, UpdateRiskBody, UpdateRiskResponse } from "@workspace/api-zod";
+import {
+  CreateRiskBody,
+  UpdateRiskBody,
+  UpdateRiskResponse,
+  CommitRisksFromDiagnosticBody,
+} from "@workspace/api-zod";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import {
   collectWeakAnswers,
   generateRisksFromWeakAnswers,
+  severidadeToNivel,
 } from "../lib/risk-generator.js";
+import type { PerguntaFonte } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -150,36 +157,49 @@ router.post("/clinics/:clinicId/risks/seed", async (req, res): Promise<void> => 
   res.status(201).json({ created: created.length, risks: created.map(mapRisk) });
 });
 
+async function loadConcludedDiagnostic(
+  req: Parameters<Parameters<typeof router.post>[1]>[0],
+  res: Parameters<Parameters<typeof router.post>[1]>[1],
+): Promise<{ clinicId: string; diagnosticId: string } | null> {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  const diagnosticId = Array.isArray(req.params.diagnosticId)
+    ? req.params.diagnosticId[0]
+    : req.params.diagnosticId;
+
+  const [diagnostic] = await db
+    .select()
+    .from(diagnosticsTable)
+    .where(eq(diagnosticsTable.id, diagnosticId));
+
+  if (!diagnostic || diagnostic.clinicId !== clinicId) {
+    res.status(404).json({ error: "Diagnostic not found" });
+    return null;
+  }
+
+  if (diagnostic.status !== "concluido") {
+    res.status(422).json({
+      error: "O diagnóstico precisa estar concluído para gerar riscos.",
+    });
+    return null;
+  }
+
+  return { clinicId, diagnosticId };
+}
+
+/**
+ * Step 1 of the review flow: synthesise risks from the diagnostic's weak answers
+ * with the AI and return them as drafts. Nothing is persisted here — the manager
+ * reviews and edits the drafts before committing.
+ */
 router.post(
-  "/clinics/:clinicId/diagnostics/:diagnosticId/generate-risks",
+  "/clinics/:clinicId/diagnostics/:diagnosticId/generate-risks/preview",
   async (req, res): Promise<void> => {
-    const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
-    const diagnosticId = Array.isArray(req.params.diagnosticId)
-      ? req.params.diagnosticId[0]
-      : req.params.diagnosticId;
+    const ctx = await loadConcludedDiagnostic(req, res);
+    if (!ctx) return;
 
-    const [diagnostic] = await db
-      .select()
-      .from(diagnosticsTable)
-      .where(eq(diagnosticsTable.id, diagnosticId));
-
-    if (!diagnostic || diagnostic.clinicId !== clinicId) {
-      res.status(404).json({ error: "Diagnostic not found" });
-      return;
-    }
-
-    if (diagnostic.status !== "concluido") {
-      res.status(422).json({
-        error: "O diagnóstico precisa estar concluído para gerar riscos.",
-      });
-      return;
-    }
-
-    const weak = await collectWeakAnswers(diagnosticId);
+    const weak = await collectWeakAnswers(ctx.diagnosticId);
     if (weak.length === 0) {
       res.json({
-        created: 0,
-        cardsCreated: 0,
         message: "Nenhuma resposta fraca encontrada neste diagnóstico.",
         risks: [],
       });
@@ -198,9 +218,79 @@ router.post(
 
     if (generated.length === 0) {
       res.json({
+        message: "A IA não conseguiu sintetizar riscos a partir das respostas.",
+        risks: [],
+      });
+      return;
+    }
+
+    res.json({
+      message: `${generated.length} risco(s) gerado(s) para revisão.`,
+      risks: generated.map((g) => ({
+        pilarSlug: g.pilarSlug,
+        nome: g.nome,
+        descricao: g.descricao,
+        probabilidade: g.probabilidade,
+        impacto: g.impacto,
+        severidade: g.severidade,
+        nivel: g.nivel,
+        acoesMitigadoras: g.acoesMitigadoras,
+        perguntasFonte: g.perguntasFonte,
+      })),
+    });
+  },
+);
+
+/**
+ * Step 2 of the review flow: persist the manager-reviewed risks and create
+ * action-plan cards only for the risks the manager explicitly selected
+ * (criarCard). Previously derived risks for this diagnostic are replaced.
+ */
+router.post(
+  "/clinics/:clinicId/diagnostics/:diagnosticId/generate-risks/commit",
+  async (req, res): Promise<void> => {
+    const ctx = await loadConcludedDiagnostic(req, res);
+    if (!ctx) return;
+    const { clinicId, diagnosticId } = ctx;
+
+    const parsed = CommitRisksFromDiagnosticBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+
+    const items = parsed.data.risks
+      .map((r) => {
+        const nome = r.nome.trim();
+        if (!nome) return null;
+        const probabilidade = Math.min(5, Math.max(1, Math.round(r.probabilidade)));
+        const impacto = Math.min(5, Math.max(1, Math.round(r.impacto)));
+        const severidade = probabilidade * impacto;
+        const perguntasFonte = (r.perguntasFonte ?? []).map((pf) => ({
+          pergunta: pf.pergunta,
+          resposta: pf.resposta,
+          pilarSlug: pf.pilarSlug ?? null,
+        })) as PerguntaFonte[];
+        return {
+          nome,
+          descricao: r.descricao?.trim() || null,
+          probabilidade,
+          impacto,
+          severidade,
+          nivel: severidadeToNivel(severidade),
+          pilarSlug: r.pilarSlug ?? null,
+          acoesMitigadoras: r.acoesMitigadoras?.trim() || null,
+          perguntasFonte,
+          criarCard: r.criarCard,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+
+    if (items.length === 0) {
+      res.json({
         created: 0,
         cardsCreated: 0,
-        message: "A IA não conseguiu sintetizar riscos a partir das respostas.",
+        message: "Nenhum risco selecionado para salvar.",
         risks: [],
       });
       return;
@@ -229,16 +319,16 @@ router.post(
       const insertedRisks = await tx
         .insert(risksTable)
         .values(
-          generated.map((g) => ({
+          items.map((g) => ({
             clinicId,
             nome: g.nome,
-            descricao: g.descricao || null,
+            descricao: g.descricao,
             probabilidade: g.probabilidade,
             impacto: g.impacto,
             severidade: g.severidade,
             pilarSlug: g.pilarSlug,
             responsavel: null,
-            acoesMitigadoras: g.acoesMitigadoras || null,
+            acoesMitigadoras: g.acoesMitigadoras,
             status: "identificado" as const,
             origem: "diagnostico",
             nivel: g.nivel,
@@ -257,15 +347,15 @@ router.post(
 
       let nextOrdem = (maxOrdemRow?.ordem ?? 0) + 1;
 
-      const highRisks = insertedRisks.filter((r) => r.nivel === "alto");
-      if (highRisks.length > 0) {
+      const cardRisks = insertedRisks.filter((_, i) => items[i].criarCard);
+      if (cardRisks.length > 0) {
         await tx.insert(actionsTable).values(
-          highRisks.map((r) => ({
+          cardRisks.map((r) => ({
             clinicId,
             titulo: r.nome,
             descricao: r.acoesMitigadoras ?? r.descricao ?? null,
             pilarSlug: r.pilarSlug,
-            prioridade: "alta",
+            prioridade: r.nivel === "alto" ? "alta" : r.nivel === "medio" ? "media" : "baixa",
             coluna: "backlog",
             ordem: nextOrdem++,
             riscoOrigemId: r.id,
@@ -273,13 +363,13 @@ router.post(
         );
       }
 
-      return { insertedRisks, cardsCreated: highRisks.length };
+      return { insertedRisks, cardsCreated: cardRisks.length };
     });
 
     res.status(201).json({
       created: result.insertedRisks.length,
       cardsCreated: result.cardsCreated,
-      message: `${result.insertedRisks.length} risco(s) gerado(s) do diagnóstico.`,
+      message: `${result.insertedRisks.length} risco(s) salvo(s) do diagnóstico.`,
       risks: result.insertedRisks.map(mapRisk),
     });
   },

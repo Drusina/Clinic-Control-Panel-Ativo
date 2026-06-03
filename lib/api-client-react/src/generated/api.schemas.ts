@@ -892,6 +892,51 @@ export interface GenerateRisksResponse {
   risks: Risk[];
 }
 
+export type GeneratedRiskPreviewNivel =
+  (typeof GeneratedRiskPreviewNivel)[keyof typeof GeneratedRiskPreviewNivel];
+
+export const GeneratedRiskPreviewNivel = {
+  baixo: "baixo",
+  medio: "medio",
+  alto: "alto",
+} as const;
+
+export interface GeneratedRiskPreview {
+  pilarSlug: string;
+  nome: string;
+  descricao: string;
+  probabilidade: number;
+  impacto: number;
+  severidade: number;
+  nivel: GeneratedRiskPreviewNivel;
+  acoesMitigadoras: string;
+  perguntasFonte: PerguntaFonte[];
+}
+
+export interface PreviewRisksResponse {
+  message: string;
+  risks: GeneratedRiskPreview[];
+}
+
+export interface CommitGeneratedRiskItem {
+  /** @nullable */
+  pilarSlug?: string | null;
+  nome: string;
+  /** @nullable */
+  descricao?: string | null;
+  probabilidade: number;
+  impacto: number;
+  /** @nullable */
+  acoesMitigadoras?: string | null;
+  /** @nullable */
+  perguntasFonte?: PerguntaFonte[] | null;
+  criarCard: boolean;
+}
+
+export interface CommitGeneratedRisksBody {
+  risks: CommitGeneratedRiskItem[];
+}
+
 export interface CreateRiskBody {
   nome: string;
   /** @nullable */

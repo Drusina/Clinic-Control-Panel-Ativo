@@ -26,6 +26,7 @@ import type {
   BulkInviteTeamMembersBody,
   Clinic,
   ClinicListResponse,
+  CommitGeneratedRisksBody,
   CreateActionBody,
   CreateActivityBody,
   CreateClinicBody,
@@ -67,6 +68,7 @@ import type {
   PerguntaInput,
   PerguntasImportResult,
   PipelineItem,
+  PreviewRisksResponse,
   ResetPerguntasToSeed200,
   Risk,
   SistemaUso,
@@ -4484,22 +4486,22 @@ export const useDeleteRisk = <
 };
 
 /**
- * @summary Generate thematic risks from a diagnostic's weak answers
+ * @summary Generate thematic risks from a diagnostic's weak answers without persisting them
  */
-export const getGenerateRisksFromDiagnosticUrl = (
+export const getPreviewRisksFromDiagnosticUrl = (
   clinicId: string,
   diagnosticId: string,
 ) => {
-  return `/api/clinics/${clinicId}/diagnostics/${diagnosticId}/generate-risks`;
+  return `/api/clinics/${clinicId}/diagnostics/${diagnosticId}/generate-risks/preview`;
 };
 
-export const generateRisksFromDiagnostic = async (
+export const previewRisksFromDiagnostic = async (
   clinicId: string,
   diagnosticId: string,
   options?: RequestInit,
-): Promise<GenerateRisksResponse> => {
-  return customFetch<GenerateRisksResponse>(
-    getGenerateRisksFromDiagnosticUrl(clinicId, diagnosticId),
+): Promise<PreviewRisksResponse> => {
+  return customFetch<PreviewRisksResponse>(
+    getPreviewRisksFromDiagnosticUrl(clinicId, diagnosticId),
     {
       ...options,
       method: "POST",
@@ -4507,24 +4509,24 @@ export const generateRisksFromDiagnostic = async (
   );
 };
 
-export const getGenerateRisksFromDiagnosticMutationOptions = <
+export const getPreviewRisksFromDiagnosticMutationOptions = <
   TError = ErrorType<unknown>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+    Awaited<ReturnType<typeof previewRisksFromDiagnostic>>,
     TError,
     { clinicId: string; diagnosticId: string },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
-  Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+  Awaited<ReturnType<typeof previewRisksFromDiagnostic>>,
   TError,
   { clinicId: string; diagnosticId: string },
   TContext
 > => {
-  const mutationKey = ["generateRisksFromDiagnostic"];
+  const mutationKey = ["previewRisksFromDiagnostic"];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation &&
       "mutationKey" in options.mutation &&
@@ -4534,44 +4536,164 @@ export const getGenerateRisksFromDiagnosticMutationOptions = <
     : { mutation: { mutationKey }, request: undefined };
 
   const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+    Awaited<ReturnType<typeof previewRisksFromDiagnostic>>,
     { clinicId: string; diagnosticId: string }
   > = (props) => {
     const { clinicId, diagnosticId } = props ?? {};
 
-    return generateRisksFromDiagnostic(clinicId, diagnosticId, requestOptions);
+    return previewRisksFromDiagnostic(clinicId, diagnosticId, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type GenerateRisksFromDiagnosticMutationResult = NonNullable<
-  Awaited<ReturnType<typeof generateRisksFromDiagnostic>>
+export type PreviewRisksFromDiagnosticMutationResult = NonNullable<
+  Awaited<ReturnType<typeof previewRisksFromDiagnostic>>
 >;
 
-export type GenerateRisksFromDiagnosticMutationError = ErrorType<unknown>;
+export type PreviewRisksFromDiagnosticMutationError = ErrorType<unknown>;
 
 /**
- * @summary Generate thematic risks from a diagnostic's weak answers
+ * @summary Generate thematic risks from a diagnostic's weak answers without persisting them
  */
-export const useGenerateRisksFromDiagnostic = <
+export const usePreviewRisksFromDiagnostic = <
   TError = ErrorType<unknown>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+    Awaited<ReturnType<typeof previewRisksFromDiagnostic>>,
     TError,
     { clinicId: string; diagnosticId: string },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
-  Awaited<ReturnType<typeof generateRisksFromDiagnostic>>,
+  Awaited<ReturnType<typeof previewRisksFromDiagnostic>>,
   TError,
   { clinicId: string; diagnosticId: string },
   TContext
 > => {
-  return useMutation(getGenerateRisksFromDiagnosticMutationOptions(options));
+  return useMutation(getPreviewRisksFromDiagnosticMutationOptions(options));
+};
+
+/**
+ * @summary Persist reviewed/edited risks and optionally create action-plan cards
+ */
+export const getCommitRisksFromDiagnosticUrl = (
+  clinicId: string,
+  diagnosticId: string,
+) => {
+  return `/api/clinics/${clinicId}/diagnostics/${diagnosticId}/generate-risks/commit`;
+};
+
+export const commitRisksFromDiagnostic = async (
+  clinicId: string,
+  diagnosticId: string,
+  commitGeneratedRisksBody: CommitGeneratedRisksBody,
+  options?: RequestInit,
+): Promise<GenerateRisksResponse> => {
+  return customFetch<GenerateRisksResponse>(
+    getCommitRisksFromDiagnosticUrl(clinicId, diagnosticId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(commitGeneratedRisksBody),
+    },
+  );
+};
+
+export const getCommitRisksFromDiagnosticMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof commitRisksFromDiagnostic>>,
+    TError,
+    {
+      clinicId: string;
+      diagnosticId: string;
+      data: BodyType<CommitGeneratedRisksBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof commitRisksFromDiagnostic>>,
+  TError,
+  {
+    clinicId: string;
+    diagnosticId: string;
+    data: BodyType<CommitGeneratedRisksBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["commitRisksFromDiagnostic"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof commitRisksFromDiagnostic>>,
+    {
+      clinicId: string;
+      diagnosticId: string;
+      data: BodyType<CommitGeneratedRisksBody>;
+    }
+  > = (props) => {
+    const { clinicId, diagnosticId, data } = props ?? {};
+
+    return commitRisksFromDiagnostic(
+      clinicId,
+      diagnosticId,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CommitRisksFromDiagnosticMutationResult = NonNullable<
+  Awaited<ReturnType<typeof commitRisksFromDiagnostic>>
+>;
+export type CommitRisksFromDiagnosticMutationBody =
+  BodyType<CommitGeneratedRisksBody>;
+export type CommitRisksFromDiagnosticMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Persist reviewed/edited risks and optionally create action-plan cards
+ */
+export const useCommitRisksFromDiagnostic = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof commitRisksFromDiagnostic>>,
+    TError,
+    {
+      clinicId: string;
+      diagnosticId: string;
+      data: BodyType<CommitGeneratedRisksBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof commitRisksFromDiagnostic>>,
+  TError,
+  {
+    clinicId: string;
+    diagnosticId: string;
+    data: BodyType<CommitGeneratedRisksBody>;
+  },
+  TContext
+> => {
+  return useMutation(getCommitRisksFromDiagnosticMutationOptions(options));
 };
 
 /**

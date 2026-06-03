@@ -1073,11 +1073,11 @@ paths:
         "204":
           description: Deleted
 
-  /clinics/{clinicId}/diagnostics/{diagnosticId}/generate-risks:
+  /clinics/{clinicId}/diagnostics/{diagnosticId}/generate-risks/preview:
     post:
-      operationId: generateRisksFromDiagnostic
+      operationId: previewRisksFromDiagnostic
       tags: [risks]
-      summary: Generate thematic risks from a diagnostic's weak answers
+      summary: Generate thematic risks from a diagnostic's weak answers without persisting them
       parameters:
         - name: clinicId
           in: path
@@ -1091,13 +1091,42 @@ paths:
             type: string
       responses:
         "200":
-          description: No risks generated (no weak answers or AI returned none)
+          description: Draft risks generated for review (not yet persisted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreviewRisksResponse"
+  /clinics/{clinicId}/diagnostics/{diagnosticId}/generate-risks/commit:
+    post:
+      operationId: commitRisksFromDiagnostic
+      tags: [risks]
+      summary: Persist reviewed/edited risks and optionally create action-plan cards
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: diagnosticId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommitGeneratedRisksBody"
+      responses:
+        "200":
+          description: No risks committed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/GenerateRisksResponse"
         "201":
-          description: Risks generated from the diagnostic
+          description: Risks persisted from the diagnostic
           content:
             application/json:
               schema:
@@ -2891,6 +2920,91 @@ components:
         - created
         - cardsCreated
         - message
+        - risks
+
+    GeneratedRiskPreview:
+      type: object
+      properties:
+        pilarSlug:
+          type: string
+        nome:
+          type: string
+        descricao:
+          type: string
+        probabilidade:
+          type: integer
+        impacto:
+          type: integer
+        severidade:
+          type: integer
+        nivel:
+          type: string
+          enum: [baixo, medio, alto]
+        acoesMitigadoras:
+          type: string
+        perguntasFonte:
+          type: array
+          items:
+            $ref: "#/components/schemas/PerguntaFonte"
+      required:
+        - pilarSlug
+        - nome
+        - descricao
+        - probabilidade
+        - impacto
+        - severidade
+        - nivel
+        - acoesMitigadoras
+        - perguntasFonte
+
+    PreviewRisksResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        risks:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeneratedRiskPreview"
+      required:
+        - message
+        - risks
+
+    CommitGeneratedRiskItem:
+      type: object
+      properties:
+        pilarSlug:
+          type: ["string", "null"]
+        nome:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        probabilidade:
+          type: integer
+        impacto:
+          type: integer
+        acoesMitigadoras:
+          type: ["string", "null"]
+        perguntasFonte:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/PerguntaFonte"
+        criarCard:
+          type: boolean
+      required:
+        - nome
+        - probabilidade
+        - impacto
+        - criarCard
+
+    CommitGeneratedRisksBody:
+      type: object
+      properties:
+        risks:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommitGeneratedRiskItem"
+      required:
         - risks
 
     CreateRiskBody:

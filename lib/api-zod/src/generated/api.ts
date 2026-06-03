@@ -1333,14 +1333,68 @@ export const DeleteRiskParams = zod.object({
 });
 
 /**
- * @summary Generate thematic risks from a diagnostic's weak answers
+ * @summary Generate thematic risks from a diagnostic's weak answers without persisting them
  */
-export const GenerateRisksFromDiagnosticParams = zod.object({
+export const PreviewRisksFromDiagnosticParams = zod.object({
   clinicId: zod.coerce.string(),
   diagnosticId: zod.coerce.string(),
 });
 
-export const GenerateRisksFromDiagnosticResponse = zod.object({
+export const PreviewRisksFromDiagnosticResponse = zod.object({
+  message: zod.string(),
+  risks: zod.array(
+    zod.object({
+      pilarSlug: zod.string(),
+      nome: zod.string(),
+      descricao: zod.string(),
+      probabilidade: zod.number(),
+      impacto: zod.number(),
+      severidade: zod.number(),
+      nivel: zod.enum(["baixo", "medio", "alto"]),
+      acoesMitigadoras: zod.string(),
+      perguntasFonte: zod.array(
+        zod.object({
+          pergunta: zod.string(),
+          resposta: zod.string(),
+          pilarSlug: zod.string().nullish(),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
+ * @summary Persist reviewed/edited risks and optionally create action-plan cards
+ */
+export const CommitRisksFromDiagnosticParams = zod.object({
+  clinicId: zod.coerce.string(),
+  diagnosticId: zod.coerce.string(),
+});
+
+export const CommitRisksFromDiagnosticBody = zod.object({
+  risks: zod.array(
+    zod.object({
+      pilarSlug: zod.string().nullish(),
+      nome: zod.string(),
+      descricao: zod.string().nullish(),
+      probabilidade: zod.number(),
+      impacto: zod.number(),
+      acoesMitigadoras: zod.string().nullish(),
+      perguntasFonte: zod
+        .array(
+          zod.object({
+            pergunta: zod.string(),
+            resposta: zod.string(),
+            pilarSlug: zod.string().nullish(),
+          }),
+        )
+        .nullish(),
+      criarCard: zod.boolean(),
+    }),
+  ),
+});
+
+export const CommitRisksFromDiagnosticResponse = zod.object({
   created: zod.number(),
   cardsCreated: zod.number(),
   message: zod.string(),
