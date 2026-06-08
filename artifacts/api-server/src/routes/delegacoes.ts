@@ -12,6 +12,7 @@ import {
   resolveAppUrl,
 } from "../lib/email.js";
 import { generateInviteCode } from "../middleware/auth.js";
+import { hasPlatformAccess } from "../lib/credentials.js";
 import { sendDelegationWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
 import { sendPushToClinic, sendPushToEmail } from "../lib/push.js";
@@ -361,8 +362,14 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
 
   if (responsavelEmail) {
     const recipientPrefs = await getRecipientPrefs(responsavelEmail, clinicId);
+    // Respondentes de diagnóstico (sem acesso à plataforma) NUNCA recebem o
+    // e-mail genérico de delegação, cujo botão aponta para a tela de login do
+    // portal (/delegacao/:clinicId). Eles já receberam o link de escopo
+    // restrito (/responder?code=...) no bloco de invite acima. Apenas gestores
+    // com acesso à plataforma recebem o e-mail/portal normal.
+    const recipientHasPlatformAccess = await hasPlatformAccess(responsavelEmail);
 
-    if (recipientPrefs.whatsappEnabled || recipientPrefs.emailEnabled) {
+    if (recipientPrefs.whatsappEnabled || (recipientPrefs.emailEnabled && recipientHasPlatformAccess)) {
       const [clinicRow] = await db
         .select({ nome: clinicsTable.nome })
         .from(clinicsTable)
@@ -411,14 +418,16 @@ router.post("/clinics/:clinicId/delegacoes", async (req, res): Promise<void> => 
         });
       }
 
-      if (recipientPrefs.emailEnabled) {
+      if (recipientPrefs.emailEnabled && recipientHasPlatformAccess) {
         sendEmail({
           to: responsavelEmail,
           subject: `[IONEX360] Delegação — ${pilarNome} (${escopoLabel})`,
           html: emailHtml,
         }).catch(() => {});
       } else if (!notifiedViaWhatsApp) {
-        // Recipient opted out of both channels — nothing to send.
+        // Recipient opted out of both channels — or is a diagnostic
+        // respondent (no platform access). Respondents already received the
+        // scoped /responder?code= link above — nothing more to send here.
       }
     }
   }
@@ -509,10 +518,10 @@ router.post(
         .json({ error: "Adicione um e-mail de responsável antes de enviar o convite." });
       return;
     }
-    if (deleg.nivel !== 1 && deleg.nivel !== 3) {
+    if (deleg.nivel !== 1 && deleg.nivel !== 2 && deleg.nivel !== 3) {
       res
         .status(400)
-        .json({ error: "Convites individuais só são suportados para delegações de pilar (N1) ou perguntas ad-hoc (N3)." });
+        .json({ error: "Convites individuais só são suportados para delegações de pilar (N1), subdelegações (N2) ou perguntas ad-hoc (N3)." });
       return;
     }
 

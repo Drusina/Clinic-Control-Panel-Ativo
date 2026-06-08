@@ -1178,6 +1178,13 @@ function ExpandedPilar({
               <Badge variant={STATUS_CONFIG[d.status]?.variant ?? "outline"} className="text-[10px]">
                 {STATUS_CONFIG[d.status]?.label ?? d.status}
               </Badge>
+              {d.responsavelEmail && (
+                <SendInviteButton
+                  clinicId={clinicId}
+                  diagnosticoId={diagnosticoId}
+                  delegacao={d}
+                />
+              )}
               <button
                 className="text-muted-foreground hover:text-destructive"
                 onClick={() => {
@@ -1590,7 +1597,10 @@ function DelegacaoDialog({
       questaoFim: form.questaoFim ? parseInt(form.questaoFim) : undefined,
       observacoes: form.observacoes || undefined,
       diagnosticoId,
-      enviarConvite: context.nivel === 1, // dispara invite no caso single-pilar
+      // Dispara o invite tanto no single-pilar (N1) quanto na subdelegação (N2).
+      // O backend minta o link de escopo restrito (/responder?code=...) e, para
+      // respondentes sem acesso à plataforma, suprime o e-mail de portal.
+      enviarConvite: true,
       // Link sub-delegations to their parent N1 when one exists.
       parentId: context.nivel === 2 ? parentDelegacao?.id ?? undefined : undefined,
     });

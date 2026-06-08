@@ -1,0 +1,1 @@
+- [Delegation email routing](delegation-email-routing.md) — respondents (no platform access) get scoped /responder?code link only; gate generic portal delegation email on hasPlatformAccess, not nível.
