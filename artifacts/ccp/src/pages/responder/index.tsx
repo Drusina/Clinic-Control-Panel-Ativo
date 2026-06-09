@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { clearToken, setActiveClinicId } from "@/hooks/use-auth";
 import {
   Card,
   CardContent,
@@ -81,6 +82,18 @@ export default function ResponderEntrypoint() {
 
   // 1. Redeem (se vier ?code= na URL) OU recupera sessão salva.
   useEffect(() => {
+    // Isolamento de sessão: o fluxo do respondente é uma identidade pública e
+    // de escopo restrito (token `diagnostic_respondent` em sessionStorage). Se
+    // o link for aberto no mesmo navegador onde já existe uma sessão
+    // privilegiada (super_admin/team_member em `ccp_admin_token`), essa sessão
+    // continuaria viva e o respondente poderia navegar de volta para a
+    // plataforma completa (ou um restore de histórico/BFCache exibiria telas de
+    // admin). Removemos o token privilegiado ao entrar no fluxo público para
+    // que qualquer navegação subsequente exija novo login. O backend já nega
+    // por papel; isto fecha a brecha de UI no mesmo navegador.
+    clearToken();
+    setActiveClinicId(null);
+
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
 

@@ -766,6 +766,20 @@ function Router() {
 }
 
 function App() {
+  // BFCache / histórico: ao restaurar uma página do cache de back-forward, o
+  // DOM previamente renderizado volta sem re-executar guards. Combinado com o
+  // fluxo público /responder (que sanitiza a sessão privilegiada na entrada),
+  // isto poderia exibir transitoriamente telas de admin/portal já renderizadas.
+  // Forçamos um reload em restores de BFCache para que /auth/me seja
+  // reavaliado do zero e os guards redirecionem quando não há sessão válida.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
