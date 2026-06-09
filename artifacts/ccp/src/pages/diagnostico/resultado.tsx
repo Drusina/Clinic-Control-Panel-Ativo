@@ -230,6 +230,32 @@ export default function DiagnosticoResultado() {
     },
   });
 
+  // These memos must run on every render (before the loading/empty early
+  // returns below) to keep the hook order stable — otherwise React throws
+  // "Rendered more hooks than during the previous render" the moment the
+  // diagnostic query resolves on a direct page load.
+  const respostasMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const r of respostas ?? []) m[r.perguntaId] = r.valor;
+    return m;
+  }, [respostas]);
+
+  const questionsByPilar = useMemo(() => {
+    const map = new Map<string, { slug: string; nome: string; ordem: number; questions: Pergunta[] }>();
+    for (const q of perguntas ?? []) {
+      let row = map.get(q.pilarSlug);
+      if (!row) {
+        row = { slug: q.pilarSlug, nome: q.pilarNome, ordem: q.pilarOrdem, questions: [] };
+        map.set(q.pilarSlug, row);
+      }
+      row.questions.push(q);
+    }
+    const groups = Array.from(map.values());
+    groups.sort((a, b) => a.ordem - b.ordem);
+    for (const g of groups) g.questions.sort((a, b) => a.ordem - b.ordem);
+    return groups;
+  }, [perguntas]);
+
   const createAction = async (acao: { pilar: string; titulo: string; descricao: string; prioridade: string }) => {
     if (!diagnostic) return;
     setCreatingAction(acao.titulo);
@@ -597,28 +623,6 @@ export default function DiagnosticoResultado() {
   }));
 
   const insights = diagnostic.insightsIa;
-
-  const respostasMap = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const r of respostas ?? []) m[r.perguntaId] = r.valor;
-    return m;
-  }, [respostas]);
-
-  const questionsByPilar = useMemo(() => {
-    const map = new Map<string, { slug: string; nome: string; ordem: number; questions: Pergunta[] }>();
-    for (const q of perguntas ?? []) {
-      let row = map.get(q.pilarSlug);
-      if (!row) {
-        row = { slug: q.pilarSlug, nome: q.pilarNome, ordem: q.pilarOrdem, questions: [] };
-        map.set(q.pilarSlug, row);
-      }
-      row.questions.push(q);
-    }
-    const groups = Array.from(map.values());
-    groups.sort((a, b) => a.ordem - b.ordem);
-    for (const g of groups) g.questions.sort((a, b) => a.ordem - b.ordem);
-    return groups;
-  }, [perguntas]);
 
   const toggle = (section: keyof typeof expandedSections) =>
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));

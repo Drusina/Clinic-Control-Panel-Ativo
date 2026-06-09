@@ -27,3 +27,10 @@ rows; `team_credentials` is keyed by email (not clinic), so delete it separately
 **Note:** the `@workspace/ccp` artifact now has a vitest harness for isolated
 component tests — prefer that over a full UI run when locking pure render/handler
 logic that doesn't need a real session.
+
+**Gotcha (runTest DB seeding is flaky):** `[DB]` INSERT steps inside a `runTest`
+plan are not reliably executed — a run can reach login with the rows never
+created, failing as "credenciais inválidas". Seed deterministically yourself via
+`executeSql` (generate the UUIDs/email in code), then make the test plan start at
+`/entrar` and use read-only `[DB]` only for assertions. Clean up the rows in the
+same code_execution afterward, since a crashing plan skips its own cleanup step.
