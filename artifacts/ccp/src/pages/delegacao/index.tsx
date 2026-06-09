@@ -1402,7 +1402,7 @@ function useSendInvite(clinicId: string, diagnosticoId: string) {
         title: data.sent ? "Convite enviado" : "Link gerado (e-mail falhou)",
         description: data.sent
           ? `E-mail enviado para ${data.to}. O link é válido por 30 dias.`
-          : `Compartilhe manualmente: ${data.link}`,
+          : `Não foi possível enviar para ${data.to}. Compartilhe o link manualmente: ${data.link}`,
       });
     },
     onError: (err: Error) => {
