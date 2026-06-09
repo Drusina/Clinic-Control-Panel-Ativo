@@ -45,6 +45,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -988,7 +996,16 @@ function PilarRow(props: PilarRowProps) {
                 <Button size="sm" variant="ghost" onClick={onSubdelegate}>
                   <Plus className="h-3 w-3 mr-1" /> Sub-delegar
                 </Button>
-                <SendInviteButton clinicId={clinicId} diagnosticoId={diagnosticoId} delegacao={n1} />
+                {n2s.length > 0 ? (
+                  <ResendInviteMenu
+                    clinicId={clinicId}
+                    diagnosticoId={diagnosticoId}
+                    n1={n1}
+                    n2s={n2s}
+                  />
+                ) : (
+                  <SendInviteButton clinicId={clinicId} diagnosticoId={diagnosticoId} delegacao={n1} />
+                )}
                 <Select
                   value={n1.status}
                   onValueChange={(val) => updateDelegMut.mutate({ id: n1.id, data: { status: val } })}
@@ -1351,21 +1368,26 @@ function AnswerInput({
 
 // ─── Send invite (link individual por pilar) — task #205 ───────────────────
 
-function SendInviteButton({
-  clinicId,
-  diagnosticoId,
-  delegacao,
-}: {
-  clinicId: string;
-  diagnosticoId: string;
-  delegacao: Delegacao;
-}) {
+// Escopo legível de uma delegação para rótulos de UI (ex.: "Q1–Q10").
+function delegacaoScopeLabel(d: Delegacao): string | null {
+  if (d.questaoInicio != null && d.questaoFim != null) {
+    return d.questaoInicio === d.questaoFim
+      ? `Q${d.questaoInicio}`
+      : `Q${d.questaoInicio}–Q${d.questaoFim}`;
+  }
+  return null;
+}
+
+// Mutation compartilhada para (re)gerar e enviar o link de resposta de uma
+// delegação específica. Recebe o id da delegação no `mutate(id)`, para que um
+// único hook possa servir o responsável do pilar (N1) e cada sub-delegado (N2).
+function useSendInvite(clinicId: string, diagnosticoId: string) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const sendMut = useMutation({
-    mutationFn: async () => {
+  return useMutation({
+    mutationFn: async (delegacaoId: string) => {
       const res = await authFetch(
-        `/api/clinics/${clinicId}/diagnostics/${diagnosticoId}/delegacoes/${delegacao.id}/send-invite`,
+        `/api/clinics/${clinicId}/diagnostics/${diagnosticoId}/delegacoes/${delegacaoId}/send-invite`,
         { method: "POST" },
       );
       if (!res.ok) {
@@ -1387,22 +1409,35 @@ function SendInviteButton({
       toast({ variant: "destructive", title: "Não foi possível enviar", description: err.message });
     },
   });
+}
+
+function SendInviteButton({
+  clinicId,
+  diagnosticoId,
+  delegacao,
+}: {
+  clinicId: string;
+  diagnosticoId: string;
+  delegacao: Delegacao;
+}) {
+  const sendMut = useSendInvite(clinicId, diagnosticoId);
 
   const alreadySent = !!delegacao.inviteSentAt;
   const disabled = !delegacao.responsavelEmail || sendMut.isPending;
+  const quem = delegacao.responsavelNome ? ` para ${delegacao.responsavelNome}` : "";
 
   return (
     <Button
       size="sm"
       variant="ghost"
       disabled={disabled}
-      onClick={() => sendMut.mutate()}
+      onClick={() => sendMut.mutate(delegacao.id)}
       title={
         !delegacao.responsavelEmail
           ? "Adicione um e-mail de responsável antes de enviar"
           : alreadySent
-          ? "Reenviar link de resposta"
-          : "Enviar link de resposta por e-mail"
+          ? `Reenviar link de resposta${quem}`
+          : `Enviar link de resposta por e-mail${quem}`
       }
     >
       {sendMut.isPending ? (
@@ -1414,6 +1449,92 @@ function SendInviteButton({
       )}
       {alreadySent ? "Reenviar" : "Enviar convite"}
     </Button>
+  );
+}
+
+// Menu "Reenviar" para a linha (fechada) do pilar quando há sub-delegações.
+// Lista o responsável do pilar (N1) e cada sub-delegado (N2) para que o gestor
+// escolha explicitamente o destinatário sem precisar expandir o pilar.
+function ResendInviteMenu({
+  clinicId,
+  diagnosticoId,
+  n1,
+  n2s,
+}: {
+  clinicId: string;
+  diagnosticoId: string;
+  n1: Delegacao;
+  n2s: Delegacao[];
+}) {
+  const sendMut = useSendInvite(clinicId, diagnosticoId);
+  const noneHaveEmail = ![n1, ...n2s].some((d) => !!d.responsavelEmail);
+
+  const renderItem = (d: Delegacao, sublabel: string) => {
+    const noEmail = !d.responsavelEmail;
+    const isPending = sendMut.isPending && sendMut.variables === d.id;
+    return (
+      <DropdownMenuItem
+        key={d.id}
+        disabled={noEmail || sendMut.isPending}
+        onSelect={() => {
+          if (!noEmail) sendMut.mutate(d.id);
+        }}
+        className="flex items-start gap-2"
+      >
+        {isPending ? (
+          <Loader2 className="h-3.5 w-3.5 mt-0.5 animate-spin shrink-0" />
+        ) : (
+          <Send className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+        )}
+        <div className="flex flex-col min-w-0">
+          <span className="font-medium truncate">
+            {d.responsavelNome ?? "—"}
+            <span className="text-muted-foreground font-normal"> · {sublabel}</span>
+          </span>
+          <span className="text-xs text-muted-foreground truncate">
+            {d.responsavelEmail ?? "sem e-mail cadastrado"}
+            {d.inviteSentAt ? " · já enviado" : ""}
+          </span>
+        </div>
+      </DropdownMenuItem>
+    );
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={sendMut.isPending || noneHaveEmail}
+          title={
+            noneHaveEmail
+              ? "Nenhum responsável tem e-mail cadastrado"
+              : "Reenviar link para o responsável do pilar ou um sub-delegado"
+          }
+        >
+          {sendMut.isPending ? (
+            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          ) : (
+            <Send className="h-3 w-3 mr-1" />
+          )}
+          Reenviar
+          <ChevronDown className="h-3 w-3 ml-1" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72">
+        <DropdownMenuLabel>Reenviar link de resposta para…</DropdownMenuLabel>
+        {renderItem(n1, "responsável do pilar")}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          Sub-delegações
+        </DropdownMenuLabel>
+        {n2s.map((d) => {
+          const scope = delegacaoScopeLabel(d);
+          return renderItem(d, scope ? `sub-delegado · ${scope}` : "sub-delegado");
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
