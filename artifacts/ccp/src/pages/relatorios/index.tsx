@@ -126,6 +126,33 @@ export default function RelatoriosPage() {
         const scoreGlobal = latest?.scoreGlobal != null ? Number(latest.scoreGlobal) : 0;
         const scoresPilares: Record<string, number> = (latest?.scoresPilares as Record<string, number>) ?? {};
         const insightsIa = (latest?.insightsIa as DiagnosticoPdfProps["insightsIa"]) ?? null;
+
+        let questions: DiagnosticoPdfProps["questions"] = undefined;
+        let respostasMap: DiagnosticoPdfProps["respostas"] = undefined;
+        if (latest?.id) {
+          const [perguntas, respostas] = await Promise.all([
+            apiFetch(`/api/perguntas`),
+            apiFetch(`/api/diagnostics/${latest.id}/respostas`),
+          ]);
+          if (Array.isArray(perguntas)) {
+            questions = perguntas.map((p: Record<string, unknown>) => ({
+              id: String(p.id),
+              pilarSlug: String(p.pilarSlug),
+              pilarNome: String(p.pilarNome),
+              pilarOrdem: Number(p.pilarOrdem),
+              texto: String(p.texto),
+              tipo: String(p.tipo),
+              ordem: Number(p.ordem),
+            }));
+          }
+          if (Array.isArray(respostas)) {
+            respostasMap = {};
+            for (const r of respostas as Array<{ perguntaId: string; valor: string }>) {
+              respostasMap[r.perguntaId] = r.valor;
+            }
+          }
+        }
+
         doc = (
           <DiagnosticoPdf
             clinicName={clinicName}
@@ -133,6 +160,8 @@ export default function RelatoriosPage() {
             scoreGlobal={scoreGlobal}
             scoresPilares={scoresPilares}
             insightsIa={insightsIa}
+            questions={questions}
+            respostas={respostasMap}
           />
         );
         filename = `diagnostico-360-${clinicName.toLowerCase().replace(/\s+/g, "-")}.pdf`;

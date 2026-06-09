@@ -1,9 +1,20 @@
-import { useListDiagnostics, getListDiagnosticsQueryKey, useCreateDiagnostic, useCompleteDiagnostic } from "@workspace/api-client-react";
+import { useListDiagnostics, getListDiagnosticsQueryKey, useCreateDiagnostic, useCompleteDiagnostic, useReopenDiagnostic } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Plus, PlayCircle, CheckCircle, ListChecks } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Loader2, Plus, PlayCircle, CheckCircle, ListChecks, Unlock } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -19,6 +30,7 @@ export default function DiagnosticsTab({ clinicId }: { clinicId: string }) {
 
   const createDiagnostic = useCreateDiagnostic();
   const completeDiagnostic = useCompleteDiagnostic();
+  const reopenDiagnostic = useReopenDiagnostic();
 
   const handleCreate = () => {
     createDiagnostic.mutate(
@@ -45,6 +57,21 @@ export default function DiagnosticsTab({ clinicId }: { clinicId: string }) {
         },
         onError: () => {
           toast({ variant: "destructive", title: "Erro", description: "Falha ao concluir diagnóstico." });
+        },
+      }
+    );
+  };
+
+  const handleReopen = (id: string) => {
+    reopenDiagnostic.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          toast({ title: "Diagnóstico reaberto", description: "Agora as respostas podem ser editadas novamente." });
+          queryClient.invalidateQueries({ queryKey: getListDiagnosticsQueryKey(clinicId) });
+        },
+        onError: () => {
+          toast({ variant: "destructive", title: "Erro", description: "Falha ao reabrir diagnóstico." });
         },
       }
     );
@@ -143,11 +170,41 @@ export default function DiagnosticsTab({ clinicId }: { clinicId: string }) {
                   <div className="text-xs text-muted-foreground">
                     Concluído em: {diag.concluidoEm ? format(new Date(diag.concluidoEm), "dd/MM/yyyy", { locale: ptBR }) : "-"}
                   </div>
-                  <Link href={`/delegacao/${clinicId}?diagnostico=${diag.id}`}>
-                    <Button size="sm" variant="ghost" className="text-xs">
-                      <ListChecks className="h-3 w-3 mr-1" /> Ver respostas
-                    </Button>
-                  </Link>
+                  <div className="flex items-center gap-1">
+                    {diag.status === "concluido" && !inProgress && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="text-xs" disabled={reopenDiagnostic.isPending}>
+                            {reopenDiagnostic.isPending ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Unlock className="h-3 w-3 mr-1" />
+                            )}
+                            Reabrir
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Reabrir diagnóstico?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              O diagnóstico (v{diag.versao}) voltará para "Em andamento" e as respostas
+                              poderão ser editadas novamente. Conclua-o de novo após as alterações para
+                              atualizar os scores.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleReopen(diag.id)}>Reabrir</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                    <Link href={`/delegacao/${clinicId}?diagnostico=${diag.id}`}>
+                      <Button size="sm" variant="ghost" className="text-xs">
+                        <ListChecks className="h-3 w-3 mr-1" /> Ver respostas
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </CardContent>
             </Card>

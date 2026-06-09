@@ -70,15 +70,62 @@ type InsightsIa = {
   acoes_sugeridas?: InsightActionItem[];
 };
 
+export type DiagnosticoPdfQuestion = {
+  id: string;
+  pilarSlug: string;
+  pilarNome: string;
+  pilarOrdem: number;
+  texto: string;
+  tipo: string;
+  ordem: number;
+};
+
 export type DiagnosticoPdfProps = {
   clinicName: string;
   date: string;
   scoreGlobal: number;
   scoresPilares: Record<string, number>;
   insightsIa?: InsightsIa | null;
+  questions?: DiagnosticoPdfQuestion[];
+  respostas?: Record<string, string>;
 };
 
-export function DiagnosticoPdf({ clinicName, date, scoreGlobal, scoresPilares, insightsIa }: DiagnosticoPdfProps) {
+function formatAnswer(tipo: string, valor: string | undefined | null): string {
+  if (valor == null || valor === "") return "Sem resposta";
+  switch (tipo) {
+    case "sim_nao":
+      return valor === "sim" ? "Sim" : valor === "nao" ? "Não" : valor;
+    case "escala_1_5":
+      return `${valor} / 5`;
+    default:
+      return valor;
+  }
+}
+
+type QuestionsByPilar = {
+  slug: string;
+  nome: string;
+  ordem: number;
+  questions: DiagnosticoPdfQuestion[];
+}[];
+
+function groupQuestionsByPilar(questions: DiagnosticoPdfQuestion[]): QuestionsByPilar {
+  const map = new Map<string, { slug: string; nome: string; ordem: number; questions: DiagnosticoPdfQuestion[] }>();
+  for (const q of questions) {
+    let row = map.get(q.pilarSlug);
+    if (!row) {
+      row = { slug: q.pilarSlug, nome: q.pilarNome, ordem: q.pilarOrdem, questions: [] };
+      map.set(q.pilarSlug, row);
+    }
+    row.questions.push(q);
+  }
+  const groups = Array.from(map.values());
+  groups.sort((a, b) => a.ordem - b.ordem);
+  for (const g of groups) g.questions.sort((a, b) => a.ordem - b.ordem);
+  return groups;
+}
+
+export function DiagnosticoPdf({ clinicName, date, scoreGlobal, scoresPilares, insightsIa, questions, respostas }: DiagnosticoPdfProps) {
   const scores = PILARES.map(p => scoresPilares[p.slug] ?? 0);
   const dataPoints = makePolygonPoints(scores);
   const grid20 = makeGridPoints(20);
@@ -282,6 +329,48 @@ export function DiagnosticoPdf({ clinicName, date, scoreGlobal, scoresPilares, i
                   ))}
                 </>
               )}
+            </>
+          )}
+
+          {questions && questions.length > 0 && (
+            <>
+              <SectionHeading>Perguntas e Respostas por Pilar</SectionHeading>
+              {groupQuestionsByPilar(questions).map(group => (
+                <View key={group.slug} style={{ marginBottom: 10 }} wrap={false}>
+                  <Text style={[styles.cardTitle, { marginBottom: 4 }]}>{group.nome}</Text>
+                  {group.questions.map(q => {
+                    const answer = formatAnswer(q.tipo, respostas?.[q.id]);
+                    const unanswered = respostas?.[q.id] == null || respostas?.[q.id] === "";
+                    return (
+                      <View
+                        key={q.id}
+                        style={{
+                          flexDirection: "row",
+                          marginBottom: 3,
+                          paddingBottom: 3,
+                          borderBottomWidth: 0.5,
+                          borderBottomColor: "#e2e8f0",
+                        }}
+                      >
+                        <Text style={{ fontSize: 7.5, color: "#374151", flex: 1, paddingRight: 8 }}>
+                          {q.ordem}. {q.texto}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 7.5,
+                            fontFamily: "Helvetica-Bold",
+                            color: unanswered ? "#94a3b8" : "#0f172a",
+                            width: 70,
+                            textAlign: "right",
+                          }}
+                        >
+                          {answer}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
             </>
           )}
         </PdfBody>

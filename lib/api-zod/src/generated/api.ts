@@ -792,6 +792,25 @@ export const CompleteDiagnosticResponse = zod.object({
 });
 
 /**
+ * @summary Reopen a completed diagnostic so answers can be edited again
+ */
+export const ReopenDiagnosticParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ReopenDiagnosticResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  versao: zod.number(),
+  status: zod.enum(["em_andamento", "concluido", "arquivado"]),
+  iniciadoEm: zod.string(),
+  concluidoEm: zod.string().nullish(),
+  scoreGlobal: zod.number().nullish(),
+  scoresPilares: zod.object({}).passthrough().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
  * @summary Recalculate scores for a diagnostic based on current responses
  */
 export const CalculateDiagnosticScoresParams = zod.object({

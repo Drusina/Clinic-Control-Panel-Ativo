@@ -680,6 +680,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/Diagnostic"
 
+  /diagnostics/{id}/reopen:
+    post:
+      operationId: reopenDiagnostic
+      tags: [diagnostics]
+      summary: Reopen a completed diagnostic so answers can be edited again
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Reopened diagnostic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Diagnostic"
+
   /diagnostics/{id}/calculate-scores:
     post:
       operationId: calculateDiagnosticScores

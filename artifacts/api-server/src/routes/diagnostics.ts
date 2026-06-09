@@ -141,4 +141,28 @@ router.post("/diagnostics/:id/complete", async (req, res): Promise<void> => {
   res.json(CompleteDiagnosticResponse.parse(mapDiagnostic(diagnostic)));
 });
 
+router.post("/diagnostics/:id/reopen", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  const existing = await db.select().from(diagnosticsTable).where(eq(diagnosticsTable.id, id));
+  if (!existing.length) {
+    res.status(404).json({ error: "Diagnostic not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, existing[0].clinicId)) return;
+
+  const [diagnostic] = await db
+    .update(diagnosticsTable)
+    .set({ status: "em_andamento", concluidoEm: null })
+    .where(eq(diagnosticsTable.id, id))
+    .returning();
+
+  if (!diagnostic) {
+    res.status(404).json({ error: "Diagnostic not found" });
+    return;
+  }
+
+  res.json(CompleteDiagnosticResponse.parse(mapDiagnostic(diagnostic)));
+});
+
 export default router;

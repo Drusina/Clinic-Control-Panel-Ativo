@@ -2683,6 +2683,90 @@ export const useCompleteDiagnostic = <
 };
 
 /**
+ * @summary Reopen a completed diagnostic so answers can be edited again
+ */
+export const getReopenDiagnosticUrl = (id: string) => {
+  return `/api/diagnostics/${id}/reopen`;
+};
+
+export const reopenDiagnostic = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Diagnostic> => {
+  return customFetch<Diagnostic>(getReopenDiagnosticUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getReopenDiagnosticMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reopenDiagnostic>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reopenDiagnostic>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["reopenDiagnostic"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reopenDiagnostic>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return reopenDiagnostic(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReopenDiagnosticMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reopenDiagnostic>>
+>;
+
+export type ReopenDiagnosticMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reopen a completed diagnostic so answers can be edited again
+ */
+export const useReopenDiagnostic = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reopenDiagnostic>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reopenDiagnostic>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getReopenDiagnosticMutationOptions(options));
+};
+
+/**
  * @summary Recalculate scores for a diagnostic based on current responses
  */
 export const getCalculateDiagnosticScoresUrl = (id: string) => {

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,7 +13,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, TrendingUp, AlertTriangle, CheckCircle2, Zap, ChevronDown, ChevronUp, Plus, ArrowLeft, FileDown } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Loader2, Sparkles, TrendingUp, AlertTriangle, CheckCircle2, Zap, ChevronDown, ChevronUp, Plus, ArrowLeft, FileDown, Unlock, ListChecks } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getStoredToken } from "@/hooks/use-auth";
 import jsPDF from "jspdf";
@@ -68,6 +79,33 @@ interface ClinicData {
   id: string;
   nome: string;
   fantasia?: string | null;
+}
+
+interface Pergunta {
+  id: string;
+  pilarSlug: string;
+  pilarNome: string;
+  pilarOrdem: number;
+  texto: string;
+  tipo: string;
+  ordem: number;
+}
+
+interface RespostaItem {
+  perguntaId: string;
+  valor: string;
+}
+
+function formatAnswer(tipo: string, valor: string | undefined | null): string {
+  if (valor == null || valor === "") return "Sem resposta";
+  switch (tipo) {
+    case "sim_nao":
+      return valor === "sim" ? "Sim" : valor === "nao" ? "Não" : valor;
+    case "escala_1_5":
+      return `${valor} / 5`;
+    default:
+      return valor;
+  }
 }
 
 function ScoreDelta({ score, meta }: { score: number; meta?: number }) {
@@ -153,6 +191,28 @@ export default function DiagnosticoResultado() {
     queryKey: ["clinic", diagnostic?.clinicId],
     queryFn: () => apiFetch(`/clinics/${diagnostic!.clinicId}`),
     enabled: !!diagnostic?.clinicId,
+  });
+
+  const { data: perguntas } = useQuery<Pergunta[]>({
+    queryKey: ["perguntas"],
+    queryFn: () => apiFetch("/perguntas"),
+  });
+
+  const { data: respostas } = useQuery<RespostaItem[]>({
+    queryKey: ["respostas", diagnosticoId],
+    queryFn: () => apiFetch(`/diagnostics/${diagnosticoId}/respostas`),
+    enabled: !!diagnosticoId,
+  });
+
+  const reopenMut = useMutation({
+    mutationFn: () => apiFetch(`/diagnostics/${diagnosticoId}/reopen`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["diagnostic", diagnosticoId] });
+      toast({ title: "Diagnóstico reaberto", description: "Agora você pode editar as respostas." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao reabrir diagnóstico", description: err.message, variant: "destructive" });
+    },
   });
 
   const analyzesMut = useMutation({
@@ -538,6 +598,28 @@ export default function DiagnosticoResultado() {
 
   const insights = diagnostic.insightsIa;
 
+  const respostasMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const r of respostas ?? []) m[r.perguntaId] = r.valor;
+    return m;
+  }, [respostas]);
+
+  const questionsByPilar = useMemo(() => {
+    const map = new Map<string, { slug: string; nome: string; ordem: number; questions: Pergunta[] }>();
+    for (const q of perguntas ?? []) {
+      let row = map.get(q.pilarSlug);
+      if (!row) {
+        row = { slug: q.pilarSlug, nome: q.pilarNome, ordem: q.pilarOrdem, questions: [] };
+        map.set(q.pilarSlug, row);
+      }
+      row.questions.push(q);
+    }
+    const groups = Array.from(map.values());
+    groups.sort((a, b) => a.ordem - b.ordem);
+    for (const g of groups) g.questions.sort((a, b) => a.ordem - b.ordem);
+    return groups;
+  }, [perguntas]);
+
   const toggle = (section: keyof typeof expandedSections) =>
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
 
@@ -551,6 +633,33 @@ export default function DiagnosticoResultado() {
           <h1 className="text-2xl font-bold">Resultado do Diagnóstico 360°</h1>
           <p className="text-sm text-muted-foreground">Versão {diagnostic.versao} · {diagnostic.status}</p>
         </div>
+        {diagnostic.status === "concluido" && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" disabled={reopenMut.isPending} className="gap-2">
+                {reopenMut.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Unlock className="h-4 w-4" />
+                )}
+                Reabrir relatório
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reabrir diagnóstico?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  O diagnóstico voltará para "Em andamento" e as respostas poderão ser editadas
+                  novamente. Conclua-o de novo após as alterações para atualizar os scores.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => reopenMut.mutate()}>Reabrir</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
         <Button
           variant="outline"
           onClick={handleExportPdf}
@@ -688,6 +797,50 @@ export default function DiagnosticoResultado() {
           </div>
         </CardContent>
       </Card>
+
+      {questionsByPilar.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-primary" />
+              Perguntas e Respostas por Pilar
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            {questionsByPilar.map((group) => {
+              const info = PILAR_INFO[group.slug] ?? { nome: group.nome, short: group.nome, color: "#888" };
+              return (
+                <div key={group.slug} className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ background: info.color }}
+                    />
+                    <h4 className="font-semibold text-sm">{info.nome}</h4>
+                  </div>
+                  <div className="flex flex-col divide-y rounded-md border">
+                    {group.questions.map((q, idx) => {
+                      const valor = respostasMap[q.id];
+                      const answered = valor != null && valor !== "";
+                      return (
+                        <div key={q.id} className="flex flex-col gap-1 px-3 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                          <p className="text-sm text-muted-foreground sm:flex-1">
+                            <span className="mr-1 font-medium text-foreground">{idx + 1}.</span>
+                            {q.texto}
+                          </p>
+                          <p className={`text-sm font-medium sm:w-40 sm:text-right ${answered ? "" : "text-muted-foreground/60 italic"}`}>
+                            {formatAnswer(q.tipo, valor)}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="pt-6">
