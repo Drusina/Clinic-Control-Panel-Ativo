@@ -1,0 +1,63 @@
+Como aplicar as correções na versão original (clinionex.com.br)
+Este pacote leva, para a sua versão original (a que tem o domínio clinionex.com.br, DNS e e-mail configurados), todas as correções feitas na cópia entre 9 e 11 de junho. Assim você corrige o bug do menu lateral sem mexer em domínio, DNS, e-mail ou dados.
+
+Arquivos deste pacote
+ccp-correcoes-portal.patch — o pacote com todas as mudanças.
+COMO-APLICAR.md — este arquivo.
+O que muda e o que NÃO muda
+✅ Muda apenas o frontend (a tela, em artifacts/ccp/src/).
+✅ NÃO altera banco de dados, servidor (API), dependências nem variáveis de ambiente.
+✅ Por isso é seguro: não afeta domínio, DNS, e-mail, publicação nem os dados das clínicas. Você só atualiza a parte visual/navegação e republica.
+Pré-requisito
+A versão original precisa estar no estado que está publicado hoje (build de 9/jun). Se ninguém mexeu no código da original desde então, está tudo certo e o patch aplica sem conflito.
+
+Passo a passo (forma mais fácil — usando o Agente do Replit na versão original)
+Abra o projeto original no Replit.
+
+Envie os dois arquivos deste pacote para a raiz do projeto original (arraste para o explorador de arquivos).
+
+Cole esta mensagem para o Agente da versão original:
+
+Apliquei um pacote de correções. Rode git apply ccp-correcoes-portal.patch na raiz. Se der conflito, use git apply --3way ccp-correcoes-portal.patch e resolva. Depois rode pnpm --filter @workspace/ccp run typecheck e pnpm --filter @workspace/ccp run test, corrija o que for necessário e me ajude a publicar.
+
+Quando terminar, clique em Publish (Publicar) na versão original.
+
+Passo a passo (manual, se preferir comandos)
+# na raiz do projeto original
+git apply ccp-correcoes-portal.patch        # ou: git apply --3way ccp-correcoes-portal.patch
+pnpm --filter @workspace/ccp run typecheck
+pnpm --filter @workspace/ccp run test
+# depois, publicar pela interface (botão Publish)
+
+Como confirmar que deu certo
+Entre como um gestor responsável por 2 ou mais clínicas. O menu lateral (Diagnóstico, Operacional, Complementar, Notificações) deve ficar bloqueado até você escolher uma clínica. Gestor de uma só clínica entra direto nela.
+
+O que está incluído (7 entregas, 11/jun)
+Navegação "clínica primeiro" no portal do gestor.
+Gestor com 2+ clínicas vai para a tela de escolha antes de qualquer módulo.
+Trava nos fluxos de respondente para gestor já logado.
+Gestor nunca vê a lista de outras clínicas.
+Melhorias de controle de acesso + confiabilidade de atualização do app (PWA).
+Seletor de clínicas mostra só a escolha, sem os módulos ativos (o seu bug).
+Forçar a escolha de clínica por sessão.
+Arquivos alterados (todos em artifacts/ccp/src/)
+App.tsx
+main.tsx
+hooks/use-auth.ts
+components/layout.tsx
+components/portal-layout.tsx
+pages/me/clinicas.tsx
+pages/portal/index.tsx
+pages/diagnostico/select.tsx
+pages/kickoff/select.tsx
+pages/relatorios/index.tsx
+pages/responder/index.tsx
+pages/acao/index.tsx
+pages/delegacao/index.tsx
+pages/documentos/index.tsx
+pages/evidencias/index.tsx
+pages/processos/index.tsx
+pages/riscos/index.tsx
+Testes: components/layout.test.tsx, components/portal-layout.test.tsx, pages/delegacao/clinic-scoping.test.tsx, pages/responder/session-isolation.test.tsx
+Se o git apply falhar (conflito)
+Significa que a original já teve mudanças nesses arquivos depois de 9/jun. Nesse caso use git apply --3way ccp-correcoes-portal.patch (resolve a maior parte automaticamente) ou peça ao Agente da original para abrir o .patch e aplicar as mudanças manualmente arquivo por arquivo — o conteúdo está todo lá.
