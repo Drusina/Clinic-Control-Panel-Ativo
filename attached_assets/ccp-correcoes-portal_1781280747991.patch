@@ -1,0 +1,2073 @@
+diff --git a/artifacts/ccp/src/App.tsx b/artifacts/ccp/src/App.tsx
+index 0944948..33ec834 100644
+--- a/artifacts/ccp/src/App.tsx
++++ b/artifacts/ccp/src/App.tsx
+@@ -63,24 +63,37 @@ async function fetchLatestActive() {
+ }
+ 
+ function DiagnosticoEntrypoint() {
+-  const [, navigate] = useLocation();
++  const [location, navigate] = useLocation();
++  const isPortal = location.startsWith("/portal");
+   const pilarParam = new URLSearchParams(window.location.search).get("pilar");
+ 
+   const { data, isLoading } = useQuery({
+     queryKey: ["diagnostico-latest-active"],
+     queryFn: fetchLatestActive,
+     retry: false,
++    // In the portal we always route through the active-clinic-scoped
++    // selector, so the cross-clinic latest-active lookup is unnecessary.
++    enabled: !isPortal,
+   });
+ 
+   useEffect(() => {
+-    if (isLoading) return;
+     const pilarQuery = pilarParam ? `?pilar=${encodeURIComponent(pilarParam)}` : "";
++    // Portal (team_member): never jump straight into a diagnostic resolved
++    // across all clinics — `latest-active` is not active-clinic-scoped and
++    // could open a NON-active clinic's wizard, breaking the clinic-first
++    // guarantee. Always go through the active-clinic-scoped selector, which
++    // itself redirects to /me/clinicas when no clinic is selected.
++    if (isPortal) {
++      navigate(`/portal/diagnostico/select${pilarQuery}`, { replace: true });
++      return;
++    }
++    if (isLoading) return;
+     if (data?.id) {
+       navigate(`/diagnostico/${data.id}${pilarQuery}`, { replace: true });
+     } else {
+       navigate(`/diagnostico/select${pilarQuery}`, { replace: true });
+     }
+-  }, [isLoading, data, navigate, pilarParam]);
++  }, [isPortal, isLoading, data, navigate, pilarParam]);
+ 
+   return null;
+ }
+@@ -101,11 +114,14 @@ function PortalActiveRedirect({ basePath }: { basePath: string }) {
+   }
+   const clinics = my?.clinics ?? [];
+   const stored = getActiveClinicId();
+-  const id =
+-    (stored && clinics.some((c) => c.id === stored) ? stored : null) ??
+-    clinics[0]?.id ??
+-    null;
+-  if (!id) return <Redirect to="/portal" />;
++  const validStored =
++    stored && clinics.some((c) => c.id === stored) ? stored : null;
++  // Single-clinic managers resolve straight to their only clinic. With 2+
++  // clinics and no valid active selection we send them to the chooser
++  // instead of silently defaulting to the first clinic — that default could
++  // surface the wrong clinic's data during a client-facing session.
++  const id = validStored ?? (clinics.length === 1 ? clinics[0]?.id ?? null : null);
++  if (!id) return <Redirect to="/me/clinicas" />;
+   return <Redirect to={`${basePath}/${id}`} />;
+ }
+ 
+diff --git a/artifacts/ccp/src/components/layout.test.tsx b/artifacts/ccp/src/components/layout.test.tsx
+new file mode 100644
+index 0000000..9d63824
+--- /dev/null
++++ b/artifacts/ccp/src/components/layout.test.tsx
+@@ -0,0 +1,130 @@
++import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
++import { render, screen, cleanup } from "@testing-library/react";
++
++/**
++ * Task #6 — "Seletor de clínicas: só mostrar escolha, sem módulos".
++ *
++ * The AppLayout sidebar must NOT expose the operational modules
++ * (Diagnóstico 360°, Notificações, Operacional, Complementar) to a
++ * team_member. A manager only ever sees the AppLayout chrome on the
++ * `/me/clinicas` chooser — TeamMemberToPortal bounces them off every other
++ * AppLayout route into `/portal` — so the chooser must offer ONLY the
++ * "Minhas clínicas" entry. The bug: a stored/first-clinic fallback used to
++ * unlock the module sidebar right there on the chooser.
++ *
++ * Super-admins keep their full module sidebar.
++ */
++
++const mocks = vi.hoisted(() => ({
++  navigateMock: vi.fn(),
++  logoutMock: vi.fn(() => Promise.resolve()),
++  role: undefined as undefined | { role: string },
++  activeClinicId: null as string | null,
++  clinics: [] as Array<{ id: string; nome: string; fantasia?: string | null }>,
++}));
++
++vi.mock("wouter", () => ({
++  useLocation: () => ["/me/clinicas", mocks.navigateMock] as const,
++  Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
++    <a href={href}>{children}</a>
++  ),
++}));
++
++vi.mock("@/hooks/use-auth", () => ({
++  useCurrentRole: () => ({ data: mocks.role }),
++  useMyClinics: () => ({ data: { clinics: mocks.clinics } }),
++  useLogout: () => mocks.logoutMock,
++  getActiveClinicId: () => mocks.activeClinicId,
++  setActiveClinicId: vi.fn(),
++}));
++
++vi.mock("@/components/notification-preferences-modal", () => ({
++  NotificationPreferencesModal: () => null,
++}));
++
++import { AppLayout } from "./layout";
++
++const CLINICS = [
++  { id: "clinic-1", nome: "Clínica Alpha" },
++  { id: "clinic-2", nome: "Clínica Beta" },
++];
++
++const MODULE_LABELS = [
++  "Diagnóstico 360°",
++  "Notificações",
++  "Operacional",
++  "Complementar",
++  "Delegação",
++  "Mapa de Riscos",
++  "Plano de Ação",
++  "Processos",
++  "Evidências",
++  "Documentos",
++];
++
++function expectNoModulesRendered() {
++  for (const label of MODULE_LABELS) {
++    expect(screen.queryByText(label)).not.toBeInTheDocument();
++  }
++}
++
++describe("AppLayout sidebar — team_member never sees modules on the chooser", () => {
++  beforeEach(() => {
++    mocks.navigateMock.mockClear();
++    mocks.logoutMock.mockClear();
++    mocks.role = undefined;
++    mocks.activeClinicId = null;
++    mocks.clinics = [];
++  });
++
++  afterEach(() => {
++    cleanup();
++  });
++
++  it("shows only 'Minhas clínicas' for a team_member with 2 clinics and no active selection", () => {
++    mocks.role = { role: "team_member" };
++    mocks.activeClinicId = null;
++    mocks.clinics = CLINICS;
++
++    render(
++      <AppLayout>
++        <div>conteúdo</div>
++      </AppLayout>,
++    );
++
++    expect(screen.getByText("Minhas clínicas")).toBeInTheDocument();
++    expectNoModulesRendered();
++  });
++
++  it("keeps modules hidden even when a previously-stored clinic is still active", () => {
++    // This is the exact regression: the stored clinic used to flip the
++    // sidebar into the unlocked module state right on the chooser.
++    mocks.role = { role: "team_member" };
++    mocks.activeClinicId = "clinic-2";
++    mocks.clinics = CLINICS;
++
++    render(
++      <AppLayout>
++        <div>conteúdo</div>
++      </AppLayout>,
++    );
++
++    expect(screen.getByText("Minhas clínicas")).toBeInTheDocument();
++    expectNoModulesRendered();
++  });
++
++  it("renders the full module sidebar for a super_admin", () => {
++    mocks.role = { role: "super_admin" };
++    mocks.clinics = CLINICS;
++
++    render(
++      <AppLayout>
++        <div>conteúdo</div>
++      </AppLayout>,
++    );
++
++    expect(screen.getByText("Dashboard")).toBeInTheDocument();
++    expect(screen.getByText("Operacional")).toBeInTheDocument();
++    expect(screen.getByText("Complementar")).toBeInTheDocument();
++  });
++});
+diff --git a/artifacts/ccp/src/components/layout.tsx b/artifacts/ccp/src/components/layout.tsx
+index 3b3aac9..7f94d66 100644
+--- a/artifacts/ccp/src/components/layout.tsx
++++ b/artifacts/ccp/src/components/layout.tsx
+@@ -53,8 +53,13 @@ interface NavItem {
+  * (e.g. /delegacao/select → /delegacao/<activeClinic>). Resolution
+  * order:
+  *   1. Clinic id present in the current URL (from /xxx/<id>)
+- *   2. localStorage ccp_active_clinic_id
+- *   3. First clinic in the user's clinic list
++ *   2. The session-scoped active clinic (getActiveClinicId / sessionStorage)
++ *   3. The only clinic, when the user has exactly one
++ *
++ * Clinic-first: with 2+ clinics and no explicit selection we return null
++ * so the UI never silently defaults to the first clinic — that default
++ * could surface the wrong clinic during a client-facing session. Mirrors
++ * the same guarantee in PortalLayout.
+  */
+ function resolveActiveClinicId(
+   location: string,
+@@ -64,7 +69,7 @@ function resolveActiveClinicId(
+   if (urlMatch && myClinicIds.includes(urlMatch[1])) return urlMatch[1];
+   const stored = getActiveClinicId();
+   if (stored && myClinicIds.includes(stored)) return stored;
+-  return myClinicIds[0] ?? null;
++  return myClinicIds.length === 1 ? myClinicIds[0] : null;
+ }
+ 
+ export function AppLayout({ children }: { children: React.ReactNode }) {
+@@ -106,13 +111,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
+         { name: "Notificações", href: "/notifications", icon: Bell },
+       ]
+     : [
++        // team_member only ever sees the AppLayout chrome on the
++        // /me/clinicas chooser — TeamMemberToPortal bounces them off every
++        // other AppLayout route into the dedicated /portal namespace. So the
++        // manager's sidebar here is just the clinic-chooser entry; the
++        // operational modules live in PortalLayout, scoped to a clinic.
+         { name: "Minhas clínicas", href: "/me/clinicas", icon: Building2 },
+-        ...(activeClinicId
+-          ? [
+-              { name: "Diagnóstico 360°", href: "/diagnostico/select", icon: ClipboardList },
+-              { name: "Notificações", href: "/notifications", icon: Bell },
+-            ]
+-          : []),
+       ];
+ 
+   const operacionalNav: NavItem[] = [
+@@ -128,7 +132,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
+     { name: "Relatórios", href: scopedHref("/relatorios", "/relatorios/select"), icon: BarChart3 },
+   ];
+ 
+-  const showOperationalSections = isSuperAdmin || (isTeamMember && !!activeClinicId);
++  // Operational/Complementar module sections belong to the super-admin
++  // sidebar only. A team_member never legitimately stays on an AppLayout
++  // module route (TeamMemberToPortal redirects them to /portal), so showing
++  // these here only ever leaked the modules onto the /me/clinicas chooser.
++  const showOperationalSections = isSuperAdmin;
+ 
+   const ClinicSwitcher = () => {
+     if (!isTeamMember) return null;
+diff --git a/artifacts/ccp/src/components/portal-layout.test.tsx b/artifacts/ccp/src/components/portal-layout.test.tsx
+new file mode 100644
+index 0000000..555908c
+--- /dev/null
++++ b/artifacts/ccp/src/components/portal-layout.test.tsx
+@@ -0,0 +1,156 @@
++import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
++import { render, screen, cleanup } from "@testing-library/react";
++
++/**
++ * Task #7 — "Forçar escolha de clínica por sessão".
++ *
++ * The portal's active clinic is session-scoped (sessionStorage). A manager
++ * with 2+ clinics must pick a clinic each new browser session: a clinic id
++ * left behind in localStorage by an older build must NOT auto-unlock the
++ * Operacional/Complementar modules. After an explicit pick (which lands in
++ * sessionStorage via setActiveClinicId) the modules unlock and their links
++ * carry the selected clinic id — never a hardcoded one. A single-clinic
++ * manager still resolves automatically and never sees the chooser.
++ *
++ * Unlike layout.test.tsx (which stubs the whole use-auth module), this suite
++ * keeps the REAL getActiveClinicId/setActiveClinicId so the session-vs-local
++ * storage contract is exercised end-to-end through PortalLayout.
++ */
++
++const mocks = vi.hoisted(() => ({
++  navigateMock: vi.fn(),
++  logoutMock: vi.fn(() => Promise.resolve()),
++  location: "/portal",
++  clinics: [] as Array<{ id: string; nome: string; fantasia?: string | null }>,
++}));
++
++vi.mock("wouter", () => ({
++  useLocation: () => [mocks.location, mocks.navigateMock] as const,
++  Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
++    <a href={href}>{children}</a>
++  ),
++}));
++
++// Keep the REAL session-scoped storage helpers; only stub the data/logout
++// hooks so we don't need a QueryClient or network.
++vi.mock("@/hooks/use-auth", async () => {
++  const actual =
++    await vi.importActual<typeof import("@/hooks/use-auth")>("@/hooks/use-auth");
++  return {
++    ...actual,
++    useMyClinics: () => ({ data: { clinics: mocks.clinics } }),
++    useLogout: () => mocks.logoutMock,
++  };
++});
++
++vi.mock("@/components/notification-preferences-modal", () => ({
++  NotificationPreferencesModal: () => null,
++}));
++
++import { PortalLayout } from "./portal-layout";
++import { getActiveClinicId, setActiveClinicId } from "@/hooks/use-auth";
++
++const ACTIVE_CLINIC_KEY = "ccp_active_clinic_id";
++
++const CLINICS = [
++  { id: "clinic-1", nome: "Clínica Alpha" },
++  { id: "clinic-2", nome: "Clínica Beta" },
++];
++
++const MODULE_LABELS = [
++  "Operacional",
++  "Complementar",
++  "Delegação",
++  "Mapa de Riscos",
++  "Plano de Ação",
++  "Processos",
++  "Evidências",
++  "Documentos",
++];
++
++function expectModulesHidden() {
++  for (const label of MODULE_LABELS) {
++    expect(screen.queryByText(label)).not.toBeInTheDocument();
++  }
++}
++
++describe("PortalLayout — active clinic is session-scoped (Task #7)", () => {
++  beforeEach(() => {
++    mocks.navigateMock.mockClear();
++    mocks.logoutMock.mockClear();
++    mocks.location = "/portal";
++    mocks.clinics = [];
++    localStorage.clear();
++    sessionStorage.clear();
++  });
++
++  afterEach(() => {
++    cleanup();
++    localStorage.clear();
++    sessionStorage.clear();
++  });
++
++  it("setActiveClinicId writes to sessionStorage and never localStorage", () => {
++    // Even a pre-existing localStorage value is purged on write.
++    localStorage.setItem(ACTIVE_CLINIC_KEY, "stale");
++    setActiveClinicId("clinic-1");
++
++    expect(sessionStorage.getItem(ACTIVE_CLINIC_KEY)).toBe("clinic-1");
++    expect(localStorage.getItem(ACTIVE_CLINIC_KEY)).toBeNull();
++    expect(getActiveClinicId()).toBe("clinic-1");
++
++    setActiveClinicId(null);
++    expect(sessionStorage.getItem(ACTIVE_CLINIC_KEY)).toBeNull();
++    expect(getActiveClinicId()).toBeNull();
++  });
++
++  it("ignores a stale localStorage clinic for a 2+ manager — modules stay blocked", () => {
++    mocks.clinics = CLINICS;
++    // Simulate an older build that persisted the active clinic in localStorage.
++    // A new browser session has an empty sessionStorage, so nothing unlocks.
++    localStorage.setItem(ACTIVE_CLINIC_KEY, "clinic-2");
++
++    render(
++      <PortalLayout>
++        <div>conteúdo</div>
++      </PortalLayout>,
++    );
++
++    expectModulesHidden();
++  });
++
++  it("unlocks modules carrying the selected clinic id after an explicit session pick", () => {
++    mocks.clinics = CLINICS;
++    mocks.location = "/portal/delegacao"; // expands the Operacional section
++    setActiveClinicId("clinic-2"); // explicit pick → sessionStorage
++
++    render(
++      <PortalLayout>
++        <div>conteúdo</div>
++      </PortalLayout>,
++    );
++
++    expect(screen.getByText("Operacional")).toBeInTheDocument();
++    const delegacaoLink = screen.getByText("Delegação").closest("a");
++    expect(delegacaoLink?.getAttribute("href")).toBe(
++      "/portal/delegacao/clinic-2",
++    );
++  });
++
++  it("auto-resolves the only clinic for a single-clinic manager", () => {
++    mocks.clinics = [CLINICS[0]];
++    mocks.location = "/portal/delegacao"; // expands the Operacional section
++
++    render(
++      <PortalLayout>
++        <div>conteúdo</div>
++      </PortalLayout>,
++    );
++
++    expect(screen.getByText("Operacional")).toBeInTheDocument();
++    const delegacaoLink = screen.getByText("Delegação").closest("a");
++    expect(delegacaoLink?.getAttribute("href")).toBe(
++      "/portal/delegacao/clinic-1",
++    );
++  });
++});
+diff --git a/artifacts/ccp/src/components/portal-layout.tsx b/artifacts/ccp/src/components/portal-layout.tsx
+index 2d0206b..b1deaf5 100644
+--- a/artifacts/ccp/src/components/portal-layout.tsx
++++ b/artifacts/ccp/src/components/portal-layout.tsx
+@@ -15,28 +15,20 @@ import {
+   Image,
+   FileText,
+   LogOut,
+-  Check,
+-  ChevronsUpDown,
++  ArrowLeftRight,
++  AlertTriangle,
+   Stethoscope,
+ } from "lucide-react";
+ import { useState, useMemo } from "react";
+ import { Button } from "@/components/ui/button";
+ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+-import {
+-  DropdownMenu,
+-  DropdownMenuContent,
+-  DropdownMenuItem,
+-  DropdownMenuLabel,
+-  DropdownMenuSeparator,
+-  DropdownMenuTrigger,
+-} from "@/components/ui/dropdown-menu";
++import { Badge } from "@/components/ui/badge";
+ import { cn } from "@/lib/utils";
+ import { NotificationPreferencesModal } from "@/components/notification-preferences-modal";
+ import {
+   useMyClinics,
+   useLogout,
+   getActiveClinicId,
+-  setActiveClinicId,
+ } from "@/hooks/use-auth";
+ 
+ interface NavItem {
+@@ -58,7 +50,11 @@ function resolveActiveClinicId(
+   if (urlMatch && myClinicIds.includes(urlMatch[1])) return urlMatch[1];
+   const stored = getActiveClinicId();
+   if (stored && myClinicIds.includes(stored)) return stored;
+-  return myClinicIds[0] ?? null;
++  // Clinic-first: only auto-resolve when there is exactly one clinic. With
++  // 2+ clinics and no explicit selection we return null so the UI prompts
++  // the manager to choose — never silently default to the first clinic,
++  // which could surface the wrong clinic during a client-facing session.
++  return myClinicIds.length === 1 ? myClinicIds[0] : null;
+ }
+ 
+ /**
+@@ -152,51 +148,108 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
+     },
+   ];
+ 
+-  const ClinicSwitcher = () => {
+-    if (myClinics.length < 2) return null;
++  const hasMultipleClinics = myClinics.length >= 2;
++
++  // Sidebar context block: shows the active clinic (read-only) and an
++  // explicit "Trocar clínica" button (only when 2+ clinics) that takes the
++  // manager back to the chooser. Replaces the old silent dropdown so the
++  // active clinic can never change by accident during a client session.
++  const ClinicContext = () => {
++    if (myClinics.length === 0) return null;
++    return (
++      <div className="px-4 pb-2 space-y-2">
++        <div className="rounded-md border border-sidebar-border bg-sidebar-accent/30 px-3 py-2">
++          <div className="flex items-center gap-2 min-w-0">
++            <Building2 className="h-4 w-4 shrink-0 text-primary" />
++            <div className="min-w-0">
++              <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/50">
++                Clínica ativa
++              </div>
++              <div className="truncate text-sm font-medium text-sidebar-foreground">
++                {activeClinic?.fantasia ||
++                  activeClinic?.nome ||
++                  "Nenhuma selecionada"}
++              </div>
++            </div>
++          </div>
++        </div>
++        {hasMultipleClinics && (
++          <Button
++            variant="outline"
++            size="sm"
++            className="w-full justify-center gap-2"
++            onClick={() => navigate("/me/clinicas")}
++            data-testid="portal-trocar-clinica"
++          >
++            <ArrowLeftRight className="h-3.5 w-3.5" />
++            Trocar clínica
++          </Button>
++        )}
++      </div>
++    );
++  };
++
++  // Top-of-content banner shown on every portal page. Makes the active
++  // clinic unmistakable during client-facing presentations. When the
++  // manager has multiple clinics but none is active, it turns into a
++  // prompt to pick one before continuing.
++  const ClinicContextBanner = () => {
++    if (!activeClinic && hasMultipleClinics) {
++      return (
++        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
++          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
++            <AlertTriangle className="h-4 w-4 shrink-0" />
++            <span className="text-sm font-medium">
++              Nenhuma clínica selecionada. Escolha uma para continuar.
++            </span>
++          </div>
++          <Button size="sm" onClick={() => navigate("/me/clinicas")}>
++            Selecionar clínica
++          </Button>
++        </div>
++      );
++    }
++    if (!activeClinic) return null;
+     return (
+-      <div className="px-4 pb-2">
+-        <DropdownMenu>
+-          <DropdownMenuTrigger asChild>
+-            <Button
+-              variant="outline"
+-              className="w-full justify-between text-left font-normal"
+-              data-testid="portal-clinic-switcher-trigger"
+-            >
+-              <span className="flex items-center gap-2 min-w-0">
+-                <Building2 className="h-4 w-4 shrink-0 text-primary" />
+-                <span className="truncate">
+-                  {activeClinic?.fantasia ||
+-                    activeClinic?.nome ||
+-                    "Selecionar clínica"}
+-                </span>
++      <div
++        className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
++        data-testid="portal-active-clinic-banner"
++      >
++        <div className="flex items-center gap-3 min-w-0">
++          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 shrink-0">
++            <Building2 className="h-5 w-5 text-primary" />
++          </div>
++          <div className="min-w-0">
++            <div className="flex items-center gap-2 flex-wrap">
++              <span className="truncate font-semibold">
++                {activeClinic.fantasia || activeClinic.nome}
+               </span>
+-              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-60" />
+-            </Button>
+-          </DropdownMenuTrigger>
+-          <DropdownMenuContent align="start" className="w-64">
+-            <DropdownMenuLabel>Trocar de clínica</DropdownMenuLabel>
+-            <DropdownMenuSeparator />
+-            {myClinics.map((c) => (
+-              <DropdownMenuItem
+-                key={c.id}
+-                onSelect={() => {
+-                  setActiveClinicId(c.id);
+-                  navigate("/portal");
+-                }}
+-                data-testid={`portal-clinic-switcher-item-${c.id}`}
+-              >
+-                <Check
+-                  className={cn(
+-                    "mr-2 h-4 w-4",
+-                    activeClinicId === c.id ? "opacity-100" : "opacity-0",
+-                  )}
+-                />
+-                <span className="truncate">{c.fantasia || c.nome}</span>
+-              </DropdownMenuItem>
+-            ))}
+-          </DropdownMenuContent>
+-        </DropdownMenu>
++              {activeClinic.status && (
++                <Badge
++                  variant={activeClinic.status === "ativa" ? "default" : "secondary"}
++                  className="capitalize"
++                >
++                  {activeClinic.status}
++                </Badge>
++              )}
++            </div>
++            <span className="text-xs text-muted-foreground">
++              Modo ativo — você está operando esta clínica
++            </span>
++          </div>
++        </div>
++        {hasMultipleClinics && (
++          <Button
++            variant="outline"
++            size="sm"
++            className="gap-2 shrink-0"
++            onClick={() => navigate("/me/clinicas")}
++            data-testid="portal-banner-trocar-clinica"
++          >
++            <ArrowLeftRight className="h-3.5 w-3.5" />
++            Trocar clínica
++          </Button>
++        )}
+       </div>
+     );
+   };
+@@ -214,7 +267,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
+           </span>
+         </div>
+       </div>
+-      <ClinicSwitcher />
++      <ClinicContext />
+       <div className="flex-1 px-4 overflow-y-auto">
+         <nav className="flex flex-col gap-1">
+           {navigation.map((item) => {
+@@ -390,7 +443,10 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
+       </aside>
+ 
+       <main className="flex-1 md:pl-64">
+-        <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</div>
++        <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
++          <ClinicContextBanner />
++          {children}
++        </div>
+       </main>
+ 
+       <NotificationPreferencesModal
+diff --git a/artifacts/ccp/src/hooks/use-auth.ts b/artifacts/ccp/src/hooks/use-auth.ts
+index 054cd77..e26c794 100644
+--- a/artifacts/ccp/src/hooks/use-auth.ts
++++ b/artifacts/ccp/src/hooks/use-auth.ts
+@@ -100,14 +100,29 @@ export function useMyClinics(options?: { enabled?: boolean }) {
+   });
+ }
+ 
+-/** Persisted "currently selected clinic" used by the header switcher. */
++/**
++ * Session-scoped "currently selected clinic".
++ *
++ * Stored in sessionStorage (NOT localStorage) on purpose: the active clinic
++ * must be chosen explicitly each new browser session. A manager with 2+
++ * clinics who reopens the app in a new session is sent back to the chooser
++ * instead of silently reopening the last clinic — that stale default could
++ * surface the wrong clinic during a client-facing session. The value still
++ * survives reloads and in-session navigation, and single-clinic managers
++ * keep auto-resolving to their only clinic in every resolver, so they never
++ * see the chooser. Login/logout clear it via setActiveClinicId(null).
++ */
+ export function getActiveClinicId(): string | null {
+-  return localStorage.getItem(ACTIVE_CLINIC_KEY);
++  return sessionStorage.getItem(ACTIVE_CLINIC_KEY);
+ }
+ 
+ export function setActiveClinicId(id: string | null): void {
+-  if (id) localStorage.setItem(ACTIVE_CLINIC_KEY, id);
+-  else localStorage.removeItem(ACTIVE_CLINIC_KEY);
++  if (id) sessionStorage.setItem(ACTIVE_CLINIC_KEY, id);
++  else sessionStorage.removeItem(ACTIVE_CLINIC_KEY);
++  // Defensive cleanup: older builds persisted this in localStorage, which
++  // auto-unlocked modules across sessions. Drop any lingering value so it can
++  // never be read by a stale code path.
++  localStorage.removeItem(ACTIVE_CLINIC_KEY);
+ }
+ 
+ function clearAllCaches(queryClient: ReturnType<typeof useQueryClient>): void {
+diff --git a/artifacts/ccp/src/main.tsx b/artifacts/ccp/src/main.tsx
+index b3d825e..9a0a78c 100644
+--- a/artifacts/ccp/src/main.tsx
++++ b/artifacts/ccp/src/main.tsx
+@@ -16,21 +16,42 @@ createRoot(document.getElementById("root")!).render(<App />);
+ // recarregar. O `updateSW(true)` envia SKIP_WAITING pro SW novo, que assume
+ // imediatamente (ver sw.ts → activate + clients.claim).
+ if ("serviceWorker" in navigator) {
++  // Timestamp of this page load. Lets us tell a fresh boot (safe to apply an
++  // update immediately) apart from an update discovered mid-session (offer a
++  // non-blocking banner instead, so we never discard in-progress work).
++  const bootedAt = Date.now();
++
+   const updateSW = registerSW({
+     immediate: true,
+     onNeedRefresh() {
+-      showUpdateBanner(() => {
++      // A new version finished installing and is waiting. If it surfaced right
++      // after boot, the user has no in-progress work — apply it now so a simple
++      // reload always delivers published fixes WITHOUT manual cache clearing
++      // (this is what makes the already-shipped Diagnóstico fix reach the
++      // manager's installed PWA). If it surfaces later in the session, show a
++      // non-blocking banner so the user chooses when to reload.
++      if (Date.now() - bootedAt < 10_000) {
+         void updateSW(true);
+-      });
++      } else {
++        showUpdateBanner(() => {
++          void updateSW(true);
++        });
++      }
+     },
+     onRegisteredSW(_swUrl, registration) {
+-      // Verifica a cada 60 min se há nova versão (também roda no foco da aba)
+       if (!registration) return;
+       const checkForUpdate = () => {
+         void registration.update().catch(() => {});
+       };
++      // Check on startup, then hourly, on tab focus, and whenever the app
++      // returns to the foreground (installed PWAs rarely fire `focus`, so
++      // `visibilitychange` is the reliable signal there).
++      checkForUpdate();
+       setInterval(checkForUpdate, 60 * 60 * 1000);
+       window.addEventListener("focus", checkForUpdate);
++      document.addEventListener("visibilitychange", () => {
++        if (document.visibilityState === "visible") checkForUpdate();
++      });
+     },
+   });
+ }
+diff --git a/artifacts/ccp/src/pages/acao/index.tsx b/artifacts/ccp/src/pages/acao/index.tsx
+index 37fe84c..f3e73fc 100644
+--- a/artifacts/ccp/src/pages/acao/index.tsx
++++ b/artifacts/ccp/src/pages/acao/index.tsx
+@@ -1,7 +1,7 @@
+-import { useState } from "react";
++import { useState, useEffect } from "react";
+ import { useParams, useLocation } from "wouter";
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+-import { getStoredToken } from "@/hooks/use-auth";
++import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
+ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
+@@ -641,7 +641,35 @@ export default function AcaoPage() {
+ function ClinicSelector() {
+   const [, navigate] = useLocation();
+   const [search, setSearch] = useState("");
++  const { data: user } = useCurrentRole();
++  const isTeamMember = user?.role === "team_member";
++  const isSuperAdmin = user?.role === "super_admin";
+   const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
++
++  // Clinic-first: a manager must never see a list of their other clinics.
++  // Resolve to the active clinic (or their only one) and enter it directly;
++  // with 2+ clinics and no active selection, send them to the chooser.
++  useEffect(() => {
++    if (!isTeamMember || isLoading) return;
++    const active = getActiveClinicId();
++    const match =
++      (active && clinics.find((c) => c.id === active)) ||
++      (clinics.length === 1 ? clinics[0] : undefined);
++    navigate(match ? `/portal/acao/${match.id}` : "/me/clinicas", {
++      replace: true,
++    });
++  }, [isTeamMember, isLoading, clinics, navigate]);
++
++  // Only a confirmed super_admin may render the clinic list. While the role is
++  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
++  // instead of flashing other clinics; the effect above scopes managers to
++  // their active clinic (or the chooser).
++  if (!isSuperAdmin) {
++    return (
++      <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
++    );
++  }
++
+   const filtered = clinics.filter(c =>
+     c.nome.toLowerCase().includes(search.toLowerCase()) ||
+     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
+diff --git a/artifacts/ccp/src/pages/delegacao/clinic-scoping.test.tsx b/artifacts/ccp/src/pages/delegacao/clinic-scoping.test.tsx
+new file mode 100644
+index 0000000..f3f73f8
+--- /dev/null
++++ b/artifacts/ccp/src/pages/delegacao/clinic-scoping.test.tsx
+@@ -0,0 +1,136 @@
++import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
++import { render, screen, waitFor, cleanup } from "@testing-library/react";
++
++/**
++ * Task #5 — "Portal: nunca exibir outras clínicas ao gestor".
++ *
++ * A logged-in GESTOR (team_member) must NEVER see a list/selector of other
++ * clinics in a portal module. When they hit a module with no clinic in the URL,
++ * the page's <ClinicSelector> must auto-scope them to their active clinic (or
++ * send them to the /me/clinicas chooser) and must never render the clinic list
++ * — not even for a frame while the role is still loading.
++ *
++ * The clinic list may only ever render for a confirmed super_admin. We exercise
++ * the real page entry (DelegacaoPage with no clinicId → ClinicSelector), which
++ * is the canonical implementation shared by all 7 portal modules.
++ */
++
++const mocks = vi.hoisted(() => ({
++  navigateMock: vi.fn(),
++  role: undefined as undefined | { role: string },
++  activeClinicId: null as string | null,
++  clinics: [] as Array<{ id: string; nome: string; cidade?: string | null; uf?: string | null }>,
++  clinicsLoading: false,
++}));
++
++vi.mock("wouter", () => ({
++  // No clinicId in the URL → DelegacaoPage renders <ClinicSelector/>.
++  useParams: () => ({}),
++  useLocation: () => ["/portal/delegacao", mocks.navigateMock] as const,
++  useSearch: () => "",
++}));
++
++vi.mock("@/hooks/use-auth", () => ({
++  getStoredToken: () => null,
++  useCurrentRole: () => ({ data: mocks.role }),
++  getActiveClinicId: () => mocks.activeClinicId,
++}));
++
++vi.mock("@/hooks/use-clinics-for-current-user", () => ({
++  useClinicsForCurrentUser: () => ({
++    clinics: mocks.clinics,
++    isLoading: mocks.clinicsLoading,
++  }),
++}));
++
++import DelegacaoPage from "./index";
++
++const CLINICS = [
++  { id: "clinic-1", nome: "Clínica Alpha", cidade: "São Paulo", uf: "SP" },
++  { id: "clinic-2", nome: "Clínica Beta", cidade: "Rio de Janeiro", uf: "RJ" },
++];
++
++function expectNoClinicListRendered() {
++  expect(screen.queryByText("Clínica Alpha")).not.toBeInTheDocument();
++  expect(screen.queryByText("Clínica Beta")).not.toBeInTheDocument();
++}
++
++describe("Portal module clinic-scoping (gestor never sees other clinics)", () => {
++  beforeEach(() => {
++    mocks.navigateMock.mockClear();
++    mocks.role = undefined;
++    mocks.activeClinicId = null;
++    mocks.clinics = [];
++    mocks.clinicsLoading = false;
++  });
++
++  afterEach(() => {
++    cleanup();
++  });
++
++  it("never flashes the clinic list while the role is still loading", () => {
++    // Role unresolved (user undefined) but clinics already loaded — the classic
++    // flash window. The list must NOT render and we must NOT redirect yet.
++    mocks.role = undefined;
++    mocks.clinics = CLINICS;
++
++    render(<DelegacaoPage />);
++
++    expectNoClinicListRendered();
++    expect(mocks.navigateMock).not.toHaveBeenCalled();
++  });
++
++  it("scopes a team_member with an active clinic straight into it, showing no list", async () => {
++    mocks.role = { role: "team_member" };
++    mocks.activeClinicId = "clinic-2";
++    mocks.clinics = CLINICS;
++
++    render(<DelegacaoPage />);
++
++    await waitFor(() =>
++      expect(mocks.navigateMock).toHaveBeenCalledWith("/portal/delegacao/clinic-2", {
++        replace: true,
++      })
++    );
++    expectNoClinicListRendered();
++  });
++
++  it("auto-enters the only clinic of a team_member with no active selection", async () => {
++    mocks.role = { role: "team_member" };
++    mocks.activeClinicId = null;
++    mocks.clinics = [CLINICS[0]];
++
++    render(<DelegacaoPage />);
++
++    await waitFor(() =>
++      expect(mocks.navigateMock).toHaveBeenCalledWith("/portal/delegacao/clinic-1", {
++        replace: true,
++      })
++    );
++    expectNoClinicListRendered();
++  });
++
++  it("sends a team_member with 2+ clinics and no active selection to the chooser", async () => {
++    mocks.role = { role: "team_member" };
++    mocks.activeClinicId = null;
++    mocks.clinics = CLINICS;
++
++    render(<DelegacaoPage />);
++
++    await waitFor(() =>
++      expect(mocks.navigateMock).toHaveBeenCalledWith("/me/clinicas", { replace: true })
++    );
++    expectNoClinicListRendered();
++  });
++
++  it("renders the clinic list only for a confirmed super_admin", () => {
++    mocks.role = { role: "super_admin" };
++    mocks.clinics = CLINICS;
++
++    render(<DelegacaoPage />);
++
++    expect(screen.getByText("Clínica Alpha")).toBeInTheDocument();
++    expect(screen.getByText("Clínica Beta")).toBeInTheDocument();
++    expect(mocks.navigateMock).not.toHaveBeenCalled();
++  });
++});
+diff --git a/artifacts/ccp/src/pages/delegacao/index.tsx b/artifacts/ccp/src/pages/delegacao/index.tsx
+index f547a58..9565d59 100644
+--- a/artifacts/ccp/src/pages/delegacao/index.tsx
++++ b/artifacts/ccp/src/pages/delegacao/index.tsx
+@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
+ import { BancoPerguntasDialog } from "@/components/banco-perguntas-dialog";
+ import { useParams, useLocation, useSearch } from "wouter";
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+-import { getStoredToken, useCurrentRole } from "@/hooks/use-auth";
++import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
+ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
+@@ -1987,7 +1987,37 @@ function PerguntaDialog({
+ function ClinicSelector() {
+   const [, navigate] = useLocation();
+   const [search, setSearch] = useState("");
++  const { data: user } = useCurrentRole();
++  const isTeamMember = user?.role === "team_member";
++  const isSuperAdmin = user?.role === "super_admin";
+   const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
++
++  // Clinic-first: a manager must never see a list of their other clinics.
++  // Resolve to the active clinic (or their only one) and enter it directly;
++  // with 2+ clinics and no active selection, send them to the chooser.
++  useEffect(() => {
++    if (!isTeamMember || isLoading) return;
++    const active = getActiveClinicId();
++    const match =
++      (active && clinics.find((c) => c.id === active)) ||
++      (clinics.length === 1 ? clinics[0] : undefined);
++    navigate(match ? `/portal/delegacao/${match.id}` : "/me/clinicas", {
++      replace: true,
++    });
++  }, [isTeamMember, isLoading, clinics, navigate]);
++
++  // Only a confirmed super_admin may render the clinic list. While the role is
++  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
++  // instead of flashing other clinics; the effect above scopes managers to
++  // their active clinic (or the chooser).
++  if (!isSuperAdmin) {
++    return (
++      <div className="py-12 flex justify-center">
++        <Loader2 className="h-6 w-6 animate-spin text-primary" />
++      </div>
++    );
++  }
++
+   const filtered = clinics.filter(
+     (c) =>
+       c.nome.toLowerCase().includes(search.toLowerCase()) ||
+diff --git a/artifacts/ccp/src/pages/diagnostico/select.tsx b/artifacts/ccp/src/pages/diagnostico/select.tsx
+index ceea923..d3f9fb8 100644
+--- a/artifacts/ccp/src/pages/diagnostico/select.tsx
++++ b/artifacts/ccp/src/pages/diagnostico/select.tsx
+@@ -41,7 +41,7 @@ interface Diagnostic {
+ }
+ 
+ export default function DiagnosticoSelectPage() {
+-  const [, navigate] = useLocation();
++  const [location, navigate] = useLocation();
+   const qc = useQueryClient();
+   const [selectedClinic, setSelectedClinic] = useState<string>("");
+   const [compareMode, setCompareMode] = useState(false);
+@@ -49,6 +49,12 @@ export default function DiagnosticoSelectPage() {
+ 
+   const { data: user } = useCurrentRole();
+   const isSuperAdmin = user?.role === "super_admin";
++  const isTeamMember = user?.role === "team_member";
++  // Navigation is portal-aware: a manager inside `/portal/...` stays in the
++  // portal namespace, while super_admin keeps the legacy `/diagnostico/...`
++  // routes. This avoids a redirect bounce through `TeamMemberToPortal`.
++  const isPortal = location.startsWith("/portal");
++  const diagBase = isPortal ? "/portal/diagnostico" : "/diagnostico";
+ 
+   // Source of truth for both roles. The hook itself fans out to the
+   // correct endpoint (`/api/clinics` for super_admin, `/api/me/clinics`
+@@ -59,14 +65,25 @@ export default function DiagnosticoSelectPage() {
+     ? { data: clinicList.map((c) => ({ id: c.id, nome: c.nome, fantasia: c.fantasia ?? undefined })) }
+     : undefined;
+ 
+-  // Atalho UX: se o gestor já tem uma clínica ativa no header (ou só uma
+-  // clínica vinculada), pré-seleciona para evitar dois cliques.
++  // Clinic-first scoping for managers: the active clinic is chosen once at
++  // `/me/clinicas` and every module stays scoped to it — no clinic selector
++  // is rendered in the portal. We pre-select the active clinic (or the only
++  // clinic). If the manager has 2+ clinics and none is active, we bounce
++  // back to the chooser so the wrong clinic's diagnostics are never shown.
+   useEffect(() => {
+-    if (isSuperAdmin || selectedClinic || !clinics?.data?.length) return;
++    if (!isTeamMember) return;
++    if (loadingClinics || !clinics?.data) return;
++    if (clinics.data.length === 0) return; // ClinicAccessGuard handles this
+     const active = getActiveClinicId();
+-    const match = (active && clinics.data.find((c) => c.id === active)) || (clinics.data.length === 1 ? clinics.data[0] : undefined);
+-    if (match) setSelectedClinic(match.id);
+-  }, [isSuperAdmin, selectedClinic, clinics]);
++    const match =
++      (active && clinics.data.find((c) => c.id === active)) ||
++      (clinics.data.length === 1 ? clinics.data[0] : undefined);
++    if (match) {
++      if (!selectedClinic) setSelectedClinic(match.id);
++      return;
++    }
++    navigate("/me/clinicas", { replace: true });
++  }, [isTeamMember, loadingClinics, clinics, selectedClinic, navigate]);
+ 
+   const { data: diagnostics, isLoading: loadingDiags } = useQuery<Diagnostic[]>({
+     queryKey: ["diagnostics", selectedClinic],
+@@ -78,7 +95,7 @@ export default function DiagnosticoSelectPage() {
+     mutationFn: () => apiFetch(`/clinics/${selectedClinic}/diagnostics`, { method: "POST" }),
+     onSuccess: (diag: Diagnostic) => {
+       qc.invalidateQueries({ queryKey: ["diagnostics", selectedClinic] });
+-      navigate(`/diagnostico/${diag.id}`);
++      navigate(`${diagBase}/${diag.id}`);
+     },
+   });
+ 
+@@ -101,7 +118,7 @@ export default function DiagnosticoSelectPage() {
+ 
+   function goToCompare() {
+     if (compareSelected.length === 2) {
+-      navigate(`/diagnostico/comparar?a=${compareSelected[0]}&b=${compareSelected[1]}`);
++      navigate(`${diagBase}/comparar?a=${compareSelected[0]}&b=${compareSelected[1]}`);
+     }
+   }
+ 
+@@ -120,39 +137,44 @@ export default function DiagnosticoSelectPage() {
+         </p>
+       </div>
+ 
+-      <Card>
+-        <CardHeader>
+-          <CardTitle className="text-base">Selecionar Clínica</CardTitle>
+-          <CardDescription>Escolha a clínica para iniciar ou continuar um diagnóstico</CardDescription>
+-        </CardHeader>
+-        <CardContent>
+-          {loadingClinics ? (
+-            <div className="flex items-center gap-2 text-muted-foreground">
+-              <Loader2 className="h-4 w-4 animate-spin" />
+-              Carregando clínicas...
+-            </div>
+-          ) : (
+-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+-              {clinics?.data.map((clinic) => (
+-                <button
+-                  key={clinic.id}
+-                  onClick={() => handleClinicSelect(clinic.id)}
+-                  className={`text-left px-3 py-2 rounded-md border transition-colors text-sm ${
+-                    selectedClinic === clinic.id
+-                      ? "bg-primary text-primary-foreground border-primary"
+-                      : "hover:bg-accent border-border"
+-                  }`}
+-                >
+-                  <div className="font-medium">{clinic.fantasia || clinic.nome}</div>
+-                  <div className={`text-xs ${selectedClinic === clinic.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+-                    {clinic.nome}
+-                  </div>
+-                </button>
+-              ))}
+-            </div>
+-          )}
+-        </CardContent>
+-      </Card>
++      {/* Clinic selector — super_admin only. Managers are already scoped to
++          their active clinic (chosen at /me/clinicas) and never see a list of
++          other clinics here. */}
++      {isSuperAdmin && (
++        <Card>
++          <CardHeader>
++            <CardTitle className="text-base">Selecionar Clínica</CardTitle>
++            <CardDescription>Escolha a clínica para iniciar ou continuar um diagnóstico</CardDescription>
++          </CardHeader>
++          <CardContent>
++            {loadingClinics ? (
++              <div className="flex items-center gap-2 text-muted-foreground">
++                <Loader2 className="h-4 w-4 animate-spin" />
++                Carregando clínicas...
++              </div>
++            ) : (
++              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
++                {clinics?.data.map((clinic) => (
++                  <button
++                    key={clinic.id}
++                    onClick={() => handleClinicSelect(clinic.id)}
++                    className={`text-left px-3 py-2 rounded-md border transition-colors text-sm ${
++                      selectedClinic === clinic.id
++                        ? "bg-primary text-primary-foreground border-primary"
++                        : "hover:bg-accent border-border"
++                    }`}
++                  >
++                    <div className="font-medium">{clinic.fantasia || clinic.nome}</div>
++                    <div className={`text-xs ${selectedClinic === clinic.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
++                      {clinic.nome}
++                    </div>
++                  </button>
++                ))}
++              </div>
++            )}
++          </CardContent>
++        </Card>
++      )}
+ 
+       {selectedClinic && (
+         <Card>
+@@ -270,7 +292,7 @@ export default function DiagnosticoSelectPage() {
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+-                                onClick={() => navigate(`/diagnostico/${d.id}`)}
++                                onClick={() => navigate(`${diagBase}/${d.id}`)}
+                               >
+                                 Continuar
+                               </Button>
+@@ -279,7 +301,7 @@ export default function DiagnosticoSelectPage() {
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+-                                onClick={() => navigate(`/diagnostico/${d.id}/resultado`)}
++                                onClick={() => navigate(`${diagBase}/${d.id}/resultado`)}
+                               >
+                                 <BarChart3 className="h-3.5 w-3.5 mr-1" />
+                                 Resultado
+diff --git a/artifacts/ccp/src/pages/documentos/index.tsx b/artifacts/ccp/src/pages/documentos/index.tsx
+index cf029e7..bc4ab39 100644
+--- a/artifacts/ccp/src/pages/documentos/index.tsx
++++ b/artifacts/ccp/src/pages/documentos/index.tsx
+@@ -1,7 +1,7 @@
+-import { useState, useRef } from "react";
++import { useState, useEffect, useRef } from "react";
+ import { useParams, useLocation } from "wouter";
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+-import { getStoredToken } from "@/hooks/use-auth";
++import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
+ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
+@@ -418,7 +418,35 @@ export default function DocumentosPage() {
+ function ClinicSelector() {
+   const [, navigate] = useLocation();
+   const [search, setSearch] = useState("");
++  const { data: user } = useCurrentRole();
++  const isTeamMember = user?.role === "team_member";
++  const isSuperAdmin = user?.role === "super_admin";
+   const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
++
++  // Clinic-first: a manager must never see a list of their other clinics.
++  // Resolve to the active clinic (or their only one) and enter it directly;
++  // with 2+ clinics and no active selection, send them to the chooser.
++  useEffect(() => {
++    if (!isTeamMember || isLoading) return;
++    const active = getActiveClinicId();
++    const match =
++      (active && clinics.find((c) => c.id === active)) ||
++      (clinics.length === 1 ? clinics[0] : undefined);
++    navigate(match ? `/portal/documentos/${match.id}` : "/me/clinicas", {
++      replace: true,
++    });
++  }, [isTeamMember, isLoading, clinics, navigate]);
++
++  // Only a confirmed super_admin may render the clinic list. While the role is
++  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
++  // instead of flashing other clinics; the effect above scopes managers to
++  // their active clinic (or the chooser).
++  if (!isSuperAdmin) {
++    return (
++      <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
++    );
++  }
++
+   const filtered = clinics.filter(c =>
+     c.nome.toLowerCase().includes(search.toLowerCase()) ||
+     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
+diff --git a/artifacts/ccp/src/pages/evidencias/index.tsx b/artifacts/ccp/src/pages/evidencias/index.tsx
+index 8589510..a9699ae 100644
+--- a/artifacts/ccp/src/pages/evidencias/index.tsx
++++ b/artifacts/ccp/src/pages/evidencias/index.tsx
+@@ -1,7 +1,7 @@
+-import { useState, useRef, useCallback } from "react";
++import { useState, useEffect, useRef, useCallback } from "react";
+ import { useParams, useLocation } from "wouter";
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+-import { getStoredToken } from "@/hooks/use-auth";
++import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
+ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
+@@ -441,7 +441,35 @@ export default function EvidenciasPage() {
+ function ClinicSelector() {
+   const [, navigate] = useLocation();
+   const [search, setSearch] = useState("");
++  const { data: user } = useCurrentRole();
++  const isTeamMember = user?.role === "team_member";
++  const isSuperAdmin = user?.role === "super_admin";
+   const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
++
++  // Clinic-first: a manager must never see a list of their other clinics.
++  // Resolve to the active clinic (or their only one) and enter it directly;
++  // with 2+ clinics and no active selection, send them to the chooser.
++  useEffect(() => {
++    if (!isTeamMember || isLoading) return;
++    const active = getActiveClinicId();
++    const match =
++      (active && clinics.find((c) => c.id === active)) ||
++      (clinics.length === 1 ? clinics[0] : undefined);
++    navigate(match ? `/portal/evidencias/${match.id}` : "/me/clinicas", {
++      replace: true,
++    });
++  }, [isTeamMember, isLoading, clinics, navigate]);
++
++  // Only a confirmed super_admin may render the clinic list. While the role is
++  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
++  // instead of flashing other clinics; the effect above scopes managers to
++  // their active clinic (or the chooser).
++  if (!isSuperAdmin) {
++    return (
++      <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
++    );
++  }
++
+   const filtered = clinics.filter(c =>
+     c.nome.toLowerCase().includes(search.toLowerCase()) ||
+     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
+diff --git a/artifacts/ccp/src/pages/kickoff/select.tsx b/artifacts/ccp/src/pages/kickoff/select.tsx
+index 5ab38b8..eb3d725 100644
+--- a/artifacts/ccp/src/pages/kickoff/select.tsx
++++ b/artifacts/ccp/src/pages/kickoff/select.tsx
+@@ -1,4 +1,4 @@
+-import { useState } from "react";
++import { useEffect, useMemo, useState } from "react";
+ import { useLocation } from "wouter";
+ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+ import { Button } from "@/components/ui/button";
+@@ -6,20 +6,61 @@ import { Input } from "@/components/ui/input";
+ import { Badge } from "@/components/ui/badge";
+ import { Loader2, Rocket, Search, ArrowRight } from "lucide-react";
+ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
++import { useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
+ 
+ export default function KickoffSelectPage() {
+-  const [, navigate] = useLocation();
++  const [location, navigate] = useLocation();
+   const [search, setSearch] = useState("");
+ 
+-  const { clinics, isLoading } = useClinicsForCurrentUser({ status: "kickoff", pageSize: 100 });
++  const { data: user } = useCurrentRole();
++  const isSuperAdmin = user?.role === "super_admin";
++  const isTeamMember = user?.role === "team_member";
++  // Portal-aware navigation: a manager stays inside `/portal/...`.
++  const isPortal = location.startsWith("/portal");
++  const kickoffBase = isPortal ? "/portal/kickoff" : "/kickoff";
+ 
+-  const filtered = clinics.filter(c =>
+-    c.nome.toLowerCase().includes(search.toLowerCase()) ||
+-    (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
+-  );
++  // super_admin → browse the full kickoff list (status-filtered server-side).
++  // team_member → load all their clinics; we scope to the active one below.
++  const { clinics, isLoading } = useClinicsForCurrentUser({
++    status: isSuperAdmin ? "kickoff" : undefined,
++    pageSize: 100,
++  });
++
++  const activeClinicId = getActiveClinicId();
++
++  // Clinic-first: a manager with 2+ clinics and no active selection is sent
++  // back to the chooser before any clinic-scoped data is shown.
++  useEffect(() => {
++    if (!isTeamMember || isLoading) return;
++    if (clinics.length === 0) return; // ClinicAccessGuard handles this
++    const resolved = activeClinicId && clinics.some((c) => c.id === activeClinicId);
++    if (!resolved && clinics.length > 1) {
++      navigate("/me/clinicas", { replace: true });
++    }
++  }, [isTeamMember, isLoading, clinics, activeClinicId, navigate]);
++
++  // Visible list. Super admins see every clinic in kickoff; a manager only
++  // ever sees the clinic they entered, and only while it is in the kickoff
++  // stage.
++  const scoped = useMemo(() => {
++    if (isSuperAdmin) return clinics;
++    const active =
++      (activeClinicId && clinics.find((c) => c.id === activeClinicId)) ||
++      (clinics.length === 1 ? clinics[0] : undefined);
++    if (!active) return [];
++    return active.status === "kickoff" ? [active] : [];
++  }, [isSuperAdmin, clinics, activeClinicId]);
++
++  const filtered = isSuperAdmin
++    ? scoped.filter(
++        (c) =>
++          c.nome.toLowerCase().includes(search.toLowerCase()) ||
++          (c.cidade ?? "").toLowerCase().includes(search.toLowerCase()),
++      )
++    : scoped;
+ 
+   function open(clinicId: string) {
+-    navigate(`/kickoff/${clinicId}`);
++    navigate(`${kickoffBase}/${clinicId}`);
+   }
+ 
+   return (
+@@ -28,19 +69,25 @@ export default function KickoffSelectPage() {
+         <Rocket className="h-7 w-7 text-primary" />
+         <div>
+           <h1 className="text-2xl font-bold">Kick-off</h1>
+-          <p className="text-sm text-muted-foreground">Selecione uma clínica para iniciar ou continuar o onboarding</p>
++          <p className="text-sm text-muted-foreground">
++            {isSuperAdmin
++              ? "Selecione uma clínica para iniciar ou continuar o onboarding"
++              : "Onboarding da clínica ativa"}
++          </p>
+         </div>
+       </div>
+ 
+-      <div className="relative">
+-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+-        <Input
+-          value={search}
+-          onChange={e => setSearch(e.target.value)}
+-          placeholder="Buscar clínica por nome ou cidade…"
+-          className="pl-9"
+-        />
+-      </div>
++      {isSuperAdmin && (
++        <div className="relative">
++          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
++          <Input
++            value={search}
++            onChange={e => setSearch(e.target.value)}
++            placeholder="Buscar clínica por nome ou cidade…"
++            className="pl-9"
++          />
++        </div>
++      )}
+ 
+       {isLoading ? (
+         <div className="py-12 flex justify-center">
+@@ -50,8 +97,16 @@ export default function KickoffSelectPage() {
+         <Card>
+           <CardContent className="py-12 text-center text-muted-foreground">
+             <Rocket className="h-8 w-8 mx-auto mb-2 opacity-40" />
+-            <p className="font-medium">Nenhuma clínica em fase de kick-off</p>
+-            <p className="text-sm mt-1">Clínicas com status "kickoff" aparecem aqui automaticamente</p>
++            <p className="font-medium">
++              {isSuperAdmin
++                ? "Nenhuma clínica em fase de kick-off"
++                : "Esta clínica não está em fase de kick-off"}
++            </p>
++            <p className="text-sm mt-1">
++              {isSuperAdmin
++                ? 'Clínicas com status "kickoff" aparecem aqui automaticamente'
++                : "O kick-off fica disponível quando a clínica entra na etapa de onboarding"}
++            </p>
+           </CardContent>
+         </Card>
+       ) : (
+diff --git a/artifacts/ccp/src/pages/me/clinicas.tsx b/artifacts/ccp/src/pages/me/clinicas.tsx
+index 67fa8fa..750665c 100644
+--- a/artifacts/ccp/src/pages/me/clinicas.tsx
++++ b/artifacts/ccp/src/pages/me/clinicas.tsx
+@@ -94,7 +94,7 @@ export default function MeClinicasPage() {
+             href="/portal"
+             onClick={() => setActiveClinicId(c.id)}
+           >
+-            <Card className="cursor-pointer hover:border-primary/50 transition-colors h-full">
++            <Card className="group cursor-pointer hover:border-primary/50 transition-colors h-full">
+               <CardHeader>
+                 <div className="flex items-start justify-between gap-2">
+                   <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 shrink-0">
+@@ -130,8 +130,12 @@ export default function MeClinicasPage() {
+                     </span>
+                   </div>
+                 )}
+-                <div className="pt-2 flex items-center text-xs text-primary font-medium">
+-                  Acessar <ArrowRight className="h-3 w-3 ml-1" />
++                {/* Styled as a button but rendered as a div: the whole card
++                    is already an <a> (Link), so a nested <button> would be
++                    invalid HTML. */}
++                <div className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors group-hover:bg-primary/90">
++                  <span className="truncate">Entrar — {c.fantasia || c.nome}</span>
++                  <ArrowRight className="h-4 w-4 shrink-0" />
+                 </div>
+               </CardContent>
+             </Card>
+diff --git a/artifacts/ccp/src/pages/portal/index.tsx b/artifacts/ccp/src/pages/portal/index.tsx
+index 00576cf..6b50d25 100644
+--- a/artifacts/ccp/src/pages/portal/index.tsx
++++ b/artifacts/ccp/src/pages/portal/index.tsx
+@@ -1,5 +1,5 @@
+ import { useMemo } from "react";
+-import { Link, useLocation } from "wouter";
++import { Link, Redirect } from "wouter";
+ import {
+   Building2,
+   ClipboardList,
+@@ -29,7 +29,6 @@ import { Button } from "@/components/ui/button";
+ import {
+   useMyClinics,
+   getActiveClinicId,
+-  setActiveClinicId,
+   type MyClinicCard,
+ } from "@/hooks/use-auth";
+ 
+@@ -39,7 +38,11 @@ function resolveActive(clinics: MyClinicCard[]): MyClinicCard | null {
+     const hit = clinics.find((c) => c.id === stored);
+     if (hit) return hit;
+   }
+-  return clinics[0] ?? null;
++  // Clinic-first: only auto-resolve when there is exactly one clinic. With
++  // 2+ clinics and no valid selection we return null so the inline chooser
++  // below prompts the manager — never silently default to the first clinic,
++  // which would surface the wrong clinic's overview during a client session.
++  return clinics.length === 1 ? clinics[0] : null;
+ }
+ 
+ const MODULE_TILES: Array<{
+@@ -105,7 +108,6 @@ const MODULE_TILES: Array<{
+ ];
+ 
+ export default function PortalHome() {
+-  const [, navigate] = useLocation();
+   const { data, isLoading } = useMyClinics();
+   const clinics = data?.clinics ?? [];
+ 
+@@ -138,37 +140,13 @@ export default function PortalHome() {
+     );
+   }
+ 
++  // Clinic-first: a manager with 2+ clinics and no active selection is sent
++  // to the single, dedicated chooser at /me/clinicas instead of listing all
++  // their clinic names here — so no clinic list ever surfaces on /portal
++  // during a client-facing session. (clinics.length === 0 is handled above;
++  // single-clinic managers resolve an active clinic and never reach here.)
+   if (!active) {
+-    return (
+-      <div className="mx-auto max-w-md py-16">
+-        <Card>
+-          <CardHeader className="text-center">
+-            <CardTitle>Selecione uma clínica</CardTitle>
+-            <CardDescription>
+-              Você tem múltiplas clínicas vinculadas. Escolha uma para começar.
+-            </CardDescription>
+-          </CardHeader>
+-          <CardContent>
+-            <div className="grid gap-2">
+-              {clinics.map((c) => (
+-                <Button
+-                  key={c.id}
+-                  variant="outline"
+-                  className="justify-between"
+-                  onClick={() => {
+-                    setActiveClinicId(c.id);
+-                    navigate("/portal");
+-                  }}
+-                >
+-                  <span className="truncate">{c.fantasia || c.nome}</span>
+-                  <ArrowRight className="h-4 w-4" />
+-                </Button>
+-              ))}
+-            </div>
+-          </CardContent>
+-        </Card>
+-      </div>
+-    );
++    return <Redirect to="/me/clinicas" />;
+   }
+ 
+   const cidade = [active.cidade, active.uf].filter(Boolean).join(" / ");
+diff --git a/artifacts/ccp/src/pages/processos/index.tsx b/artifacts/ccp/src/pages/processos/index.tsx
+index ef0d479..b10af3f 100644
+--- a/artifacts/ccp/src/pages/processos/index.tsx
++++ b/artifacts/ccp/src/pages/processos/index.tsx
+@@ -1,7 +1,7 @@
+-import { useState, useCallback } from "react";
++import { useState, useEffect, useCallback } from "react";
+ import { useParams, useLocation } from "wouter";
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+-import { getStoredToken } from "@/hooks/use-auth";
++import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
+ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
+@@ -622,7 +622,35 @@ export default function ProcessosPage() {
+ function ClinicSelector() {
+   const [, navigate] = useLocation();
+   const [search, setSearch] = useState("");
++  const { data: user } = useCurrentRole();
++  const isTeamMember = user?.role === "team_member";
++  const isSuperAdmin = user?.role === "super_admin";
+   const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
++
++  // Clinic-first: a manager must never see a list of their other clinics.
++  // Resolve to the active clinic (or their only one) and enter it directly;
++  // with 2+ clinics and no active selection, send them to the chooser.
++  useEffect(() => {
++    if (!isTeamMember || isLoading) return;
++    const active = getActiveClinicId();
++    const match =
++      (active && clinics.find((c) => c.id === active)) ||
++      (clinics.length === 1 ? clinics[0] : undefined);
++    navigate(match ? `/portal/processos/${match.id}` : "/me/clinicas", {
++      replace: true,
++    });
++  }, [isTeamMember, isLoading, clinics, navigate]);
++
++  // Only a confirmed super_admin may render the clinic list. While the role is
++  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
++  // instead of flashing other clinics; the effect above scopes managers to
++  // their active clinic (or the chooser).
++  if (!isSuperAdmin) {
++    return (
++      <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
++    );
++  }
++
+   const filtered = clinics.filter(c =>
+     c.nome.toLowerCase().includes(search.toLowerCase()) ||
+     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
+diff --git a/artifacts/ccp/src/pages/relatorios/index.tsx b/artifacts/ccp/src/pages/relatorios/index.tsx
+index 5315fe1..8d4b04a 100644
+--- a/artifacts/ccp/src/pages/relatorios/index.tsx
++++ b/artifacts/ccp/src/pages/relatorios/index.tsx
+@@ -1,7 +1,7 @@
+-import { useState, type ReactElement } from "react";
++import { useState, useEffect, type ReactElement } from "react";
+ import { useParams, useLocation } from "wouter";
+ import { useQuery } from "@tanstack/react-query";
+-import { getStoredToken } from "@/hooks/use-auth";
++import { getStoredToken, useCurrentRole } from "@/hooks/use-auth";
+ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+ import { Button } from "@/components/ui/button";
+ import { Input } from "@/components/ui/input";
+@@ -276,7 +276,28 @@ export default function RelatoriosPage() {
+ function ClinicSelector() {
+   const [, navigate] = useLocation();
+   const [search, setSearch] = useState("");
++  const { data: user } = useCurrentRole();
++  const isTeamMember = user?.role === "team_member";
++  const isSuperAdmin = user?.role === "super_admin";
+   const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
++
++  // Relatórios is not part of the manager portal nav. A team_member must
++  // never see the list of clinics here — bounce them to the portal home.
++  useEffect(() => {
++    if (!isTeamMember) return;
++    navigate("/portal", { replace: true });
++  }, [isTeamMember, navigate]);
++
++  // Only a confirmed super_admin may render the clinic list. While the role is
++  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
++  // instead of flashing other clinics; the effect above bounces managers to the
++  // portal home.
++  if (!isSuperAdmin) {
++    return (
++      <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
++    );
++  }
++
+   const filtered = clinics.filter(c =>
+     c.nome.toLowerCase().includes(search.toLowerCase()) ||
+     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
+diff --git a/artifacts/ccp/src/pages/responder/index.tsx b/artifacts/ccp/src/pages/responder/index.tsx
+index 43bb20f..fe8b6f9 100644
+--- a/artifacts/ccp/src/pages/responder/index.tsx
++++ b/artifacts/ccp/src/pages/responder/index.tsx
+@@ -1,6 +1,6 @@
+-import { useEffect, useMemo, useState } from "react";
++import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+ import { useLocation } from "wouter";
+-import { useQuery } from "@tanstack/react-query";
++import { useQuery, useQueryClient } from "@tanstack/react-query";
+ import {
+   Loader2,
+   AlertTriangle,
+@@ -10,11 +10,17 @@ import {
+   Clock,
+   LogOut,
+   ListChecks,
++  ShieldAlert,
+ } from "lucide-react";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
+ import { Progress } from "@/components/ui/progress";
+-import { clearToken, setActiveClinicId } from "@/hooks/use-auth";
++import {
++  clearToken,
++  setActiveClinicId,
++  getStoredToken,
++  useLogout,
++} from "@/hooks/use-auth";
+ import {
+   Card,
+   CardContent,
+@@ -74,28 +80,26 @@ interface HubResponse {
+ 
+ export default function ResponderEntrypoint() {
+   const [, navigate] = useLocation();
+-  const [status, setStatus] = useState<"redeeming" | "ready" | "error">(
+-    "redeeming",
+-  );
++  const qc = useQueryClient();
++  const logout = useLogout();
++  const [status, setStatus] = useState<
++    "checking" | "conflict" | "redeeming" | "ready" | "error"
++  >("checking");
+   const [errorMessage, setErrorMessage] = useState("");
+   const [identity, setIdentity] = useState<ResponderIdentity | null>(null);
+ 
+-  // 1. Redeem (se vier ?code= na URL) OU recupera sessão salva.
+-  useEffect(() => {
+-    // Isolamento de sessão: o fluxo do respondente é uma identidade pública e
+-    // de escopo restrito (token `diagnostic_respondent` em sessionStorage). Se
+-    // o link for aberto no mesmo navegador onde já existe uma sessão
+-    // privilegiada (super_admin/team_member em `ccp_admin_token`), essa sessão
+-    // continuaria viva e o respondente poderia navegar de volta para a
+-    // plataforma completa (ou um restore de histórico/BFCache exibiria telas de
+-    // admin). Removemos o token privilegiado ao entrar no fluxo público para
+-    // que qualquer navegação subsequente exija novo login. O backend já nega
+-    // por papel; isto fecha a brecha de UI no mesmo navegador.
+-    clearToken();
+-    setActiveClinicId(null);
++  // Captura o invite code uma única vez (síncrono, no primeiro render), antes
++  // de removermos a querystring da URL — assim o gate de conflito e o redeem
++  // compartilham o mesmo valor.
++  const codeRef = useRef<string | null>(
++    new URLSearchParams(window.location.search).get("code"),
++  );
+ 
+-    const params = new URLSearchParams(window.location.search);
+-    const code = params.get("code");
++  // Executa o redeem (quando vem `?code=`) OU restaura a sessão de respondente
++  // já salva. SÓ é chamado depois que qualquer sessão privilegiada deste
++  // navegador foi encerrada.
++  const enterResponderFlow = useCallback(async () => {
++    const code = codeRef.current;
+ 
+     // Sem code: assume sessão pré-existente. Sem sessão → erro.
+     if (!code) {
+@@ -112,41 +116,88 @@ export default function ResponderEntrypoint() {
+       return;
+     }
+ 
++    setStatus("redeeming");
+     history.replaceState(null, "", window.location.pathname);
+-    (async () => {
+-      try {
+-        const res = await fetch(`${BASE}/api/auth/responder`, {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: JSON.stringify({ code }),
+-        });
+-        if (!res.ok) {
+-          const body = await res.json().catch(() => ({}));
+-          setErrorMessage(
+-            body?.error ??
+-              "Não foi possível abrir o diagnóstico. Solicite um novo link ao gestor.",
+-          );
+-          setStatus("error");
+-          return;
+-        }
+-        const data = (await res.json()) as ResponderIdentity;
+-        sessionStorage.setItem(RESPONDENT_TOKEN_KEY, data.token);
+-        sessionStorage.setItem(
+-          `${RESPONDENT_TOKEN_KEY}_identity`,
+-          JSON.stringify(data),
++    try {
++      const res = await fetch(`${BASE}/api/auth/responder`, {
++        method: "POST",
++        headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({ code }),
++      });
++      if (!res.ok) {
++        const body = await res.json().catch(() => ({}));
++        setErrorMessage(
++          body?.error ??
++            "Não foi possível abrir o diagnóstico. Solicite um novo link ao gestor.",
+         );
+-        // Limpa o ctx legado (formato amarrado à delegação) para evitar que
+-        // o wizard leia contexto obsoleto.
+-        sessionStorage.removeItem(`${RESPONDENT_TOKEN_KEY}_ctx`);
+-        setIdentity(data);
+-        setStatus("ready");
+-      } catch {
+-        setErrorMessage("Erro de conexão. Tente novamente em instantes.");
+         setStatus("error");
++        return;
+       }
+-    })();
++      const data = (await res.json()) as ResponderIdentity;
++      sessionStorage.setItem(RESPONDENT_TOKEN_KEY, data.token);
++      sessionStorage.setItem(
++        `${RESPONDENT_TOKEN_KEY}_identity`,
++        JSON.stringify(data),
++      );
++      // Limpa o ctx legado (formato amarrado à delegação) para evitar que
++      // o wizard leia contexto obsoleto.
++      sessionStorage.removeItem(`${RESPONDENT_TOKEN_KEY}_ctx`);
++      setIdentity(data);
++      setStatus("ready");
++    } catch {
++      setErrorMessage("Erro de conexão. Tente novamente em instantes.");
++      setStatus("error");
++    }
+   }, []);
+ 
++  // Limpeza leve de QUALQUER resíduo de sessão privilegiada (token do gestor /
++  // super-admin, clínica ativa e cache de queries em memória). Usada quando
++  // NÃO há sessão privilegiada viva a confirmar — apenas higieniza o estado.
++  const purgePrivilegedSession = useCallback(() => {
++    clearToken();
++    setActiveClinicId(null);
++    qc.clear();
++  }, [qc]);
++
++  // Gate de isolamento de sessão na entrada do fluxo público do respondente.
++  useEffect(() => {
++    // O fluxo do respondente é uma identidade pública e de escopo restrito
++    // (token `diagnostic_respondent` em sessionStorage). Se o link for aberto
++    // no mesmo navegador onde já existe uma sessão privilegiada
++    // (super_admin/team_member em `ccp_admin_token`, compartilhado por todas as
++    // abas), derrubá-la silenciosamente faria o gestor perder o acesso sem
++    // aviso. Detectamos a sessão e exigimos confirmação explícita antes de
++    // qualquer teardown. O backend já nega por papel; isto fecha a brecha de UI
++    // no mesmo navegador sem surpreender o gestor.
++    if (getStoredToken() !== null) {
++      setStatus("conflict");
++      return;
++    }
++    purgePrivilegedSession();
++    void enterResponderFlow();
++  }, [enterResponderFlow, purgePrivilegedSession]);
++
++  const handleConfirmConflict = useCallback(async () => {
++    setStatus("redeeming");
++    // Teardown COMPLETO da sessão do gestor: token, clínica ativa, cache de
++    // queries em memória E push subscription (useLogout revoga best-effort em
++    // ≤1,5s). Só então abrimos o fluxo do respondente. Qualquer falha no
++    // teardown roteia para a tela de erro em vez de travar no spinner.
++    try {
++      await logout();
++    } catch {
++      setStatus("error");
++      return;
++    }
++    await enterResponderFlow();
++  }, [logout, enterResponderFlow]);
++
++  const handleCancelConflict = useCallback(() => {
++    // Mantém a sessão do gestor INTACTA e volta para a home — os guards
++    // roteiam super_admin → dashboard e team_member → /portal.
++    navigate("/", { replace: true });
++  }, [navigate]);
++
+   const token = identity?.token ?? null;
+ 
+   // 2. Carrega o hub.
+@@ -174,6 +225,19 @@ export default function ResponderEntrypoint() {
+ 
+   const cards = useMemo(() => hubQuery.data?.delegacoes ?? [], [hubQuery.data]);
+ 
++  if (status === "checking") {
++    return <CenteredSpinner label="Verificando sua sessão…" />;
++  }
++
++  if (status === "conflict") {
++    return (
++      <SessionConflictScreen
++        onConfirm={handleConfirmConflict}
++        onCancel={handleCancelConflict}
++      />
++    );
++  }
++
+   if (status === "redeeming") {
+     return (
+       <CenteredSpinner label="Abrindo seu diagnóstico…" />
+@@ -366,6 +430,59 @@ export default function ResponderEntrypoint() {
+   );
+ }
+ 
++/**
++ * Tela de conflito de sessão. Mostrada quando o link público de respondente é
++ * aberto num navegador que já tem uma sessão privilegiada (gestor/super-admin)
++ * viva. Exige confirmação explícita antes de encerrar a sessão do gestor — o
++ * token mora em localStorage e é compartilhado por todas as abas, então
++ * derrubá-lo sem aviso surpreenderia o gestor.
++ */
++function SessionConflictScreen({
++  onConfirm,
++  onCancel,
++}: {
++  onConfirm: () => void;
++  onCancel: () => void;
++}) {
++  const [submitting, setSubmitting] = useState(false);
++  return (
++    <div className="flex min-h-screen items-center justify-center bg-background p-4">
++      <Card className="w-full max-w-md">
++        <CardHeader className="text-center">
++          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
++            <ShieldAlert className="h-6 w-6 text-amber-600" />
++          </div>
++          <CardTitle>Você está logado como gestor</CardTitle>
++          <CardDescription>
++            Para preencher o diagnóstico como respondente, sua sessão de gestor
++            será encerrada neste dispositivo. Você precisará entrar novamente
++            depois para voltar ao painel. Deseja continuar?
++          </CardDescription>
++        </CardHeader>
++        <CardContent className="flex flex-col gap-2 pt-2">
++          <Button
++            disabled={submitting}
++            onClick={() => {
++              setSubmitting(true);
++              onConfirm();
++            }}
++          >
++            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
++            Continuar como respondente (encerra sessão atual)
++          </Button>
++          <Button variant="outline" disabled={submitting} onClick={onCancel}>
++            Cancelar
++          </Button>
++          <div className="mx-auto mt-2 flex items-center gap-2 text-xs text-muted-foreground">
++            <Building2 className="h-3.5 w-3.5" />
++            <span>IONEX360 — Diagnóstico 360°</span>
++          </div>
++        </CardContent>
++      </Card>
++    </div>
++  );
++}
++
+ function CenteredSpinner({ label }: { label: string }) {
+   return (
+     <div className="flex min-h-screen items-center justify-center bg-background">
+diff --git a/artifacts/ccp/src/pages/responder/session-isolation.test.tsx b/artifacts/ccp/src/pages/responder/session-isolation.test.tsx
+new file mode 100644
+index 0000000..b435796
+--- /dev/null
++++ b/artifacts/ccp/src/pages/responder/session-isolation.test.tsx
+@@ -0,0 +1,154 @@
++import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
++import { render, screen, waitFor, cleanup } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++
++// Hoisted mutable state + spies shared between the module mocks and the tests.
++const mocks = vi.hoisted(() => ({
++  storedTokenRef: { current: null as string | null },
++  events: [] as string[],
++  logoutMock: vi.fn(),
++  clearTokenMock: vi.fn(),
++  setActiveClinicIdMock: vi.fn(),
++  navigateMock: vi.fn(),
++}));
++
++// getStoredToken drives the conflict gate; the rest are teardown spies.
++vi.mock("@/hooks/use-auth", () => ({
++  getStoredToken: () => mocks.storedTokenRef.current,
++  clearToken: mocks.clearTokenMock,
++  setActiveClinicId: mocks.setActiveClinicIdMock,
++  useLogout: () => mocks.logoutMock,
++}));
++
++vi.mock("wouter", () => ({
++  useLocation: () => ["/responder", mocks.navigateMock],
++}));
++
++import ResponderEntrypoint from "./index";
++
++function renderPage() {
++  const qc = new QueryClient({
++    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
++  });
++  return render(
++    <QueryClientProvider client={qc}>
++      <ResponderEntrypoint />
++    </QueryClientProvider>,
++  );
++}
++
++let redeemCalls: number;
++
++beforeEach(() => {
++  redeemCalls = 0;
++  mocks.events.length = 0;
++  mocks.storedTokenRef.current = null;
++  mocks.logoutMock.mockReset();
++  mocks.logoutMock.mockImplementation(async () => {
++    mocks.events.push("logout");
++    // Mirror the real teardown: the manager token is gone afterwards.
++    mocks.storedTokenRef.current = null;
++  });
++  mocks.clearTokenMock.mockReset();
++  mocks.setActiveClinicIdMock.mockReset();
++  mocks.navigateMock.mockReset();
++
++  // The invite code lives in the querystring; the entrypoint reads it on mount.
++  window.history.pushState({}, "", "/responder?code=test-code");
++
++  const fetchMock = vi.fn(async (url: string) => {
++    const u = String(url);
++    const json = (body: unknown) => ({ ok: true, json: async () => body });
++    if (u.includes("/api/auth/responder")) {
++      redeemCalls += 1;
++      mocks.events.push("redeem");
++      return json({
++        token: "resp-token",
++        clinicId: "clinic-1",
++        clinicNome: "Clínica Teste",
++        diagnosticoId: "diag-1",
++      });
++    }
++    if (u.includes("/api/respondent/hub")) {
++      return json({
++        clinicId: "clinic-1",
++        clinicNome: "Clínica Teste",
++        diagnosticoId: "diag-1",
++        diagnosticoStatus: "em_andamento",
++        responsavelNome: "Fulano",
++        responsavelEmail: "fulano@example.com",
++        delegacoes: [],
++      });
++    }
++    return json({});
++  });
++  vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
++});
++
++afterEach(() => {
++  cleanup();
++  vi.unstubAllGlobals();
++});
++
++describe("Respondent link — session isolation gate", () => {
++  it("shows the conflict warning (and does NOT redeem) when a manager session is live", async () => {
++    mocks.storedTokenRef.current = "mgr-token";
++    renderPage();
++
++    expect(
++      await screen.findByText(/Você está logado como gestor/i),
++    ).toBeInTheDocument();
++    expect(
++      screen.getByRole("button", { name: /Continuar como respondente/i }),
++    ).toBeInTheDocument();
++    expect(screen.getByRole("button", { name: /^Cancelar$/i })).toBeInTheDocument();
++
++    // No respondent session is established while the warning is up.
++    expect(redeemCalls).toBe(0);
++    expect(mocks.logoutMock).not.toHaveBeenCalled();
++    expect(mocks.clearTokenMock).not.toHaveBeenCalled();
++  });
++
++  it("on confirm: tears down the manager session BEFORE redeeming the respondent link", async () => {
++    const user = userEvent.setup();
++    mocks.storedTokenRef.current = "mgr-token";
++    renderPage();
++
++    await user.click(
++      await screen.findByRole("button", { name: /Continuar como respondente/i }),
++    );
++
++    await waitFor(() => expect(redeemCalls).toBe(1));
++    expect(mocks.logoutMock).toHaveBeenCalledTimes(1);
++    // Order matters: the privileged session must be gone before the public
++    // respondent flow opens.
++    expect(mocks.events).toEqual(["logout", "redeem"]);
++  });
++
++  it("on cancel: keeps the manager session and navigates home without redeeming", async () => {
++    const user = userEvent.setup();
++    mocks.storedTokenRef.current = "mgr-token";
++    renderPage();
++
++    await user.click(await screen.findByRole("button", { name: /^Cancelar$/i }));
++
++    expect(mocks.navigateMock).toHaveBeenCalledWith("/", { replace: true });
++    expect(redeemCalls).toBe(0);
++    expect(mocks.logoutMock).not.toHaveBeenCalled();
++    expect(mocks.clearTokenMock).not.toHaveBeenCalled();
++  });
++
++  it("with no manager session: enters the respondent flow directly (no conflict screen)", async () => {
++    mocks.storedTokenRef.current = null;
++    renderPage();
++
++    await waitFor(() => expect(redeemCalls).toBe(1));
++    expect(
++      screen.queryByText(/Você está logado como gestor/i),
++    ).not.toBeInTheDocument();
++    // Residual privileged state is still hygienically purged on entry.
++    expect(mocks.clearTokenMock).toHaveBeenCalled();
++    expect(mocks.setActiveClinicIdMock).toHaveBeenCalledWith(null);
++  });
++});
+diff --git a/artifacts/ccp/src/pages/riscos/index.tsx b/artifacts/ccp/src/pages/riscos/index.tsx
+index 864c0a2..598dfd9 100644
+--- a/artifacts/ccp/src/pages/riscos/index.tsx
++++ b/artifacts/ccp/src/pages/riscos/index.tsx
+@@ -1,7 +1,7 @@
+-import { useState } from "react";
++import { useState, useEffect } from "react";
+ import { useParams, useLocation, Link } from "wouter";
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+-import { getStoredToken } from "@/hooks/use-auth";
++import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
+ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
+@@ -982,7 +982,35 @@ export default function RiscosPage() {
+ function ClinicSelector() {
+   const [, navigate] = useLocation();
+   const [search, setSearch] = useState("");
++  const { data: user } = useCurrentRole();
++  const isTeamMember = user?.role === "team_member";
++  const isSuperAdmin = user?.role === "super_admin";
+   const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
++
++  // Clinic-first: a manager must never see a list of their other clinics.
++  // Resolve to the active clinic (or their only one) and enter it directly;
++  // with 2+ clinics and no active selection, send them to the chooser.
++  useEffect(() => {
++    if (!isTeamMember || isLoading) return;
++    const active = getActiveClinicId();
++    const match =
++      (active && clinics.find((c) => c.id === active)) ||
++      (clinics.length === 1 ? clinics[0] : undefined);
++    navigate(match ? `/portal/riscos/${match.id}` : "/me/clinicas", {
++      replace: true,
++    });
++  }, [isTeamMember, isLoading, clinics, navigate]);
++
++  // Only a confirmed super_admin may render the clinic list. While the role is
++  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
++  // instead of flashing other clinics; the effect above scopes managers to
++  // their active clinic (or the chooser).
++  if (!isSuperAdmin) {
++    return (
++      <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
++    );
++  }
++
+   const filtered = clinics.filter(c =>
+     c.nome.toLowerCase().includes(search.toLowerCase()) ||
+     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
