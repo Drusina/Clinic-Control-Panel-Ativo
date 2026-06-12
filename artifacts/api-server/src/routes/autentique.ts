@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { db, lgpdTermosTable, teamTable } from "@workspace/db";
-import { sendEmail, buildSigningRequestEmail, buildSigningConfirmationEmail, resolveAppUrl } from "../lib/email.js";
+import { db, lgpdTermosTable, teamTable, clinicsTable } from "@workspace/db";
+import { sendEmail, buildSigningRequestEmail, buildSigningConfirmationEmail } from "../lib/email.js";
 import { sendApprovalWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
 import { getConfig } from "../lib/config.js";
+import { formatBRT } from "../lib/lgpd-pdf.js";
 
 const publicRouter: IRouter = Router();
 const protectedRouter: IRouter = Router();
@@ -308,12 +309,17 @@ publicRouter.post("/autentique/webhook", async (req, res): Promise<void> => {
         }
 
         if (!notifiedViaWhatsApp && recipientPrefs.emailEnabled) {
-          const appUrl = await resolveAppUrl(req);
-          const docsLink = `${appUrl}/documentos`;
+          const [clinic] = await db
+            .select({ fantasia: clinicsTable.fantasia, nome: clinicsTable.nome })
+            .from(clinicsTable)
+            .where(eq(clinicsTable.id, termo.clinicId))
+            .limit(1);
           const html = buildSigningConfirmationEmail({
             signatarioNome: termo.signatarioNome,
             termoNome: termo.nome ?? "Termo LGPD",
-            docsLink,
+            clinicName: clinic?.fantasia ?? clinic?.nome ?? undefined,
+            signedAt: formatBRT(new Date()),
+            verificationCode: docId,
           });
           sendEmail({
             to: termo.signatarioEmail,

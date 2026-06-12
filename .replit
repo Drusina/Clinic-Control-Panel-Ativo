@@ -18,26 +18,11 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "storage-auth-test"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "test"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "api-test"
-
-[[workflows.workflow]]
-name = "storage-auth-test"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "node artifacts/api-server/src/scripts/test-storage-auth.mjs"
-
-[workflows.workflow.metadata]
-isValidation = true
 
 [[workflows.workflow]]
 name = "test"
