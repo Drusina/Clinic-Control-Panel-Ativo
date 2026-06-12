@@ -94,7 +94,7 @@ export default function MeClinicasPage() {
             href="/portal"
             onClick={() => setActiveClinicId(c.id)}
           >
-            <Card className="cursor-pointer hover:border-primary/50 transition-colors h-full">
+            <Card className="group cursor-pointer hover:border-primary/50 transition-colors h-full">
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 shrink-0">
@@ -130,8 +130,12 @@ export default function MeClinicasPage() {
                     </span>
                   </div>
                 )}
-                <div className="pt-2 flex items-center text-xs text-primary font-medium">
-                  Acessar <ArrowRight className="h-3 w-3 ml-1" />
+                {/* Styled as a button but rendered as a div: the whole card
+                    is already an <a> (Link), so a nested <button> would be
+                    invalid HTML. */}
+                <div className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors group-hover:bg-primary/90">
+                  <span className="truncate">Entrar — {c.fantasia || c.nome}</span>
+                  <ArrowRight className="h-4 w-4 shrink-0" />
                 </div>
               </CardContent>
             </Card>

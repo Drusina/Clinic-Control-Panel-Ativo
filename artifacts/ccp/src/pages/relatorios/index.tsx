@@ -1,7 +1,7 @@
-import { useState, type ReactElement } from "react";
+import { useState, useEffect, type ReactElement } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { getStoredToken } from "@/hooks/use-auth";
+import { getStoredToken, useCurrentRole } from "@/hooks/use-auth";
 import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -276,7 +276,28 @@ export default function RelatoriosPage() {
 function ClinicSelector() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
+  const { data: user } = useCurrentRole();
+  const isTeamMember = user?.role === "team_member";
+  const isSuperAdmin = user?.role === "super_admin";
   const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
+
+  // Relatórios is not part of the manager portal nav. A team_member must
+  // never see the list of clinics here — bounce them to the portal home.
+  useEffect(() => {
+    if (!isTeamMember) return;
+    navigate("/portal", { replace: true });
+  }, [isTeamMember, navigate]);
+
+  // Only a confirmed super_admin may render the clinic list. While the role is
+  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
+  // instead of flashing other clinics; the effect above bounces managers to the
+  // portal home.
+  if (!isSuperAdmin) {
+    return (
+      <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+    );
+  }
+
   const filtered = clinics.filter(c =>
     c.nome.toLowerCase().includes(search.toLowerCase()) ||
     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())

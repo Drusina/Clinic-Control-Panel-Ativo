@@ -53,8 +53,13 @@ interface NavItem {
  * (e.g. /delegacao/select → /delegacao/<activeClinic>). Resolution
  * order:
  *   1. Clinic id present in the current URL (from /xxx/<id>)
- *   2. localStorage ccp_active_clinic_id
- *   3. First clinic in the user's clinic list
+ *   2. The session-scoped active clinic (getActiveClinicId / sessionStorage)
+ *   3. The only clinic, when the user has exactly one
+ *
+ * Clinic-first: with 2+ clinics and no explicit selection we return null
+ * so the UI never silently defaults to the first clinic — that default
+ * could surface the wrong clinic during a client-facing session. Mirrors
+ * the same guarantee in PortalLayout.
  */
 function resolveActiveClinicId(
   location: string,
@@ -64,7 +69,7 @@ function resolveActiveClinicId(
   if (urlMatch && myClinicIds.includes(urlMatch[1])) return urlMatch[1];
   const stored = getActiveClinicId();
   if (stored && myClinicIds.includes(stored)) return stored;
-  return myClinicIds[0] ?? null;
+  return myClinicIds.length === 1 ? myClinicIds[0] : null;
 }
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -106,13 +111,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         { name: "Notificações", href: "/notifications", icon: Bell },
       ]
     : [
+        // team_member only ever sees the AppLayout chrome on the
+        // /me/clinicas chooser — TeamMemberToPortal bounces them off every
+        // other AppLayout route into the dedicated /portal namespace. So the
+        // manager's sidebar here is just the clinic-chooser entry; the
+        // operational modules live in PortalLayout, scoped to a clinic.
         { name: "Minhas clínicas", href: "/me/clinicas", icon: Building2 },
-        ...(activeClinicId
-          ? [
-              { name: "Diagnóstico 360°", href: "/diagnostico/select", icon: ClipboardList },
-              { name: "Notificações", href: "/notifications", icon: Bell },
-            ]
-          : []),
       ];
 
   const operacionalNav: NavItem[] = [
@@ -128,7 +132,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: "Relatórios", href: scopedHref("/relatorios", "/relatorios/select"), icon: BarChart3 },
   ];
 
-  const showOperationalSections = isSuperAdmin || (isTeamMember && !!activeClinicId);
+  // Operational/Complementar module sections belong to the super-admin
+  // sidebar only. A team_member never legitimately stays on an AppLayout
+  // module route (TeamMemberToPortal redirects them to /portal), so showing
+  // these here only ever leaked the modules onto the /me/clinicas chooser.
+  const showOperationalSections = isSuperAdmin;
 
   const ClinicSwitcher = () => {
     if (!isTeamMember) return null;

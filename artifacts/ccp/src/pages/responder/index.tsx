@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
   AlertTriangle,
@@ -10,11 +10,17 @@ import {
   Clock,
   LogOut,
   ListChecks,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { clearToken, setActiveClinicId } from "@/hooks/use-auth";
+import {
+  clearToken,
+  setActiveClinicId,
+  getStoredToken,
+  useLogout,
+} from "@/hooks/use-auth";
 import {
   Card,
   CardContent,
@@ -74,28 +80,26 @@ interface HubResponse {
 
 export default function ResponderEntrypoint() {
   const [, navigate] = useLocation();
-  const [status, setStatus] = useState<"redeeming" | "ready" | "error">(
-    "redeeming",
-  );
+  const qc = useQueryClient();
+  const logout = useLogout();
+  const [status, setStatus] = useState<
+    "checking" | "conflict" | "redeeming" | "ready" | "error"
+  >("checking");
   const [errorMessage, setErrorMessage] = useState("");
   const [identity, setIdentity] = useState<ResponderIdentity | null>(null);
 
-  // 1. Redeem (se vier ?code= na URL) OU recupera sessão salva.
-  useEffect(() => {
-    // Isolamento de sessão: o fluxo do respondente é uma identidade pública e
-    // de escopo restrito (token `diagnostic_respondent` em sessionStorage). Se
-    // o link for aberto no mesmo navegador onde já existe uma sessão
-    // privilegiada (super_admin/team_member em `ccp_admin_token`), essa sessão
-    // continuaria viva e o respondente poderia navegar de volta para a
-    // plataforma completa (ou um restore de histórico/BFCache exibiria telas de
-    // admin). Removemos o token privilegiado ao entrar no fluxo público para
-    // que qualquer navegação subsequente exija novo login. O backend já nega
-    // por papel; isto fecha a brecha de UI no mesmo navegador.
-    clearToken();
-    setActiveClinicId(null);
+  // Captura o invite code uma única vez (síncrono, no primeiro render), antes
+  // de removermos a querystring da URL — assim o gate de conflito e o redeem
+  // compartilham o mesmo valor.
+  const codeRef = useRef<string | null>(
+    new URLSearchParams(window.location.search).get("code"),
+  );
 
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
+  // Executa o redeem (quando vem `?code=`) OU restaura a sessão de respondente
+  // já salva. SÓ é chamado depois que qualquer sessão privilegiada deste
+  // navegador foi encerrada.
+  const enterResponderFlow = useCallback(async () => {
+    const code = codeRef.current;
 
     // Sem code: assume sessão pré-existente. Sem sessão → erro.
     if (!code) {
@@ -112,40 +116,87 @@ export default function ResponderEntrypoint() {
       return;
     }
 
+    setStatus("redeeming");
     history.replaceState(null, "", window.location.pathname);
-    (async () => {
-      try {
-        const res = await fetch(`${BASE}/api/auth/responder`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          setErrorMessage(
-            body?.error ??
-              "Não foi possível abrir o diagnóstico. Solicite um novo link ao gestor.",
-          );
-          setStatus("error");
-          return;
-        }
-        const data = (await res.json()) as ResponderIdentity;
-        sessionStorage.setItem(RESPONDENT_TOKEN_KEY, data.token);
-        sessionStorage.setItem(
-          `${RESPONDENT_TOKEN_KEY}_identity`,
-          JSON.stringify(data),
+    try {
+      const res = await fetch(`${BASE}/api/auth/responder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErrorMessage(
+          body?.error ??
+            "Não foi possível abrir o diagnóstico. Solicite um novo link ao gestor.",
         );
-        // Limpa o ctx legado (formato amarrado à delegação) para evitar que
-        // o wizard leia contexto obsoleto.
-        sessionStorage.removeItem(`${RESPONDENT_TOKEN_KEY}_ctx`);
-        setIdentity(data);
-        setStatus("ready");
-      } catch {
-        setErrorMessage("Erro de conexão. Tente novamente em instantes.");
         setStatus("error");
+        return;
       }
-    })();
+      const data = (await res.json()) as ResponderIdentity;
+      sessionStorage.setItem(RESPONDENT_TOKEN_KEY, data.token);
+      sessionStorage.setItem(
+        `${RESPONDENT_TOKEN_KEY}_identity`,
+        JSON.stringify(data),
+      );
+      // Limpa o ctx legado (formato amarrado à delegação) para evitar que
+      // o wizard leia contexto obsoleto.
+      sessionStorage.removeItem(`${RESPONDENT_TOKEN_KEY}_ctx`);
+      setIdentity(data);
+      setStatus("ready");
+    } catch {
+      setErrorMessage("Erro de conexão. Tente novamente em instantes.");
+      setStatus("error");
+    }
   }, []);
+
+  // Limpeza leve de QUALQUER resíduo de sessão privilegiada (token do gestor /
+  // super-admin, clínica ativa e cache de queries em memória). Usada quando
+  // NÃO há sessão privilegiada viva a confirmar — apenas higieniza o estado.
+  const purgePrivilegedSession = useCallback(() => {
+    clearToken();
+    setActiveClinicId(null);
+    qc.clear();
+  }, [qc]);
+
+  // Gate de isolamento de sessão na entrada do fluxo público do respondente.
+  useEffect(() => {
+    // O fluxo do respondente é uma identidade pública e de escopo restrito
+    // (token `diagnostic_respondent` em sessionStorage). Se o link for aberto
+    // no mesmo navegador onde já existe uma sessão privilegiada
+    // (super_admin/team_member em `ccp_admin_token`, compartilhado por todas as
+    // abas), derrubá-la silenciosamente faria o gestor perder o acesso sem
+    // aviso. Detectamos a sessão e exigimos confirmação explícita antes de
+    // qualquer teardown. O backend já nega por papel; isto fecha a brecha de UI
+    // no mesmo navegador sem surpreender o gestor.
+    if (getStoredToken() !== null) {
+      setStatus("conflict");
+      return;
+    }
+    purgePrivilegedSession();
+    void enterResponderFlow();
+  }, [enterResponderFlow, purgePrivilegedSession]);
+
+  const handleConfirmConflict = useCallback(async () => {
+    setStatus("redeeming");
+    // Teardown COMPLETO da sessão do gestor: token, clínica ativa, cache de
+    // queries em memória E push subscription (useLogout revoga best-effort em
+    // ≤1,5s). Só então abrimos o fluxo do respondente. Qualquer falha no
+    // teardown roteia para a tela de erro em vez de travar no spinner.
+    try {
+      await logout();
+    } catch {
+      setStatus("error");
+      return;
+    }
+    await enterResponderFlow();
+  }, [logout, enterResponderFlow]);
+
+  const handleCancelConflict = useCallback(() => {
+    // Mantém a sessão do gestor INTACTA e volta para a home — os guards
+    // roteiam super_admin → dashboard e team_member → /portal.
+    navigate("/", { replace: true });
+  }, [navigate]);
 
   const token = identity?.token ?? null;
 
@@ -173,6 +224,19 @@ export default function ResponderEntrypoint() {
   }, [hubQuery.data, navigate]);
 
   const cards = useMemo(() => hubQuery.data?.delegacoes ?? [], [hubQuery.data]);
+
+  if (status === "checking") {
+    return <CenteredSpinner label="Verificando sua sessão…" />;
+  }
+
+  if (status === "conflict") {
+    return (
+      <SessionConflictScreen
+        onConfirm={handleConfirmConflict}
+        onCancel={handleCancelConflict}
+      />
+    );
+  }
 
   if (status === "redeeming") {
     return (
@@ -362,6 +426,59 @@ export default function ResponderEntrypoint() {
           })}
         </div>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Tela de conflito de sessão. Mostrada quando o link público de respondente é
+ * aberto num navegador que já tem uma sessão privilegiada (gestor/super-admin)
+ * viva. Exige confirmação explícita antes de encerrar a sessão do gestor — o
+ * token mora em localStorage e é compartilhado por todas as abas, então
+ * derrubá-lo sem aviso surpreenderia o gestor.
+ */
+function SessionConflictScreen({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+            <ShieldAlert className="h-6 w-6 text-amber-600" />
+          </div>
+          <CardTitle>Você está logado como gestor</CardTitle>
+          <CardDescription>
+            Para preencher o diagnóstico como respondente, sua sessão de gestor
+            será encerrada neste dispositivo. Você precisará entrar novamente
+            depois para voltar ao painel. Deseja continuar?
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 pt-2">
+          <Button
+            disabled={submitting}
+            onClick={() => {
+              setSubmitting(true);
+              onConfirm();
+            }}
+          >
+            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Continuar como respondente (encerra sessão atual)
+          </Button>
+          <Button variant="outline" disabled={submitting} onClick={onCancel}>
+            Cancelar
+          </Button>
+          <div className="mx-auto mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <Building2 className="h-3.5 w-3.5" />
+            <span>IONEX360 — Diagnóstico 360°</span>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

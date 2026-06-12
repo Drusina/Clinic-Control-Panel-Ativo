@@ -16,21 +16,42 @@ createRoot(document.getElementById("root")!).render(<App />);
 // recarregar. O `updateSW(true)` envia SKIP_WAITING pro SW novo, que assume
 // imediatamente (ver sw.ts → activate + clients.claim).
 if ("serviceWorker" in navigator) {
+  // Timestamp of this page load. Lets us tell a fresh boot (safe to apply an
+  // update immediately) apart from an update discovered mid-session (offer a
+  // non-blocking banner instead, so we never discard in-progress work).
+  const bootedAt = Date.now();
+
   const updateSW = registerSW({
     immediate: true,
     onNeedRefresh() {
-      showUpdateBanner(() => {
+      // A new version finished installing and is waiting. If it surfaced right
+      // after boot, the user has no in-progress work — apply it now so a simple
+      // reload always delivers published fixes WITHOUT manual cache clearing
+      // (this is what makes the already-shipped Diagnóstico fix reach the
+      // manager's installed PWA). If it surfaces later in the session, show a
+      // non-blocking banner so the user chooses when to reload.
+      if (Date.now() - bootedAt < 10_000) {
         void updateSW(true);
-      });
+      } else {
+        showUpdateBanner(() => {
+          void updateSW(true);
+        });
+      }
     },
     onRegisteredSW(_swUrl, registration) {
-      // Verifica a cada 60 min se há nova versão (também roda no foco da aba)
       if (!registration) return;
       const checkForUpdate = () => {
         void registration.update().catch(() => {});
       };
+      // Check on startup, then hourly, on tab focus, and whenever the app
+      // returns to the foreground (installed PWAs rarely fire `focus`, so
+      // `visibilitychange` is the reliable signal there).
+      checkForUpdate();
       setInterval(checkForUpdate, 60 * 60 * 1000);
       window.addEventListener("focus", checkForUpdate);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") checkForUpdate();
+      });
     },
   });
 }

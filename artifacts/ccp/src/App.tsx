@@ -63,24 +63,37 @@ async function fetchLatestActive() {
 }
 
 function DiagnosticoEntrypoint() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const isPortal = location.startsWith("/portal");
   const pilarParam = new URLSearchParams(window.location.search).get("pilar");
 
   const { data, isLoading } = useQuery({
     queryKey: ["diagnostico-latest-active"],
     queryFn: fetchLatestActive,
     retry: false,
+    // In the portal we always route through the active-clinic-scoped
+    // selector, so the cross-clinic latest-active lookup is unnecessary.
+    enabled: !isPortal,
   });
 
   useEffect(() => {
-    if (isLoading) return;
     const pilarQuery = pilarParam ? `?pilar=${encodeURIComponent(pilarParam)}` : "";
+    // Portal (team_member): never jump straight into a diagnostic resolved
+    // across all clinics — `latest-active` is not active-clinic-scoped and
+    // could open a NON-active clinic's wizard, breaking the clinic-first
+    // guarantee. Always go through the active-clinic-scoped selector, which
+    // itself redirects to /me/clinicas when no clinic is selected.
+    if (isPortal) {
+      navigate(`/portal/diagnostico/select${pilarQuery}`, { replace: true });
+      return;
+    }
+    if (isLoading) return;
     if (data?.id) {
       navigate(`/diagnostico/${data.id}${pilarQuery}`, { replace: true });
     } else {
       navigate(`/diagnostico/select${pilarQuery}`, { replace: true });
     }
-  }, [isLoading, data, navigate, pilarParam]);
+  }, [isPortal, isLoading, data, navigate, pilarParam]);
 
   return null;
 }
@@ -101,11 +114,14 @@ function PortalActiveRedirect({ basePath }: { basePath: string }) {
   }
   const clinics = my?.clinics ?? [];
   const stored = getActiveClinicId();
-  const id =
-    (stored && clinics.some((c) => c.id === stored) ? stored : null) ??
-    clinics[0]?.id ??
-    null;
-  if (!id) return <Redirect to="/portal" />;
+  const validStored =
+    stored && clinics.some((c) => c.id === stored) ? stored : null;
+  // Single-clinic managers resolve straight to their only clinic. With 2+
+  // clinics and no valid active selection we send them to the chooser
+  // instead of silently defaulting to the first clinic — that default could
+  // surface the wrong clinic's data during a client-facing session.
+  const id = validStored ?? (clinics.length === 1 ? clinics[0]?.id ?? null : null);
+  if (!id) return <Redirect to="/me/clinicas" />;
   return <Redirect to={`${basePath}/${id}`} />;
 }
 

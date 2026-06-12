@@ -41,7 +41,7 @@ interface Diagnostic {
 }
 
 export default function DiagnosticoSelectPage() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const qc = useQueryClient();
   const [selectedClinic, setSelectedClinic] = useState<string>("");
   const [compareMode, setCompareMode] = useState(false);
@@ -49,6 +49,12 @@ export default function DiagnosticoSelectPage() {
 
   const { data: user } = useCurrentRole();
   const isSuperAdmin = user?.role === "super_admin";
+  const isTeamMember = user?.role === "team_member";
+  // Navigation is portal-aware: a manager inside `/portal/...` stays in the
+  // portal namespace, while super_admin keeps the legacy `/diagnostico/...`
+  // routes. This avoids a redirect bounce through `TeamMemberToPortal`.
+  const isPortal = location.startsWith("/portal");
+  const diagBase = isPortal ? "/portal/diagnostico" : "/diagnostico";
 
   // Source of truth for both roles. The hook itself fans out to the
   // correct endpoint (`/api/clinics` for super_admin, `/api/me/clinics`
@@ -59,14 +65,25 @@ export default function DiagnosticoSelectPage() {
     ? { data: clinicList.map((c) => ({ id: c.id, nome: c.nome, fantasia: c.fantasia ?? undefined })) }
     : undefined;
 
-  // Atalho UX: se o gestor já tem uma clínica ativa no header (ou só uma
-  // clínica vinculada), pré-seleciona para evitar dois cliques.
+  // Clinic-first scoping for managers: the active clinic is chosen once at
+  // `/me/clinicas` and every module stays scoped to it — no clinic selector
+  // is rendered in the portal. We pre-select the active clinic (or the only
+  // clinic). If the manager has 2+ clinics and none is active, we bounce
+  // back to the chooser so the wrong clinic's diagnostics are never shown.
   useEffect(() => {
-    if (isSuperAdmin || selectedClinic || !clinics?.data?.length) return;
+    if (!isTeamMember) return;
+    if (loadingClinics || !clinics?.data) return;
+    if (clinics.data.length === 0) return; // ClinicAccessGuard handles this
     const active = getActiveClinicId();
-    const match = (active && clinics.data.find((c) => c.id === active)) || (clinics.data.length === 1 ? clinics.data[0] : undefined);
-    if (match) setSelectedClinic(match.id);
-  }, [isSuperAdmin, selectedClinic, clinics]);
+    const match =
+      (active && clinics.data.find((c) => c.id === active)) ||
+      (clinics.data.length === 1 ? clinics.data[0] : undefined);
+    if (match) {
+      if (!selectedClinic) setSelectedClinic(match.id);
+      return;
+    }
+    navigate("/me/clinicas", { replace: true });
+  }, [isTeamMember, loadingClinics, clinics, selectedClinic, navigate]);
 
   const { data: diagnostics, isLoading: loadingDiags } = useQuery<Diagnostic[]>({
     queryKey: ["diagnostics", selectedClinic],
@@ -78,7 +95,7 @@ export default function DiagnosticoSelectPage() {
     mutationFn: () => apiFetch(`/clinics/${selectedClinic}/diagnostics`, { method: "POST" }),
     onSuccess: (diag: Diagnostic) => {
       qc.invalidateQueries({ queryKey: ["diagnostics", selectedClinic] });
-      navigate(`/diagnostico/${diag.id}`);
+      navigate(`${diagBase}/${diag.id}`);
     },
   });
 
@@ -101,7 +118,7 @@ export default function DiagnosticoSelectPage() {
 
   function goToCompare() {
     if (compareSelected.length === 2) {
-      navigate(`/diagnostico/comparar?a=${compareSelected[0]}&b=${compareSelected[1]}`);
+      navigate(`${diagBase}/comparar?a=${compareSelected[0]}&b=${compareSelected[1]}`);
     }
   }
 
@@ -120,39 +137,44 @@ export default function DiagnosticoSelectPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Selecionar Clínica</CardTitle>
-          <CardDescription>Escolha a clínica para iniciar ou continuar um diagnóstico</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loadingClinics ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando clínicas...
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-              {clinics?.data.map((clinic) => (
-                <button
-                  key={clinic.id}
-                  onClick={() => handleClinicSelect(clinic.id)}
-                  className={`text-left px-3 py-2 rounded-md border transition-colors text-sm ${
-                    selectedClinic === clinic.id
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "hover:bg-accent border-border"
-                  }`}
-                >
-                  <div className="font-medium">{clinic.fantasia || clinic.nome}</div>
-                  <div className={`text-xs ${selectedClinic === clinic.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                    {clinic.nome}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Clinic selector — super_admin only. Managers are already scoped to
+          their active clinic (chosen at /me/clinicas) and never see a list of
+          other clinics here. */}
+      {isSuperAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Selecionar Clínica</CardTitle>
+            <CardDescription>Escolha a clínica para iniciar ou continuar um diagnóstico</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingClinics ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando clínicas...
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                {clinics?.data.map((clinic) => (
+                  <button
+                    key={clinic.id}
+                    onClick={() => handleClinicSelect(clinic.id)}
+                    className={`text-left px-3 py-2 rounded-md border transition-colors text-sm ${
+                      selectedClinic === clinic.id
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "hover:bg-accent border-border"
+                    }`}
+                  >
+                    <div className="font-medium">{clinic.fantasia || clinic.nome}</div>
+                    <div className={`text-xs ${selectedClinic === clinic.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                      {clinic.nome}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {selectedClinic && (
         <Card>
@@ -270,7 +292,7 @@ export default function DiagnosticoSelectPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => navigate(`/diagnostico/${d.id}`)}
+                                onClick={() => navigate(`${diagBase}/${d.id}`)}
                               >
                                 Continuar
                               </Button>
@@ -279,7 +301,7 @@ export default function DiagnosticoSelectPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => navigate(`/diagnostico/${d.id}/resultado`)}
+                                onClick={() => navigate(`${diagBase}/${d.id}/resultado`)}
                               >
                                 <BarChart3 className="h-3.5 w-3.5 mr-1" />
                                 Resultado

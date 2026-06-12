@@ -15,28 +15,20 @@ import {
   Image,
   FileText,
   LogOut,
-  Check,
-  ChevronsUpDown,
+  ArrowLeftRight,
+  AlertTriangle,
   Stethoscope,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { NotificationPreferencesModal } from "@/components/notification-preferences-modal";
 import {
   useMyClinics,
   useLogout,
   getActiveClinicId,
-  setActiveClinicId,
 } from "@/hooks/use-auth";
 
 interface NavItem {
@@ -58,7 +50,11 @@ function resolveActiveClinicId(
   if (urlMatch && myClinicIds.includes(urlMatch[1])) return urlMatch[1];
   const stored = getActiveClinicId();
   if (stored && myClinicIds.includes(stored)) return stored;
-  return myClinicIds[0] ?? null;
+  // Clinic-first: only auto-resolve when there is exactly one clinic. With
+  // 2+ clinics and no explicit selection we return null so the UI prompts
+  // the manager to choose — never silently default to the first clinic,
+  // which could surface the wrong clinic during a client-facing session.
+  return myClinicIds.length === 1 ? myClinicIds[0] : null;
 }
 
 /**
@@ -152,51 +148,108 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
     },
   ];
 
-  const ClinicSwitcher = () => {
-    if (myClinics.length < 2) return null;
+  const hasMultipleClinics = myClinics.length >= 2;
+
+  // Sidebar context block: shows the active clinic (read-only) and an
+  // explicit "Trocar clínica" button (only when 2+ clinics) that takes the
+  // manager back to the chooser. Replaces the old silent dropdown so the
+  // active clinic can never change by accident during a client session.
+  const ClinicContext = () => {
+    if (myClinics.length === 0) return null;
     return (
-      <div className="px-4 pb-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              className="w-full justify-between text-left font-normal"
-              data-testid="portal-clinic-switcher-trigger"
-            >
-              <span className="flex items-center gap-2 min-w-0">
-                <Building2 className="h-4 w-4 shrink-0 text-primary" />
-                <span className="truncate">
-                  {activeClinic?.fantasia ||
-                    activeClinic?.nome ||
-                    "Selecionar clínica"}
-                </span>
+      <div className="px-4 pb-2 space-y-2">
+        <div className="rounded-md border border-sidebar-border bg-sidebar-accent/30 px-3 py-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Building2 className="h-4 w-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/50">
+                Clínica ativa
+              </div>
+              <div className="truncate text-sm font-medium text-sidebar-foreground">
+                {activeClinic?.fantasia ||
+                  activeClinic?.nome ||
+                  "Nenhuma selecionada"}
+              </div>
+            </div>
+          </div>
+        </div>
+        {hasMultipleClinics && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-center gap-2"
+            onClick={() => navigate("/me/clinicas")}
+            data-testid="portal-trocar-clinica"
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            Trocar clínica
+          </Button>
+        )}
+      </div>
+    );
+  };
+
+  // Top-of-content banner shown on every portal page. Makes the active
+  // clinic unmistakable during client-facing presentations. When the
+  // manager has multiple clinics but none is active, it turns into a
+  // prompt to pick one before continuing.
+  const ClinicContextBanner = () => {
+    if (!activeClinic && hasMultipleClinics) {
+      return (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span className="text-sm font-medium">
+              Nenhuma clínica selecionada. Escolha uma para continuar.
+            </span>
+          </div>
+          <Button size="sm" onClick={() => navigate("/me/clinicas")}>
+            Selecionar clínica
+          </Button>
+        </div>
+      );
+    }
+    if (!activeClinic) return null;
+    return (
+      <div
+        className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
+        data-testid="portal-active-clinic-banner"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 shrink-0">
+            <Building2 className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="truncate font-semibold">
+                {activeClinic.fantasia || activeClinic.nome}
               </span>
-              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuLabel>Trocar de clínica</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {myClinics.map((c) => (
-              <DropdownMenuItem
-                key={c.id}
-                onSelect={() => {
-                  setActiveClinicId(c.id);
-                  navigate("/portal");
-                }}
-                data-testid={`portal-clinic-switcher-item-${c.id}`}
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    activeClinicId === c.id ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                <span className="truncate">{c.fantasia || c.nome}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {activeClinic.status && (
+                <Badge
+                  variant={activeClinic.status === "ativa" ? "default" : "secondary"}
+                  className="capitalize"
+                >
+                  {activeClinic.status}
+                </Badge>
+              )}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              Modo ativo — você está operando esta clínica
+            </span>
+          </div>
+        </div>
+        {hasMultipleClinics && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 shrink-0"
+            onClick={() => navigate("/me/clinicas")}
+            data-testid="portal-banner-trocar-clinica"
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            Trocar clínica
+          </Button>
+        )}
       </div>
     );
   };
@@ -214,7 +267,7 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
           </span>
         </div>
       </div>
-      <ClinicSwitcher />
+      <ClinicContext />
       <div className="flex-1 px-4 overflow-y-auto">
         <nav className="flex flex-col gap-1">
           {navigation.map((item) => {
@@ -390,7 +443,10 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="flex-1 md:pl-64">
-        <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</div>
+        <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+          <ClinicContextBanner />
+          {children}
+        </div>
       </main>
 
       <NotificationPreferencesModal

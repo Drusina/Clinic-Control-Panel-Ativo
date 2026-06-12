@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getStoredToken } from "@/hooks/use-auth";
+import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
 import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -982,7 +982,35 @@ export default function RiscosPage() {
 function ClinicSelector() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
+  const { data: user } = useCurrentRole();
+  const isTeamMember = user?.role === "team_member";
+  const isSuperAdmin = user?.role === "super_admin";
   const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
+
+  // Clinic-first: a manager must never see a list of their other clinics.
+  // Resolve to the active clinic (or their only one) and enter it directly;
+  // with 2+ clinics and no active selection, send them to the chooser.
+  useEffect(() => {
+    if (!isTeamMember || isLoading) return;
+    const active = getActiveClinicId();
+    const match =
+      (active && clinics.find((c) => c.id === active)) ||
+      (clinics.length === 1 ? clinics[0] : undefined);
+    navigate(match ? `/portal/riscos/${match.id}` : "/me/clinicas", {
+      replace: true,
+    });
+  }, [isTeamMember, isLoading, clinics, navigate]);
+
+  // Only a confirmed super_admin may render the clinic list. While the role is
+  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
+  // instead of flashing other clinics; the effect above scopes managers to
+  // their active clinic (or the chooser).
+  if (!isSuperAdmin) {
+    return (
+      <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+    );
+  }
+
   const filtered = clinics.filter(c =>
     c.nome.toLowerCase().includes(search.toLowerCase()) ||
     (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())

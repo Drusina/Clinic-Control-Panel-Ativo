@@ -100,14 +100,29 @@ export function useMyClinics(options?: { enabled?: boolean }) {
   });
 }
 
-/** Persisted "currently selected clinic" used by the header switcher. */
+/**
+ * Session-scoped "currently selected clinic".
+ *
+ * Stored in sessionStorage (NOT localStorage) on purpose: the active clinic
+ * must be chosen explicitly each new browser session. A manager with 2+
+ * clinics who reopens the app in a new session is sent back to the chooser
+ * instead of silently reopening the last clinic — that stale default could
+ * surface the wrong clinic during a client-facing session. The value still
+ * survives reloads and in-session navigation, and single-clinic managers
+ * keep auto-resolving to their only clinic in every resolver, so they never
+ * see the chooser. Login/logout clear it via setActiveClinicId(null).
+ */
 export function getActiveClinicId(): string | null {
-  return localStorage.getItem(ACTIVE_CLINIC_KEY);
+  return sessionStorage.getItem(ACTIVE_CLINIC_KEY);
 }
 
 export function setActiveClinicId(id: string | null): void {
-  if (id) localStorage.setItem(ACTIVE_CLINIC_KEY, id);
-  else localStorage.removeItem(ACTIVE_CLINIC_KEY);
+  if (id) sessionStorage.setItem(ACTIVE_CLINIC_KEY, id);
+  else sessionStorage.removeItem(ACTIVE_CLINIC_KEY);
+  // Defensive cleanup: older builds persisted this in localStorage, which
+  // auto-unlocked modules across sessions. Drop any lingering value so it can
+  // never be read by a stale code path.
+  localStorage.removeItem(ACTIVE_CLINIC_KEY);
 }
 
 function clearAllCaches(queryClient: ReturnType<typeof useQueryClient>): void {

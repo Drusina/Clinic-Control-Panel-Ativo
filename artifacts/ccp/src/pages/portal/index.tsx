@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, Redirect } from "wouter";
 import {
   Building2,
   ClipboardList,
@@ -29,7 +29,6 @@ import { Button } from "@/components/ui/button";
 import {
   useMyClinics,
   getActiveClinicId,
-  setActiveClinicId,
   type MyClinicCard,
 } from "@/hooks/use-auth";
 
@@ -39,7 +38,11 @@ function resolveActive(clinics: MyClinicCard[]): MyClinicCard | null {
     const hit = clinics.find((c) => c.id === stored);
     if (hit) return hit;
   }
-  return clinics[0] ?? null;
+  // Clinic-first: only auto-resolve when there is exactly one clinic. With
+  // 2+ clinics and no valid selection we return null so the inline chooser
+  // below prompts the manager — never silently default to the first clinic,
+  // which would surface the wrong clinic's overview during a client session.
+  return clinics.length === 1 ? clinics[0] : null;
 }
 
 const MODULE_TILES: Array<{
@@ -105,7 +108,6 @@ const MODULE_TILES: Array<{
 ];
 
 export default function PortalHome() {
-  const [, navigate] = useLocation();
   const { data, isLoading } = useMyClinics();
   const clinics = data?.clinics ?? [];
 
@@ -138,37 +140,13 @@ export default function PortalHome() {
     );
   }
 
+  // Clinic-first: a manager with 2+ clinics and no active selection is sent
+  // to the single, dedicated chooser at /me/clinicas instead of listing all
+  // their clinic names here — so no clinic list ever surfaces on /portal
+  // during a client-facing session. (clinics.length === 0 is handled above;
+  // single-clinic managers resolve an active clinic and never reach here.)
   if (!active) {
-    return (
-      <div className="mx-auto max-w-md py-16">
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle>Selecione uma clínica</CardTitle>
-            <CardDescription>
-              Você tem múltiplas clínicas vinculadas. Escolha uma para começar.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2">
-              {clinics.map((c) => (
-                <Button
-                  key={c.id}
-                  variant="outline"
-                  className="justify-between"
-                  onClick={() => {
-                    setActiveClinicId(c.id);
-                    navigate("/portal");
-                  }}
-                >
-                  <span className="truncate">{c.fantasia || c.nome}</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <Redirect to="/me/clinicas" />;
   }
 
   const cidade = [active.cidade, active.uf].filter(Boolean).join(" / ");
