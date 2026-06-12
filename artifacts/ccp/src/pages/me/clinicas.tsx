@@ -48,7 +48,7 @@ export default function MeClinicasPage() {
   }
 
   if (!user || !user.role) {
-    return <Redirect to="/admin/login" />;
+    return <Redirect to="/entrar" />;
   }
 
   if (user.role === "super_admin") {
@@ -70,7 +70,7 @@ export default function MeClinicasPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center">
-            <Button variant="outline" onClick={() => logout().then(() => navigate("/admin/login"))}>
+            <Button variant="outline" onClick={() => logout().then(() => navigate("/entrar"))}>
               Sair
             </Button>
           </CardContent>

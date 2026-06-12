@@ -163,12 +163,12 @@ export default function ResponderEntrypoint() {
   useEffect(() => {
     // O fluxo do respondente é uma identidade pública e de escopo restrito
     // (token `diagnostic_respondent` em sessionStorage). Se o link for aberto
-    // no mesmo navegador onde já existe uma sessão privilegiada
-    // (super_admin/team_member em `ccp_admin_token`, compartilhado por todas as
-    // abas), derrubá-la silenciosamente faria o gestor perder o acesso sem
+    // na mesma aba onde já existe uma sessão privilegiada
+    // (super_admin/team_member em `ccp_admin_token`, no sessionStorage desta
+    // aba), derrubá-la silenciosamente faria o gestor perder o acesso sem
     // aviso. Detectamos a sessão e exigimos confirmação explícita antes de
     // qualquer teardown. O backend já nega por papel; isto fecha a brecha de UI
-    // no mesmo navegador sem surpreender o gestor.
+    // na mesma aba sem surpreender o gestor.
     if (getStoredToken() !== null) {
       setStatus("conflict");
       return;
@@ -432,10 +432,10 @@ export default function ResponderEntrypoint() {
 
 /**
  * Tela de conflito de sessão. Mostrada quando o link público de respondente é
- * aberto num navegador que já tem uma sessão privilegiada (gestor/super-admin)
+ * aberto numa aba que já tem uma sessão privilegiada (gestor/super-admin)
  * viva. Exige confirmação explícita antes de encerrar a sessão do gestor — o
- * token mora em localStorage e é compartilhado por todas as abas, então
- * derrubá-lo sem aviso surpreenderia o gestor.
+ * token mora no sessionStorage desta aba, então derrubá-lo sem aviso
+ * encerraria a sessão do gestor nesta aba sem que ele perceba.
  */
 function SessionConflictScreen({
   onConfirm,

@@ -7,15 +7,40 @@ const ACTIVE_CLINIC_KEY = "ccp_active_clinic_id";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// One-time migration on boot: older builds persisted the auth token in
+// localStorage, which auto-resumed a logged-in session on every visit (a new
+// tab, retyping the address, or relaunching the installed PWA all silently
+// reopened the app). The session is now scoped to sessionStorage — it survives
+// an in-tab refresh but is cleared when the tab/window/PWA closes — so each
+// fresh visit must log in again. Purge any legacy localStorage token left
+// behind so it can never be read by a stale code path.
+try {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+} catch {
+  // ignore storage access errors (private mode, disabled storage, etc.)
+}
+
+/**
+ * The bearer token for the privileged session (super_admin / team_member).
+ *
+ * Stored in sessionStorage (NOT localStorage) on purpose: a session must not
+ * outlive the browsing context. It survives an in-tab refresh but is gone in a
+ * new tab/window or after the installed PWA is relaunched, so every fresh visit
+ * lands on the login screen and asks for credentials again.
+ */
 export function getStoredToken(): string | null {
-  return localStorage.getItem(AUTH_TOKEN_KEY);
+  return sessionStorage.getItem(AUTH_TOKEN_KEY);
 }
 
 export function storeToken(token: string): void {
-  localStorage.setItem(AUTH_TOKEN_KEY, token);
+  sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+  // Defensive: drop any legacy localStorage copy so a stale path can never
+  // resurrect a cross-session token.
+  localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
 export function clearToken(): void {
+  sessionStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 

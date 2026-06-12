@@ -315,7 +315,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             className="w-full justify-start gap-3 text-sidebar-foreground/70"
             onClick={async () => {
               await logout();
-              navigate("/admin/login");
+              navigate("/entrar");
             }}
             data-testid="logout-button"
           >

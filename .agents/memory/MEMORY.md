@@ -1,3 +1,4 @@
 - [Delegation email routing](delegation-email-routing.md) — respondents (no platform access) get scoped /responder?code link only; gate generic portal delegation email on hasPlatformAccess, not nível.
 - [Responder session isolation](responder-session-isolation.md) — public /responder must clear admin session on entry + global BFCache pageshow reload; "sub-delegation = super admin" report was same-tab UI leak, not a token bug.
 - [Test auth setup](test-auth-setup.md) — env secrets are unreadable, so seed a team_member + team_credentials and log in via /api/auth/entrar; never mint JWTs.
+- [Auth token session scoping](auth-token-session-scope.md) — bearer token is sessionStorage (login-first per fresh visit); don't revert to localStorage; unauth guards → /entrar not /admin/login.

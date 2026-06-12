@@ -18,7 +18,7 @@ export function SuperAdminGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (data?.role !== "super_admin") {
-    return <Redirect to="/admin/login" />;
+    return <Redirect to="/entrar" />;
   }
 
   return <>{children}</>;

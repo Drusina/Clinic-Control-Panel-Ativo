@@ -25,7 +25,7 @@ interface ClinicAccessGuardProps {
  *     (b) `clinicId` belongs to one of the user's clinics.
  *
  * Otherwise redirects:
- *   - no session → `/admin/login`
+ *   - no session → `/entrar`
  *   - team_member with no access at all → `/me/clinicas`
  *   - team_member trying to reach a clinic they don't own → `/me/clinicas`
  */
@@ -36,7 +36,7 @@ export function ClinicAccessGuard({ clinicId, children }: ClinicAccessGuardProps
   if (roleLoading) return <GuardSpinner />;
 
   if (!user || !user.role) {
-    return <Redirect to="/admin/login" />;
+    return <Redirect to="/entrar" />;
   }
 
   if (user.role === "super_admin") {
@@ -44,7 +44,7 @@ export function ClinicAccessGuard({ clinicId, children }: ClinicAccessGuardProps
   }
 
   if (user.role !== "team_member") {
-    return <Redirect to="/admin/login" />;
+    return <Redirect to="/entrar" />;
   }
 
   if (clinicsLoading) return <GuardSpinner />;
