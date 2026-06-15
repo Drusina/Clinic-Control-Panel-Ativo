@@ -2,15 +2,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 
 /**
- * Task #7 — "Forçar escolha de clínica por sessão".
+ * Unified "Painel da Clínica" — slim chrome contract.
  *
- * The portal's active clinic is session-scoped (sessionStorage). A manager
- * with 2+ clinics must pick a clinic each new browser session: a clinic id
- * left behind in localStorage by an older build must NOT auto-unlock the
- * Operacional/Complementar modules. After an explicit pick (which lands in
- * sessionStorage via setActiveClinicId) the modules unlock and their links
- * carry the selected clinic id — never a hardcoded one. A single-clinic
- * manager still resolves automatically and never sees the chooser.
+ * After the panel landed, PortalLayout is just global chrome: the active
+ * clinic (+ "Trocar clínica" for 2+ managers), Notificações, Preferências
+ * and Sair. Modules NO LONGER live in the chrome — they navigate inside the
+ * panel. These tests assert (1) no module label ever leaks into the chrome,
+ * (2) the clinic switcher only appears for 2+ managers while single-clinic
+ * managers get a static clinic label, and (3) the session-scoped
+ * (sessionStorage, never localStorage) active-clinic contract still holds.
  *
  * Unlike layout.test.tsx (which stubs the whole use-auth module), this suite
  * keeps the REAL getActiveClinicId/setActiveClinicId so the session-vs-local
@@ -57,6 +57,8 @@ const CLINICS = [
   { id: "clinic-2", nome: "Clínica Beta" },
 ];
 
+// Module labels must NEVER appear in the chrome anymore — they live in the
+// panel hub. Includes the old sidebar group names plus module titles.
 const MODULE_LABELS = [
   "Operacional",
   "Complementar",
@@ -66,15 +68,17 @@ const MODULE_LABELS = [
   "Processos",
   "Evidências",
   "Documentos",
+  "Kickoff",
+  "Equipe Interna",
 ];
 
-function expectModulesHidden() {
+function expectNoModuleLabels() {
   for (const label of MODULE_LABELS) {
     expect(screen.queryByText(label)).not.toBeInTheDocument();
   }
 }
 
-describe("PortalLayout — active clinic is session-scoped (Task #7)", () => {
+describe("PortalLayout — slim chrome for the unified panel", () => {
   beforeEach(() => {
     mocks.navigateMock.mockClear();
     mocks.logoutMock.mockClear();
@@ -104,11 +108,10 @@ describe("PortalLayout — active clinic is session-scoped (Task #7)", () => {
     expect(getActiveClinicId()).toBeNull();
   });
 
-  it("ignores a stale localStorage clinic for a 2+ manager — modules stay blocked", () => {
+  it("never renders module navigation in the chrome (2+ manager)", () => {
     mocks.clinics = CLINICS;
-    // Simulate an older build that persisted the active clinic in localStorage.
-    // A new browser session has an empty sessionStorage, so nothing unlocks.
-    localStorage.setItem(ACTIVE_CLINIC_KEY, "clinic-2");
+    mocks.location = "/portal/clinica/clinic-2/delegacao";
+    setActiveClinicId("clinic-2");
 
     render(
       <PortalLayout>
@@ -116,12 +119,28 @@ describe("PortalLayout — active clinic is session-scoped (Task #7)", () => {
       </PortalLayout>,
     );
 
-    expectModulesHidden();
+    expectNoModuleLabels();
+    expect(screen.getByText("conteúdo")).toBeInTheDocument();
+    expect(screen.getByTestId("portal-logout-button")).toBeInTheDocument();
   });
 
-  it("unlocks modules carrying the selected clinic id after an explicit session pick", () => {
+  it("never renders module navigation in the chrome (single-clinic manager)", () => {
+    mocks.clinics = [CLINICS[0]];
+    mocks.location = "/portal/clinica/clinic-1";
+
+    render(
+      <PortalLayout>
+        <div>conteúdo</div>
+      </PortalLayout>,
+    );
+
+    expectNoModuleLabels();
+    expect(screen.getByTestId("portal-logout-button")).toBeInTheDocument();
+  });
+
+  it("shows the clinic switcher only for a 2+ manager, with the active clinic name", () => {
     mocks.clinics = CLINICS;
-    mocks.location = "/portal/delegacao"; // expands the Operacional section
+    mocks.location = "/portal/clinica/clinic-2";
     setActiveClinicId("clinic-2"); // explicit pick → sessionStorage
 
     render(
@@ -130,16 +149,15 @@ describe("PortalLayout — active clinic is session-scoped (Task #7)", () => {
       </PortalLayout>,
     );
 
-    expect(screen.getByText("Operacional")).toBeInTheDocument();
-    const delegacaoLink = screen.getByText("Delegação").closest("a");
-    expect(delegacaoLink?.getAttribute("href")).toBe(
-      "/portal/delegacao/clinic-2",
-    );
+    const trocar = screen.getByTestId("portal-trocar-clinica");
+    expect(trocar).toBeInTheDocument();
+    expect(trocar).toHaveTextContent("Clínica Beta");
+    expect(screen.queryByTestId("portal-active-clinic")).not.toBeInTheDocument();
   });
 
-  it("auto-resolves the only clinic for a single-clinic manager", () => {
+  it("shows a static clinic label (no switcher) for a single-clinic manager", () => {
     mocks.clinics = [CLINICS[0]];
-    mocks.location = "/portal/delegacao"; // expands the Operacional section
+    mocks.location = "/portal/clinica/clinic-1";
 
     render(
       <PortalLayout>
@@ -147,10 +165,32 @@ describe("PortalLayout — active clinic is session-scoped (Task #7)", () => {
       </PortalLayout>,
     );
 
-    expect(screen.getByText("Operacional")).toBeInTheDocument();
-    const delegacaoLink = screen.getByText("Delegação").closest("a");
-    expect(delegacaoLink?.getAttribute("href")).toBe(
-      "/portal/delegacao/clinic-1",
+    const active = screen.getByTestId("portal-active-clinic");
+    expect(active).toBeInTheDocument();
+    expect(active).toHaveTextContent("Clínica Alpha");
+    expect(
+      screen.queryByTestId("portal-trocar-clinica"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("resolves the active clinic from a UUID URL even with a hyphenated section", () => {
+    const uuid = "11111111-2222-4333-8444-555566667777";
+    mocks.clinics = [
+      { id: uuid, nome: "Clínica UUID" },
+      { id: "clinic-2", nome: "Clínica Beta" },
+    ];
+    // No stored selection; the UUID-shaped id must be read from the URL and
+    // the hyphenated "rede-externa" section must not break the lookup.
+    mocks.location = `/portal/clinica/${uuid}/rede-externa`;
+
+    render(
+      <PortalLayout>
+        <div>conteúdo</div>
+      </PortalLayout>,
     );
+
+    const trocar = screen.getByTestId("portal-trocar-clinica");
+    expect(trocar).toBeInTheDocument();
+    expect(trocar).toHaveTextContent("Clínica UUID");
   });
 });

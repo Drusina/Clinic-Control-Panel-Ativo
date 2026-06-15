@@ -44,9 +44,7 @@ import ResponderSaiuPage from "@/pages/responder/saiu";
 import ClinicDocumentsPage from "@/pages/clinic-documents/index";
 import AssinarPage from "@/pages/assinar/index";
 import MeClinicasPage from "@/pages/me/clinicas";
-import PortalHome from "@/pages/portal/index";
-import PortalEquipePage from "@/pages/portal/equipe";
-import PortalRedeExternaPage from "@/pages/portal/rede-externa";
+import PainelClinica from "@/pages/portal/painel-clinica";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Loader2 } from "lucide-react";
 
@@ -103,7 +101,13 @@ function DiagnosticoEntrypoint() {
  * Used by `/portal/<module>` shortcut routes so the manager doesn't have
  * to type/keep a clinic id in the URL.
  */
-function PortalActiveRedirect({ basePath }: { basePath: string }) {
+function PortalActiveRedirect({
+  basePath,
+  secao,
+}: {
+  basePath: string;
+  secao?: string;
+}) {
   const { data: my, isLoading } = useMyClinics();
   if (isLoading) {
     return (
@@ -122,7 +126,8 @@ function PortalActiveRedirect({ basePath }: { basePath: string }) {
   // surface the wrong clinic's data during a client-facing session.
   const id = validStored ?? (clinics.length === 1 ? clinics[0]?.id ?? null : null);
   if (!id) return <Redirect to="/me/clinicas" />;
-  return <Redirect to={`${basePath}/${id}`} />;
+  const suffix = secao ? `/${secao}` : "";
+  return <Redirect to={`${basePath}/${id}${suffix}`} />;
 }
 
 setAuthTokenGetter(getStoredToken);
@@ -195,45 +200,19 @@ function Router() {
         )}
       </Route>
 
-      {/* ─── Portal do Gestor (team_member dedicated namespace) ─── */}
+      {/* ─── Portal do Gestor (team_member) — unified Painel da Clínica ─── */}
+      {/* Entry points resolve the active clinic, then land in the panel. */}
       <Route path="/portal">
-        {() => (
-          <PortalLayout>
-            <ClinicAccessGuard>
-              <PortalHome />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
+        {() => <PortalActiveRedirect basePath="/portal/clinica" />}
       </Route>
       <Route path="/portal/clinica">
         {() => <PortalActiveRedirect basePath="/portal/clinica" />}
       </Route>
-      <Route path="/portal/clinica/:id">
-        {(params) => (
-          <PortalLayout>
-            <ClinicAccessGuard clinicId={params.id}>
-              <ClinicDetail mode="portal" />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
-      </Route>
       <Route path="/portal/kickoff">
-        {() => (
-          <PortalLayout>
-            <ClinicAccessGuard>
-              <KickoffSelectPage />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
+        {() => <PortalActiveRedirect basePath="/portal/clinica" secao="kickoff" />}
       </Route>
       <Route path="/portal/kickoff/:clinicId">
-        {(params) => (
-          <PortalLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <KickoffPage />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
+        {(params) => <Redirect to={`/portal/clinica/${params.clinicId}/kickoff`} />}
       </Route>
       <Route path="/portal/notificacoes">
         {() => (
@@ -249,28 +228,16 @@ function Router() {
         {() => <Redirect to="/portal/notificacoes" />}
       </Route>
       <Route path="/portal/equipe">
-        {() => <PortalActiveRedirect basePath="/portal/equipe" />}
+        {() => <PortalActiveRedirect basePath="/portal/clinica" secao="equipe" />}
       </Route>
       <Route path="/portal/equipe/:clinicId">
-        {(params) => (
-          <PortalLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <PortalEquipePage />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
+        {(params) => <Redirect to={`/portal/clinica/${params.clinicId}/equipe`} />}
       </Route>
       <Route path="/portal/rede-externa">
-        {() => <PortalActiveRedirect basePath="/portal/rede-externa" />}
+        {() => <PortalActiveRedirect basePath="/portal/clinica" secao="rede-externa" />}
       </Route>
       <Route path="/portal/rede-externa/:clinicId">
-        {(params) => (
-          <PortalLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <PortalRedeExternaPage />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
+        {(params) => <Redirect to={`/portal/clinica/${params.clinicId}/rede-externa`} />}
       </Route>
       <Route path="/portal/diagnostico">
         {() => (
@@ -318,73 +285,59 @@ function Router() {
         )}
       </Route>
       <Route path="/portal/delegacao">
-        {() => <PortalActiveRedirect basePath="/portal/delegacao" />}
+        {() => <PortalActiveRedirect basePath="/portal/clinica" secao="delegacao" />}
       </Route>
       <Route path="/portal/delegacao/:clinicId">
-        {(params) => (
-          <PortalLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <DelegacaoPage />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
+        {(params) => <Redirect to={`/portal/clinica/${params.clinicId}/delegacao`} />}
       </Route>
       <Route path="/portal/riscos">
-        {() => <PortalActiveRedirect basePath="/portal/riscos" />}
+        {() => <PortalActiveRedirect basePath="/portal/clinica" secao="riscos" />}
       </Route>
       <Route path="/portal/riscos/:clinicId">
-        {(params) => (
-          <PortalLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <RiscosPage />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
+        {(params) => <Redirect to={`/portal/clinica/${params.clinicId}/riscos`} />}
       </Route>
       <Route path="/portal/acao">
-        {() => <PortalActiveRedirect basePath="/portal/acao" />}
+        {() => <PortalActiveRedirect basePath="/portal/clinica" secao="acao" />}
       </Route>
       <Route path="/portal/acao/:clinicId">
-        {(params) => (
-          <PortalLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <AcaoPage />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
+        {(params) => <Redirect to={`/portal/clinica/${params.clinicId}/acao`} />}
       </Route>
       <Route path="/portal/processos">
-        {() => <PortalActiveRedirect basePath="/portal/processos" />}
+        {() => <PortalActiveRedirect basePath="/portal/clinica" secao="processos" />}
       </Route>
       <Route path="/portal/processos/:clinicId">
-        {(params) => (
-          <PortalLayout>
-            <ClinicAccessGuard clinicId={params.clinicId}>
-              <ProcessosPage />
-            </ClinicAccessGuard>
-          </PortalLayout>
-        )}
+        {(params) => <Redirect to={`/portal/clinica/${params.clinicId}/processos`} />}
       </Route>
       <Route path="/portal/evidencias">
-        {() => <PortalActiveRedirect basePath="/portal/evidencias" />}
+        {() => <PortalActiveRedirect basePath="/portal/clinica" secao="evidencias" />}
       </Route>
       <Route path="/portal/evidencias/:clinicId">
+        {(params) => <Redirect to={`/portal/clinica/${params.clinicId}/evidencias`} />}
+      </Route>
+      <Route path="/portal/documentos">
+        {() => <PortalActiveRedirect basePath="/portal/clinica" secao="documentos" />}
+      </Route>
+      <Route path="/portal/documentos/:clinicId">
+        {(params) => <Redirect to={`/portal/clinica/${params.clinicId}/documentos`} />}
+      </Route>
+
+      {/* Canonical unified panel. Two routes (with/without section) so we
+          don't depend on wouter optional-param support; both render the
+          PainelClinica shell which maps `:secao` to the right module. */}
+      <Route path="/portal/clinica/:clinicId/:secao">
         {(params) => (
           <PortalLayout>
             <ClinicAccessGuard clinicId={params.clinicId}>
-              <EvidenciasPage />
+              <PainelClinica />
             </ClinicAccessGuard>
           </PortalLayout>
         )}
       </Route>
-      <Route path="/portal/documentos">
-        {() => <PortalActiveRedirect basePath="/portal/documentos" />}
-      </Route>
-      <Route path="/portal/documentos/:clinicId">
+      <Route path="/portal/clinica/:clinicId">
         {(params) => (
           <PortalLayout>
             <ClinicAccessGuard clinicId={params.clinicId}>
-              <DocumentosPage />
+              <PainelClinica />
             </ClinicAccessGuard>
           </PortalLayout>
         )}

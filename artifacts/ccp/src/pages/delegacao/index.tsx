@@ -362,19 +362,25 @@ async function fetchHydrated(clinicId: string, diagnosticoId: string): Promise<H
 
 // ─── Page entry ─────────────────────────────────────────────────────────────
 
-export default function DelegacaoPage() {
+export default function DelegacaoPage({ embedded = false }: { embedded?: boolean }) {
   const params = useParams<{ clinicId: string }>();
   const clinicId = params.clinicId;
 
   if (!clinicId) {
     return <ClinicSelector />;
   }
-  return <DelegacaoBoard clinicId={clinicId} />;
+  return <DelegacaoBoard clinicId={clinicId} embedded={embedded} />;
 }
 
 // ─── Main board ─────────────────────────────────────────────────────────────
 
-function DelegacaoBoard({ clinicId }: { clinicId: string }) {
+function DelegacaoBoard({
+  clinicId,
+  embedded = false,
+}: {
+  clinicId: string;
+  embedded?: boolean;
+}) {
   const [, navigate] = useLocation();
   const search = useSearch();
   const { toast } = useToast();
@@ -482,15 +488,21 @@ function DelegacaoBoard({ clinicId }: { clinicId: string }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/me/clinicas")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">Delegação do Diagnóstico</h1>
-          <p className="text-sm text-muted-foreground">
-            Responda às perguntas, delegue por pilar, módulo ou pergunta individual.
-          </p>
-        </div>
+        {!embedded ? (
+          <>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/me/clinicas")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold">Delegação do Diagnóstico</h1>
+              <p className="text-sm text-muted-foreground">
+                Responda às perguntas, delegue por pilar, módulo ou pergunta individual.
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1" />
+        )}
         <DiagnosticPicker
           diagnostics={diagnostics}
           value={selectedDiagId}

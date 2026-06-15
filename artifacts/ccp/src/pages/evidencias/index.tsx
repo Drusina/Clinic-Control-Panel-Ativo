@@ -119,7 +119,7 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export default function EvidenciasPage() {
+export default function EvidenciasPage({ embedded = false }: { embedded?: boolean }) {
   const params = useParams<{ clinicId: string }>();
   const clinicId = params.clinicId;
   const [, navigate] = useLocation();
@@ -248,15 +248,17 @@ export default function EvidenciasPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/evidencias/select")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Evidências</h1>
-            <p className="text-sm text-muted-foreground">Arquivos e documentos organizados por pilar</p>
+        {!embedded && (
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/evidencias/select")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">Evidências</h1>
+              <p className="text-sm text-muted-foreground">Arquivos e documentos organizados por pilar</p>
+            </div>
           </div>
-        </div>
+        )}
         <Button onClick={() => { setPendingFiles([]); setDialogOpen(true); }}>
           <Plus className="h-4 w-4 mr-2" /> Nova Evidência
         </Button>

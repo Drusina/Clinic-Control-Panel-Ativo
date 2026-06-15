@@ -133,7 +133,7 @@ function getExpiryStatus(validade: string | null): { daysLeft: number | null; is
   return { daysLeft: days, isExpiring: days >= 0 && days <= 30, isExpired: days < 0 };
 }
 
-export default function DocumentosPage() {
+export default function DocumentosPage({ embedded = false }: { embedded?: boolean }) {
   const params = useParams<{ clinicId: string }>();
   const clinicId = params.clinicId;
   const [, navigate] = useLocation();
@@ -216,15 +216,17 @@ export default function DocumentosPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/documentos/select")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Documentos</h1>
-            <p className="text-sm text-muted-foreground">Gestão de documentos gerais da clínica</p>
+        {!embedded && (
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/documentos/select")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">Documentos</h1>
+              <p className="text-sm text-muted-foreground">Gestão de documentos gerais da clínica</p>
+            </div>
           </div>
-        </div>
+        )}
         <Button onClick={() => setDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" /> Novo Documento
         </Button>

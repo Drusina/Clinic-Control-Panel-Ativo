@@ -305,7 +305,7 @@ function computeGenerations(risks: Risk[], diagnostics: DiagnosticSummary[]): Ri
     .sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
 }
 
-export default function RiscosPage() {
+export default function RiscosPage({ embedded = false }: { embedded?: boolean }) {
   const params = useParams<{ clinicId: string }>();
   const clinicId = params.clinicId;
   const [, navigate] = useLocation();
@@ -470,15 +470,17 @@ export default function RiscosPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/riscos/select")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Mapa de Riscos</h1>
-            <p className="text-sm text-muted-foreground">Visualize e gerencie os riscos identificados no diagnóstico ICS.</p>
+        {!embedded && (
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/riscos/select")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">Mapa de Riscos</h1>
+              <p className="text-sm text-muted-foreground">Visualize e gerencie os riscos identificados no diagnóstico ICS.</p>
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setGenDialogOpen(true)} disabled={previewMut.isPending}>
             {previewMut.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
