@@ -1,7 +1,11 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
 import { z } from "zod";
-import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import {
+  ObjectStorageService,
+  ObjectNotFoundError,
+  isInlineSafeContentType,
+} from "../lib/objectStorage";
 import { requireSuperAdmin, verifyToken, extractToken, signToken } from "../middleware/auth";
 import { db, documentAccessLogTable } from "@workspace/db";
 
@@ -157,10 +161,20 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
       const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
       const response = await objectStorageService.downloadObject(objectFile);
 
+      const upstreamType = response.headers.get("content-type");
+      const wantInline =
+        req.query.disposition === "inline" &&
+        isInlineSafeContentType(upstreamType);
+
       res.status(response.status);
       response.headers.forEach((value, key) => res.setHeader(key, value));
-      res.setHeader("Content-Type", "application/octet-stream");
-      res.setHeader("Content-Disposition", "attachment");
+      if (wantInline) {
+        res.setHeader("Content-Type", upstreamType as string);
+        res.setHeader("Content-Disposition", "inline");
+      } else {
+        res.setHeader("Content-Type", "application/octet-stream");
+        res.setHeader("Content-Disposition", "attachment");
+      }
       res.setHeader("X-Content-Type-Options", "nosniff");
 
       res.on("finish", () => {

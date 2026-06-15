@@ -3,3 +3,4 @@
 - [Test auth setup](test-auth-setup.md) — env secrets are unreadable, so seed a team_member + team_credentials and log in via /api/auth/entrar; never mint JWTs.
 - [Auth token session scoping](auth-token-session-scope.md) — bearer token is sessionStorage (login-first per fresh visit); don't revert to localStorage; unauth guards → /entrar not /admin/login.
 - [wouter Link renders its own anchor](wouter-link-anchor.md) — in ccp, `<Link href>` IS the `<a>`; never nest `<a>` inside it; style the Link directly for clickable cards.
+- [Document preview disposition](document-preview-disposition.md) — private objects serve attachment by default; inline preview is opt-in, gated server-side on a PDF/raster allowlist (excl HTML/SVG) to avoid stored XSS.

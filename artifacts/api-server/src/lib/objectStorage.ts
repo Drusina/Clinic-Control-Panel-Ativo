@@ -11,6 +11,29 @@ import {
 
 export { ObjectPermission };
 
+// Content types that are safe to serve with `Content-Disposition: inline` so the
+// browser previews them in-page (PDF viewer / <img>) instead of downloading a
+// copy. Deliberately excludes HTML and SVG (and anything else scriptable) so an
+// uploaded file can never execute script in the app origin. Everything not on
+// this list keeps the `attachment` + octet-stream + nosniff download behavior.
+const INLINE_SAFE_CONTENT_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+  "image/bmp",
+]);
+
+export function isInlineSafeContentType(
+  mime: string | null | undefined,
+): boolean {
+  if (!mime) return false;
+  const normalized = mime.split(";")[0].trim().toLowerCase();
+  return INLINE_SAFE_CONTENT_TYPES.has(normalized);
+}
+
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
 export const objectStorageClient = new Storage({

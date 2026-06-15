@@ -30,7 +30,18 @@ vi.mock("../lib/objectStorage.js", () => {
       return { download: async () => [Buffer.from("file-bytes")] };
     }
   }
-  return { ObjectStorageService, ObjectNotFoundError };
+  const inlineSafe = new Set([
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/gif",
+    "image/webp",
+    "image/bmp",
+  ]);
+  const isInlineSafeContentType = (mime: string | null | undefined) =>
+    !!mime && inlineSafe.has(mime.split(";")[0].trim().toLowerCase());
+  return { ObjectStorageService, ObjectNotFoundError, isInlineSafeContentType };
 });
 
 // Control the AI title suggester deterministically.
@@ -198,6 +209,42 @@ describe("POST /api/clinics/:clinicId/documents/:id/suggest-title", () => {
     expect(res.status).toBe(200);
     expect(res.body.source).toBe("filename");
     expect(res.body.title).toBe("balanco 2025");
+  });
+});
+
+describe("GET /api/clinics/:clinicId/documents/:id/signed-url — preview disposition", () => {
+  it("requests inline rendering for preview-friendly types (PDF)", async () => {
+    const bytes = Buffer.from(`signed-pdf-${suffix}`);
+    const up = await request(app)
+      .post(`/api/clinics/${clinicId}/documents`)
+      .set("Authorization", `Bearer ${superAdminToken()}`)
+      .field("categoryId", categoryId)
+      .attach("file", bytes, { filename: "preview.pdf", contentType: "application/pdf" });
+    expect(up.status).toBe(201);
+
+    const res = await request(app)
+      .get(`/api/clinics/${clinicId}/documents/${up.body.id}/signed-url`)
+      .set("Authorization", `Bearer ${superAdminToken()}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.url).toContain("disposition=inline");
+  });
+
+  it("omits inline for types that must download (e.g. zip)", async () => {
+    const bytes = Buffer.from(`signed-zip-${suffix}`);
+    const up = await request(app)
+      .post(`/api/clinics/${clinicId}/documents`)
+      .set("Authorization", `Bearer ${superAdminToken()}`)
+      .field("categoryId", categoryId)
+      .attach("file", bytes, { filename: "backup.zip", contentType: "application/zip" });
+    expect(up.status).toBe(201);
+
+    const res = await request(app)
+      .get(`/api/clinics/${clinicId}/documents/${up.body.id}/signed-url`)
+      .set("Authorization", `Bearer ${superAdminToken()}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.url).not.toContain("disposition=inline");
   });
 });
 

@@ -8,7 +8,11 @@ import {
   documentCategoriesTable,
   clinicsTable,
 } from "@workspace/db";
-import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage.js";
+import {
+  ObjectStorageService,
+  ObjectNotFoundError,
+  isInlineSafeContentType,
+} from "../lib/objectStorage.js";
 import { signToken } from "../middleware/auth.js";
 import {
   summarizeDocument,
@@ -409,7 +413,13 @@ router.get(
         { purpose: "signed_object_url", path: doc.storagePath },
         SIGNED_URL_TTL_SECONDS,
       );
-      const url = `/api/storage/objects/${wildcardPath}?sig=${encodeURIComponent(sigToken)}`;
+      // Preview-friendly types (PDF, images) are served inline so the browser
+      // renders them in-page instead of downloading a copy. The explicit
+      // "Baixar" button still forces a save via the anchor's `download` attr.
+      const inlineParam = isInlineSafeContentType(doc.fileType)
+        ? "&disposition=inline"
+        : "";
+      const url = `/api/storage/objects/${wildcardPath}?sig=${encodeURIComponent(sigToken)}${inlineParam}`;
       res.json({ url });
     } catch (err) {
       res
