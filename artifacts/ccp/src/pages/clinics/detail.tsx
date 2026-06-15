@@ -25,21 +25,10 @@ import UsuariosTab from "./tabs/usuarios-tab";
 import AtividadeTab from "./tabs/atividade-tab";
 import DocumentosTab from "./tabs/documentos-tab";
 
-interface ClinicDetailProps {
-  /**
-   * "admin" (default) shows all 14 tabs and goes back to /admin/clinicas.
-   * "portal" hides admin-only tabs (Cadastro, Financeiro, Status, Usuários,
-   * Atividade) for `team_member` and goes back to /portal.
-   */
-  mode?: "admin" | "portal";
-}
-
-export default function ClinicDetail({ mode = "admin" }: ClinicDetailProps = {}) {
+export default function ClinicDetail() {
   const params = useParams();
   const id = params.id as string;
-  const isPortal = mode === "portal";
-  const backHref = isPortal ? "/portal" : "/admin/clinicas";
-  const defaultTab = isPortal ? "overview" : "cadastro";
+  const backHref = "/admin/clinicas";
 
   const { data: clinic, isLoading } = useGetClinic(id, {
     query: { enabled: !!id, queryKey: getGetClinicQueryKey(id) },
@@ -90,17 +79,13 @@ export default function ClinicDetail({ mode = "admin" }: ClinicDetailProps = {})
         </div>
       </div>
 
-      <Tabs defaultValue={defaultTab} className="w-full space-y-6">
+      <Tabs defaultValue="cadastro" className="w-full space-y-6">
         <TabsList className="bg-card border w-full flex overflow-x-auto justify-start rounded-md h-auto flex-wrap gap-1 p-1">
-          {!isPortal && (
-            <>
-              <TabsTrigger value="cadastro" className="min-w-fit" data-testid="tab-cadastro">Cadastro</TabsTrigger>
-              <TabsTrigger value="financial" className="min-w-fit" data-testid="tab-financial">Financeiro & Contrato</TabsTrigger>
-              <TabsTrigger value="status" className="min-w-fit" data-testid="tab-status">Status</TabsTrigger>
-              <TabsTrigger value="usuarios" className="min-w-fit" data-testid="tab-usuarios">Usuários</TabsTrigger>
-              <TabsTrigger value="atividade" className="min-w-fit" data-testid="tab-atividade">Atividade</TabsTrigger>
-            </>
-          )}
+          <TabsTrigger value="cadastro" className="min-w-fit" data-testid="tab-cadastro">Cadastro</TabsTrigger>
+          <TabsTrigger value="financial" className="min-w-fit" data-testid="tab-financial">Financeiro & Contrato</TabsTrigger>
+          <TabsTrigger value="status" className="min-w-fit" data-testid="tab-status">Status</TabsTrigger>
+          <TabsTrigger value="usuarios" className="min-w-fit" data-testid="tab-usuarios">Usuários</TabsTrigger>
+          <TabsTrigger value="atividade" className="min-w-fit" data-testid="tab-atividade">Atividade</TabsTrigger>
           <TabsTrigger value="overview" className="min-w-fit">Visão Geral</TabsTrigger>
           <TabsTrigger value="kickoff" className="min-w-fit">Kickoff</TabsTrigger>
           <TabsTrigger value="documentos" className="min-w-fit" data-testid="tab-documentos">Documentos</TabsTrigger>
@@ -112,25 +97,21 @@ export default function ClinicDetail({ mode = "admin" }: ClinicDetailProps = {})
           <TabsTrigger value="sistemas-acessos" className="min-w-fit" data-testid="tab-sistemas-acessos">Sistemas e Acessos</TabsTrigger>
         </TabsList>
 
-        {!isPortal && (
-          <>
-            <TabsContent value="cadastro">
-              <CadastroTab clinic={clinic} />
-            </TabsContent>
-            <TabsContent value="financial">
-              <FinancialTab clinicId={id} clinic={clinic} />
-            </TabsContent>
-            <TabsContent value="status">
-              <StatusTab clinic={clinic} />
-            </TabsContent>
-            <TabsContent value="usuarios">
-              <UsuariosTab clinicId={id} />
-            </TabsContent>
-            <TabsContent value="atividade">
-              <AtividadeTab clinicId={id} />
-            </TabsContent>
-          </>
-        )}
+        <TabsContent value="cadastro">
+          <CadastroTab clinic={clinic} />
+        </TabsContent>
+        <TabsContent value="financial">
+          <FinancialTab clinicId={id} clinic={clinic} />
+        </TabsContent>
+        <TabsContent value="status">
+          <StatusTab clinic={clinic} />
+        </TabsContent>
+        <TabsContent value="usuarios">
+          <UsuariosTab clinicId={id} />
+        </TabsContent>
+        <TabsContent value="atividade">
+          <AtividadeTab clinicId={id} />
+        </TabsContent>
         <TabsContent value="documentos">
           <DocumentosTab clinicId={id} />
         </TabsContent>
