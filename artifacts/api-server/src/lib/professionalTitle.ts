@@ -50,7 +50,7 @@ function cleanRazaoSocial(razao: string | null | undefined): string | null {
   return `${cased.slice(0, MAX_RAZAO_LEN - 1).trim()}…`;
 }
 
-function cleanFileNameAsTitle(fileName: string | null | undefined): string {
+export function cleanFileNameAsTitle(fileName: string | null | undefined): string {
   if (!fileName) return "Documento";
   const noExt = fileName.replace(/\.[A-Za-z0-9]{1,5}$/, "");
   const stripped = noExt
@@ -63,7 +63,7 @@ function cleanFileNameAsTitle(fileName: string | null | undefined): string {
   return titleCasePreservingAcronyms(stripped);
 }
 
-function formatDataReferencia(input: string | null | undefined): string | null {
+export function formatDataReferencia(input: string | null | undefined): string | null {
   if (!input) return null;
   const trimmed = input.trim();
   if (!trimmed) return null;

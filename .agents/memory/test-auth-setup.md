@@ -28,6 +28,17 @@ rows; `team_credentials` is keyed by email (not clinic), so delete it separately
 component tests — prefer that over a full UI run when locking pure render/handler
 logic that doesn't need a real session.
 
+**Backend vitest route tests are the exception — DO mint tokens here.** The
+"don't mint tokens" rule above is only about the live server (sandbox/runTest),
+whose signing secret is unreadable. In `artifacts/api-server` vitest files you
+`vi.mock("../lib/token-secret.js", () => ({ getTokenSigningSecret: () => "<fixed>" }))`
+and then call `signToken({ role: "super_admin", sub: "tester" })` to mint a real
+token through the production verify path. Mount the router under its real
+middleware (`app.use("/api", requireClinicAccess, router)`) and seed clinic rows
+directly via `db`. See `kickoffs.test.ts` / `clinic-documents.dedup.test.ts`.
+**Why:** mocking the secret makes minted tokens valid, so no DB/login dance is
+needed for isolated route tests.
+
 **Gotcha (runTest DB seeding is flaky):** `[DB]` INSERT steps inside a `runTest`
 plan are not reliably executed — a run can reach login with the rows never
 created, failing as "credenciais inválidas". Seed deterministically yourself via

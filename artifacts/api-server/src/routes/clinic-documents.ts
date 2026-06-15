@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import multer, { MulterError } from "multer";
-import { eq, and, desc, sql, asc } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { eq, and, or, isNull, desc, sql, asc } from "drizzle-orm";
 import {
   db,
   clinicDocumentsTable,
@@ -16,6 +17,11 @@ import {
   EmptyDocumentError,
   PdfExtractionError,
 } from "../lib/aiSummarizer.js";
+import {
+  suggestDocumentTitle,
+  cleanFileNameAsTitle,
+  isTitleSuggestableMimeType,
+} from "../lib/documentTitleSuggester.js";
 
 const objectStorageService = new ObjectStorageService();
 const SIGNED_URL_TTL_SECONDS = 3600;
@@ -40,6 +46,7 @@ interface DocMapped {
   storagePath: string;
   fileSize: number | null;
   fileType: string | null;
+  contentHash: string | null;
   uploadedBy: string | null;
   summary: string | null;
   summarizedAt: string | null;
@@ -64,6 +71,7 @@ function mapDoc(d: typeof clinicDocumentsTable.$inferSelect): DocMapped {
     storagePath: d.storagePath,
     fileSize: d.fileSize ?? null,
     fileType: d.fileType ?? null,
+    contentHash: d.contentHash ?? null,
     uploadedBy: d.uploadedBy ?? null,
     summary: d.summary ?? null,
     summarizedAt: d.summarizedAt ? d.summarizedAt.toISOString() : null,
@@ -174,6 +182,7 @@ router.post(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const categoryId = typeof body.categoryId === "string" ? body.categoryId : "";
     const titleRaw = typeof body.title === "string" ? body.title : "";
+    const allowDuplicate = body.allowDuplicate === "true" || body.allowDuplicate === true;
 
     if (!categoryId) {
       res.status(400).json({ error: "categoryId é obrigatório" });
@@ -237,6 +246,49 @@ router.post(
       return;
     }
 
+    // Duplicate detection: hash the bytes and look for an existing document in
+    // this clinic with the same content. Legacy rows without a hash are matched
+    // on (file_name, file_size) as a best-effort fallback. Done BEFORE uploading
+    // to storage so a rejected duplicate never leaves an orphan object.
+    const contentHash = createHash("sha256").update(file.buffer).digest("hex");
+
+    if (!allowDuplicate) {
+      const [dup] = await db
+        .select()
+        .from(clinicDocumentsTable)
+        .where(
+          and(
+            eq(clinicDocumentsTable.clinicId, clinicId),
+            or(
+              eq(clinicDocumentsTable.contentHash, contentHash),
+              and(
+                isNull(clinicDocumentsTable.contentHash),
+                eq(clinicDocumentsTable.fileName, fileName),
+                eq(clinicDocumentsTable.fileSize, file.buffer.byteLength),
+              ),
+            ),
+          ),
+        )
+        .orderBy(asc(clinicDocumentsTable.sequenceNumber))
+        .limit(1);
+
+      if (dup) {
+        const exact = dup.contentHash === contentHash;
+        res.status(409).json({
+          error: exact
+            ? "Este documento já foi enviado para esta clínica."
+            : "Possível duplicado: já existe um documento com o mesmo nome e tamanho nesta clínica.",
+          duplicateOf: {
+            id: dup.id,
+            title: dup.title,
+            sequenceNumber: dup.sequenceNumber,
+            createdAt: dup.createdAt.toISOString(),
+          },
+        });
+        return;
+      }
+    }
+
     let storagePath: string;
     let size: number;
     try {
@@ -276,6 +328,7 @@ router.post(
         storagePath,
         fileSize: size,
         fileType: mimeType ?? null,
+        contentHash,
       })
       .returning();
     return row;
@@ -498,6 +551,139 @@ router.post(
         result.pagesAnalyzed > 0 ? result.pagesAnalyzed : null,
       summaryTotalPages: result.totalPages > 0 ? result.totalPages : null,
     });
+  },
+);
+
+const MAX_TITLE_LEN = 180;
+
+// Manual title rename. Used by the inline edit control after an AI suggestion.
+router.patch(
+  "/clinics/:clinicId/documents/:id",
+  async (req, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId)
+      ? req.params.clinicId[0]
+      : req.params.clinicId;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const titleRaw = typeof body.title === "string" ? body.title.trim() : "";
+    if (!titleRaw) {
+      res.status(400).json({ error: "title é obrigatório" });
+      return;
+    }
+    const title =
+      titleRaw.length > MAX_TITLE_LEN ? titleRaw.slice(0, MAX_TITLE_LEN).trim() : titleRaw;
+
+    const [doc] = await db
+      .select()
+      .from(clinicDocumentsTable)
+      .where(
+        and(
+          eq(clinicDocumentsTable.id, id),
+          eq(clinicDocumentsTable.clinicId, clinicId),
+        ),
+      );
+    if (!doc) {
+      res.status(404).json({ error: "Documento não encontrado" });
+      return;
+    }
+
+    const [updated] = await db
+      .update(clinicDocumentsTable)
+      .set({ title })
+      .where(
+        and(
+          eq(clinicDocumentsTable.id, id),
+          eq(clinicDocumentsTable.clinicId, clinicId),
+        ),
+      )
+      .returning();
+
+    res.json(mapDoc(updated));
+  },
+);
+
+// Generate an objective, modular AI title for a document and apply it. Falls
+// back to a cleaned filename for unsupported types or when the AI call fails.
+router.post(
+  "/clinics/:clinicId/documents/:id/suggest-title",
+  async (req, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId)
+      ? req.params.clinicId[0]
+      : req.params.clinicId;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const [doc] = await db
+      .select()
+      .from(clinicDocumentsTable)
+      .where(
+        and(
+          eq(clinicDocumentsTable.id, id),
+          eq(clinicDocumentsTable.clinicId, clinicId),
+        ),
+      );
+    if (!doc) {
+      res.status(404).json({ error: "Documento não encontrado" });
+      return;
+    }
+
+    let title: string;
+    let source: "ai" | "filename";
+
+    if (
+      !doc.storagePath.startsWith("/objects/") ||
+      !isTitleSuggestableMimeType(doc.fileType)
+    ) {
+      // Legacy storage (unreadable bytes) or a type the AI can't analyze
+      // (office docs, zips, etc.) — derive the title from the filename without
+      // an unnecessary storage download or AI call.
+      title = cleanFileNameAsTitle(doc.fileName);
+      source = "filename";
+    } else {
+      let fileBuffer: Buffer;
+      try {
+        const file = await objectStorageService.getObjectEntityFile(doc.storagePath);
+        const [data] = await file.download();
+        fileBuffer = data;
+      } catch (err) {
+        if (err instanceof ObjectNotFoundError) {
+          res.status(404).json({ error: "Arquivo não encontrado no armazenamento." });
+          return;
+        }
+        console.error(
+          `[clinic-documents] storage read failed for doc ${id}:`,
+          err,
+        );
+        res.status(500).json({ error: "Falha ao ler o arquivo do armazenamento." });
+        return;
+      }
+
+      try {
+        const result = await suggestDocumentTitle(fileBuffer, doc.fileType, doc.fileName);
+        title = result.title;
+        source = result.source;
+      } catch (err) {
+        // AI failed for a supported type — degrade gracefully to the filename.
+        console.warn(
+          `[clinic-documents] suggest-title AI failed for doc ${id}: ${(err as Error).message}`,
+        );
+        title = cleanFileNameAsTitle(doc.fileName);
+        source = "filename";
+      }
+    }
+
+    const [updated] = await db
+      .update(clinicDocumentsTable)
+      .set({ title })
+      .where(
+        and(
+          eq(clinicDocumentsTable.id, id),
+          eq(clinicDocumentsTable.clinicId, clinicId),
+        ),
+      )
+      .returning();
+
+    res.json({ title, source, document: mapDoc(updated) });
   },
 );
 

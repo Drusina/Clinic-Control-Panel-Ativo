@@ -13,9 +13,12 @@ import {
   useDeleteDocumentCategory,
   useUploadClinicDocument,
   useDeleteClinicDocument,
+  useSuggestClinicDocumentTitle,
+  useRenameClinicDocument,
   fixClinicDocumentEncoding,
   type ClinicDocument,
   type ClinicDocumentCategory,
+  type SuggestTitleResponse,
 } from "@/hooks/use-clinic-documents";
 import { useQueryClient } from "@tanstack/react-query";
 import { SidebarTree } from "@/components/clinic-documents/sidebar-tree";
@@ -56,6 +59,8 @@ export default function ClinicDocumentsPage() {
   const deleteCategory = useDeleteDocumentCategory(clinicId);
   const uploadDoc = useUploadClinicDocument(clinicId);
   const deleteDoc = useDeleteClinicDocument(clinicId);
+  const suggestTitle = useSuggestClinicDocumentTitle(clinicId);
+  const renameDoc = useRenameClinicDocument(clinicId);
 
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [newCatOpen, setNewCatOpen] = useState(false);
@@ -180,8 +185,20 @@ export default function ClinicDocumentsPage() {
     setUploadOpen(true);
   }
 
-  async function uploadOne(categoryId: string, file: File): Promise<unknown> {
-    return uploadDoc.mutateAsync({ categoryId, file });
+  async function uploadOne(
+    categoryId: string,
+    file: File,
+    allowDuplicate?: boolean,
+  ): Promise<ClinicDocument> {
+    return uploadDoc.mutateAsync({ categoryId, file, allowDuplicate });
+  }
+
+  async function suggestTitleFor(id: string): Promise<SuggestTitleResponse> {
+    return suggestTitle.mutateAsync(id);
+  }
+
+  async function renameDocument(id: string, title: string): Promise<void> {
+    await renameDoc.mutateAsync({ id, title });
   }
 
   const isLoading = categoriesQ.isLoading || docsQ.isLoading;
@@ -258,6 +275,8 @@ export default function ClinicDocumentsPage() {
         categories={categories}
         initialCategoryId={uploadCategoryId}
         uploadOne={uploadOne}
+        suggestTitleFor={suggestTitleFor}
+        renameDocument={renameDocument}
       />
     </div>
   );

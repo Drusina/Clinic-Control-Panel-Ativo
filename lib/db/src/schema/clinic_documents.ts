@@ -18,6 +18,9 @@ export const clinicDocumentsTable = pgTable(
     storagePath: text("storage_path").notNull(),
     fileSize: integer("file_size"),
     fileType: text("file_type"),
+    // SHA-256 hex digest of the file bytes, used to detect duplicate uploads
+    // within a clinic. Nullable for rows created before this column existed.
+    contentHash: text("content_hash"),
     uploadedBy: text("uploaded_by"),
     summary: text("summary"),
     summarizedAt: timestamp("summarized_at", { withTimezone: true }),
@@ -29,6 +32,10 @@ export const clinicDocumentsTable = pgTable(
   (t) => ({
     clinicIdx: index("clinic_documents_clinic_idx").on(t.clinicId),
     categoryIdx: index("clinic_documents_category_idx").on(t.categoryId),
+    clinicContentHashIdx: index("clinic_documents_clinic_content_hash_idx").on(
+      t.clinicId,
+      t.contentHash,
+    ),
   }),
 );
 
