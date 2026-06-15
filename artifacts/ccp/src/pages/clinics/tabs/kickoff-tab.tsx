@@ -14,11 +14,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 
 const formSchema = z.object({
-  dataRealizacao: z.string().optional().or(z.literal("")),
-  modalidade: z.enum(["presencial", "remoto", "hibrido"]).optional().or(z.literal("")),
+  dataRealizacao: z.string().optional(),
+  modalidade: z.enum(["presencial", "remoto", "hibrido"]).optional(),
   duracaoMinutos: z.coerce.number().optional(),
-  facilitador: z.string().optional().or(z.literal("")),
-  status: z.enum(["rascunho", "realizado", "validado"]).optional().or(z.literal("")),
+  facilitador: z.string().optional(),
+  status: z.enum(["rascunho", "realizado", "validado"]).optional(),
 });
 
 export default function KickoffTab({ clinicId }: { clinicId: string }) {
@@ -54,8 +54,20 @@ export default function KickoffTab({ clinicId }: { clinicId: string }) {
   }, [kickoff, form]);
 
   function onSubmit(values: z.infer<typeof formSchema>) {
+    const data = {
+      dataRealizacao: values.dataRealizacao?.trim() ? values.dataRealizacao : null,
+      modalidade: values.modalidade ?? null,
+      duracaoMinutos:
+        typeof values.duracaoMinutos === "number" &&
+        Number.isFinite(values.duracaoMinutos) &&
+        values.duracaoMinutos > 0
+          ? values.duracaoMinutos
+          : null,
+      facilitador: values.facilitador?.trim() ? values.facilitador : null,
+      status: values.status ?? null,
+    };
     upsertKickoff.mutate(
-      { clinicId, data: values as any },
+      { clinicId, data },
       {
         onSuccess: () => {
           toast({ title: "Kickoff atualizado", description: "Os detalhes do kickoff foram salvos." });
