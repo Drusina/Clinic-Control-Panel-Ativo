@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useGetClinic, getGetClinicQueryKey } from "@workspace/api-client-react";
 import { getStoredToken, useMyClinics } from "@/hooks/use-auth";
@@ -29,6 +29,12 @@ import {
   MapPin,
   Upload,
   Plus,
+  AlertCircle,
+  CircleAlert,
+  CheckCircle2,
+  Mail,
+  Phone,
+  UserRound,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -38,6 +44,12 @@ interface IcsStatus {
   risks: number;
   actions: number;
   seeded: boolean;
+}
+
+interface Pendencia {
+  key: string;
+  label: string;
+  secao?: string;
 }
 
 type IconType = typeof LayoutDashboard;
@@ -200,6 +212,7 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
   const card = myClinics?.clinics.find((c) => c.id === clinicId) ?? null;
 
   const [ics, setIcs] = useState<IcsStatus | null>(null);
+  const [icsLoaded, setIcsLoaded] = useState(false);
 
   useEffect(() => {
     if (!clinicId) return;
@@ -211,9 +224,13 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
     fetch(`${BASE}/api/clinics/${clinicId}/ics-status`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: IcsStatus | null) => {
-        if (!cancelled && data) setIcs(data);
+        if (cancelled) return;
+        if (data) setIcs(data);
+        setIcsLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setIcsLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -222,6 +239,46 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
   const nome = clinic?.nome ?? card?.fantasia ?? card?.nome ?? "Clínica";
   const progresso = card?.progresso ?? 0;
   const etapa = card?.etapa ?? null;
+
+  const pendencias = useMemo<Pendencia[]>(() => {
+    const list: Pendencia[] = [];
+    if (icsLoaded && ics) {
+      if (!ics.seeded) {
+        list.push({
+          key: "diagnostico",
+          label: "Diagnóstico ainda não iniciado",
+          secao: "diagnostico",
+        });
+      } else {
+        if (ics.delegacoes === 0)
+          list.push({
+            key: "delegacao",
+            label: "Nenhuma delegação criada",
+            secao: "delegacao",
+          });
+        if (ics.risks === 0)
+          list.push({
+            key: "riscos",
+            label: "Nenhum risco mapeado",
+            secao: "riscos",
+          });
+        if (ics.actions === 0)
+          list.push({
+            key: "acao",
+            label: "Plano de ação sem tarefas",
+            secao: "acao",
+          });
+      }
+    }
+    if (progresso < 100) {
+      list.push({
+        key: "implantacao",
+        label: `Implantação ${progresso}% concluída`,
+        secao: "kickoff",
+      });
+    }
+    return list;
+  }, [ics, icsLoaded, progresso]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -261,7 +318,10 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
           </div>
         </div>
 
-        <div className="flex w-full flex-col gap-2 rounded-lg border border-border bg-muted/40 p-4 md:w-[340px]">
+        <div
+          className="flex w-full flex-col gap-2 rounded-lg border border-border bg-muted/40 p-4 md:w-[340px]"
+          data-testid="painel-progresso"
+        >
           <div className="flex items-center justify-between text-sm font-medium">
             <span className="text-foreground">{etapa ?? "Progresso da implantação"}</span>
             <span className="text-primary">{progresso}%</span>
@@ -301,6 +361,53 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
 
         {/* Coluna de apoio */}
         <div className="flex flex-col gap-6 xl:col-span-4">
+          <Card data-testid="painel-pendencias">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlertCircle className="h-4 w-4 text-primary" />
+                Pendências
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {pendencias.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {pendencias.map((p) => {
+                    const inner = (
+                      <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+                        <span className="flex items-center gap-2 text-foreground">
+                          <CircleAlert className="h-4 w-4 shrink-0 text-amber-600" />
+                          {p.label}
+                        </span>
+                        {p.secao && (
+                          <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        )}
+                      </div>
+                    );
+                    return p.secao ? (
+                      <Link
+                        key={p.key}
+                        href={`/portal/clinica/${clinicId}/${p.secao}`}
+                        className="block transition-opacity hover:opacity-80"
+                        data-testid={`pendencia-${p.key}`}
+                      >
+                        {inner}
+                      </Link>
+                    ) : (
+                      <div key={p.key} data-testid={`pendencia-${p.key}`}>
+                        {inner}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  Nenhuma pendência no momento.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Atalhos rápidos</CardTitle>
@@ -323,7 +430,7 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card data-testid="painel-ics-status">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Activity className="h-4 w-4 text-primary" />
@@ -349,6 +456,57 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Dados operacionais ainda não carregados para esta clínica.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card data-testid="painel-contato-principal">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <UserRound className="h-4 w-4 text-primary" />
+                Contato principal
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {clinic?.responsavel || clinic?.email || clinic?.whatsapp ? (
+                <div className="flex flex-col gap-3 text-sm">
+                  {clinic?.responsavel && (
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">
+                        {clinic.responsavel}
+                      </span>
+                      {clinic?.cargo && (
+                        <span className="text-xs text-muted-foreground">
+                          {clinic.cargo}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {clinic?.email && (
+                    <a
+                      href={`mailto:${clinic.email}`}
+                      className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-primary"
+                    >
+                      <Mail className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{clinic.email}</span>
+                    </a>
+                  )}
+                  {clinic?.whatsapp && (
+                    <a
+                      href={`https://wa.me/${clinic.whatsapp.replace(/\D/g, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-primary"
+                    >
+                      <Phone className="h-4 w-4 shrink-0" />
+                      <span>{clinic.whatsapp}</span>
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum contato principal cadastrado.
                 </p>
               )}
             </CardContent>
