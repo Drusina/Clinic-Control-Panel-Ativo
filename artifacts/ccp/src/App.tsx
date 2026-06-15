@@ -169,7 +169,7 @@ function ProvisionalPasswordGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function Router() {
+export function Router() {
   return (
     <ProvisionalPasswordGate>
     <Switch>
