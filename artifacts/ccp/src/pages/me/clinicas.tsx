@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, Redirect, useLocation } from "wouter";
 import { Loader2, Building2, ArrowRight, MapPin } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ClinicLogo } from "@/components/clinic-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -97,8 +98,14 @@ export default function MeClinicasPage() {
             <Card className="group cursor-pointer hover:border-primary/50 transition-colors h-full">
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 shrink-0">
-                    <Building2 className="h-5 w-5 text-primary" />
+                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md bg-primary/10 shrink-0">
+                    <ClinicLogo
+                      clinicId={c.id}
+                      logoUrl={c.logoUrl}
+                      name={c.fantasia || c.nome}
+                      className="h-full w-full p-1"
+                      fallback={<Building2 className="h-5 w-5 text-primary" />}
+                    />
                   </div>
                   {c.status && (
                     <Badge variant={c.status === "ativa" ? "default" : "secondary"}>

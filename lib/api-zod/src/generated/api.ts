@@ -135,6 +135,12 @@ export const ListClinicsResponse = zod.object({
         .describe(
           "URL to the uploaded signed contract PDF in Supabase Storage",
         ),
+      logoUrl: zod
+        .string()
+        .nullish()
+        .describe(
+          "Storage path of the clinic logo. When set, the image is served at GET \/api\/clinics\/{id}\/logo",
+        ),
       createdAt: zod.string(),
       updatedAt: zod.string(),
     }),
@@ -232,6 +238,12 @@ export const GetClinicResponse = zod.object({
     .string()
     .nullish()
     .describe("URL to the uploaded signed contract PDF in Supabase Storage"),
+  logoUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Storage path of the clinic logo. When set, the image is served at GET \/api\/clinics\/{id}\/logo",
+    ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -318,6 +330,12 @@ export const UpdateClinicResponse = zod.object({
     .string()
     .nullish()
     .describe("URL to the uploaded signed contract PDF in Supabase Storage"),
+  logoUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Storage path of the clinic logo. When set, the image is served at GET \/api\/clinics\/{id}\/logo",
+    ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -395,6 +413,12 @@ export const UpdateClinicStatusResponse = zod.object({
     .string()
     .nullish()
     .describe("URL to the uploaded signed contract PDF in Supabase Storage"),
+  logoUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Storage path of the clinic logo. When set, the image is served at GET \/api\/clinics\/{id}\/logo",
+    ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

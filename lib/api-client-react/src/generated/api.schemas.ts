@@ -128,6 +128,11 @@ export interface Clinic {
    * @nullable
    */
   contratoUrl?: string | null;
+  /**
+   * Storage path of the clinic logo. When set, the image is served at GET /api/clinics/{id}/logo
+   * @nullable
+   */
+  logoUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }

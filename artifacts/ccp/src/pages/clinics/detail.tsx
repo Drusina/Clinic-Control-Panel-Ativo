@@ -6,8 +6,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Activity, ArrowLeft } from "lucide-react";
+import { Activity, ArrowLeft, Building2 } from "lucide-react";
 import { Link } from "wouter";
+import { ClinicLogo } from "@/components/clinic-logo";
 import { getStatusBadgeVariant, getPlanBadgeVariant } from "./index";
 
 import OverviewTab from "./tabs/overview-tab";
@@ -61,6 +62,15 @@ export default function ClinicDetail() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-card">
+          <ClinicLogo
+            clinicId={clinic.id}
+            logoUrl={clinic.logoUrl}
+            name={clinic.nome}
+            className="h-full w-full p-1.5"
+            fallback={<Building2 className="h-7 w-7 text-muted-foreground" />}
+          />
+        </div>
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight" data-testid="clinic-name">

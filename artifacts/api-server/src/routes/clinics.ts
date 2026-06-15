@@ -71,6 +71,7 @@ function mapClinic(c: typeof clinicsTable.$inferSelect) {
     dataAbertura: c.dataAbertura,
     propostaUrl: c.propostaUrl,
     contratoUrl: c.contratoUrl,
+    logoUrl: c.logoUrl,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
   };

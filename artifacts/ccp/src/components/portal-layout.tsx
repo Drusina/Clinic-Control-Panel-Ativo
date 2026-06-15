@@ -10,6 +10,7 @@ import {
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { NotificationPreferencesModal } from "@/components/notification-preferences-modal";
+import { ClinicLogo } from "@/components/clinic-logo";
 import {
   useMyClinics,
   useLogout,
@@ -92,7 +93,13 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
                 data-testid="portal-trocar-clinica"
                 title="Trocar clínica"
               >
-                <Building2 className="h-4 w-4 shrink-0 text-primary" />
+                <ClinicLogo
+                  clinicId={activeClinic?.id ?? ""}
+                  logoUrl={activeClinic?.logoUrl}
+                  name={clinicLabel}
+                  className="h-5 w-5 shrink-0 rounded"
+                  fallback={<Building2 className="h-4 w-4 shrink-0 text-primary" />}
+                />
                 <span className="truncate text-sm font-medium">
                   {clinicLabel}
                 </span>
@@ -103,7 +110,13 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
                 className="flex min-w-0 items-center gap-2 px-2"
                 data-testid="portal-active-clinic"
               >
-                <Building2 className="h-4 w-4 shrink-0 text-primary" />
+                <ClinicLogo
+                  clinicId={activeClinic?.id ?? ""}
+                  logoUrl={activeClinic?.logoUrl}
+                  name={clinicLabel}
+                  className="h-5 w-5 shrink-0 rounded"
+                  fallback={<Building2 className="h-4 w-4 shrink-0 text-primary" />}
+                />
                 <span className="truncate text-sm font-medium">
                   {clinicLabel}
                 </span>

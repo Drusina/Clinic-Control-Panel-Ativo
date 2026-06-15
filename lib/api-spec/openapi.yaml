@@ -2013,6 +2013,9 @@ components:
         contratoUrl:
           type: ["string", "null"]
           description: "URL to the uploaded signed contract PDF in Supabase Storage"
+        logoUrl:
+          type: ["string", "null"]
+          description: "Storage path of the clinic logo. When set, the image is served at GET /api/clinics/{id}/logo"
         createdAt:
           type: string
         updatedAt:

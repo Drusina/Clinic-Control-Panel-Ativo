@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useGetClinic, getGetClinicQueryKey } from "@workspace/api-client-react";
 import { getStoredToken, useMyClinics } from "@/hooks/use-auth";
+import { ClinicLogo } from "@/components/clinic-logo";
 import {
   Card,
   CardContent,
@@ -284,6 +285,15 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
     <div className="flex flex-col gap-8">
       {/* Resumo da clínica */}
       <section className="flex flex-col gap-6 rounded-xl border border-border bg-card p-6 md:flex-row md:items-center">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background">
+          <ClinicLogo
+            clinicId={clinicId}
+            logoUrl={clinic?.logoUrl ?? card?.logoUrl}
+            name={nome}
+            className="h-full w-full p-2"
+            fallback={<Building2 className="h-8 w-8 text-muted-foreground" />}
+          />
+        </div>
         <div className="flex flex-1 flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <h1

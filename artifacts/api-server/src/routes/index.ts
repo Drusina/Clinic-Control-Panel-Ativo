@@ -47,6 +47,7 @@ import documentCategoriesRouter from "./document-categories";
 import clinicDocumentsRouter from "./clinic-documents";
 import societaryDocsRouter from "./societary-docs";
 import respondentRouter from "./respondent";
+import { clinicLogoPublicRouter, clinicLogoScopedRouter } from "./clinic-logo";
 
 const router: IRouter = Router();
 
@@ -66,6 +67,10 @@ router.use(meRouter);
 // because passing middleware to `router.use(mw, subRouter)` actually
 // installs it as a global layer that runs on every subsequent request.
 router.use(lgpdSigningPublicRouter);
+// Public clinic logo — GET /api/clinics/:id/logo streams the image with no
+// auth (the logo is not confidential and must render via a plain <img src>).
+// MUST be registered BEFORE the requireClinicAccess layer below.
+router.use(clinicLogoPublicRouter);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IMPORTANT — middleware mounting note
@@ -90,6 +95,7 @@ router.use(lgpdSigningPublicRouter);
 router.use(requireClinicAccess, documentCategoriesRouter);
 router.use(requireClinicAccess, clinicDocumentsRouter);
 router.use(requireClinicAccess, societaryDocsRouter);
+router.use(requireClinicAccess, clinicLogoScopedRouter);
 router.use(requireClinicAccess, clinicsRouter);
 router.use(requireClinicAccess, statusHistoryRouter);
 router.use(requireClinicAccess, sociosRouter);

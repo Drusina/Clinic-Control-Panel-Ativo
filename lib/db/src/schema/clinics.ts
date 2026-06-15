@@ -42,6 +42,7 @@ export const clinicsTable = pgTable("clinics", {
   dataAbertura: text("data_abertura"),
   propostaUrl: text("proposta_url"),
   contratoUrl: text("contrato_url"),
+  logoUrl: text("logo_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

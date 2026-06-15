@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const AUTH_TOKEN_KEY = "ccp_admin_token";
 const AUTH_QUERY_KEY = ["auth", "me"] as const;
-const MY_CLINICS_QUERY_KEY = ["me", "clinics"] as const;
+export const MY_CLINICS_QUERY_KEY = ["me", "clinics"] as const;
 const ACTIVE_CLINIC_KEY = "ccp_active_clinic_id";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -91,6 +91,7 @@ export interface MyClinicCard {
   progresso: number;
   cidade: string | null;
   uf: string | null;
+  logoUrl: string | null;
 }
 
 export interface MyClinicsResponse {

@@ -20,6 +20,7 @@ function mapClinicCard(c: typeof clinicsTable.$inferSelect) {
     progresso: c.progresso ?? 0,
     cidade: c.cidade,
     uf: c.uf,
+    logoUrl: c.logoUrl,
   };
 }
 

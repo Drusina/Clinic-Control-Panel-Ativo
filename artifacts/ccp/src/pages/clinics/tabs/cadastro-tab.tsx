@@ -45,6 +45,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import SocietaryDocsCard from "./societary-docs-card";
+import LogoCard from "./logo-card";
 
 const clinicFormSchema = z.object({
   nome: z.string().min(1, "Nome obrigatório"),
@@ -521,6 +522,8 @@ export default function CadastroTab({ clinic }: { clinic: Clinic }) {
           </div>
         </form>
       </Form>
+
+      <LogoCard clinicId={clinic.id} nome={clinic.nome} logoUrl={clinic.logoUrl} />
 
       <SocietaryDocsCard clinicId={clinic.id} />
 
