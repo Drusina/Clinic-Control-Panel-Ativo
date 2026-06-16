@@ -76,6 +76,8 @@ import type {
   Socio,
   StatusHistory,
   TeamMember,
+  Trilha,
+  TrilhaEtapaUpdate,
   UpdateActionBody,
   UpdateClinicBody,
   UpdateClinicStatusBody,
@@ -4778,6 +4780,183 @@ export const useCommitRisksFromDiagnostic = <
   TContext
 > => {
   return useMutation(getCommitRisksFromDiagnosticMutationOptions(options));
+};
+
+/**
+ * Returns the fixed 15 stages with their per-clinic state merged with a live "pronto para concluir" suggestion derived from existing module data, plus the derived clinic-level summary (etapa atual + progresso %).
+
+ * @summary Get the 15-stage implementation journey for a clinic
+ */
+export const getGetTrilhaUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/trilha`;
+};
+
+export const getTrilha = async (
+  clinicId: string,
+  options?: RequestInit,
+): Promise<Trilha> => {
+  return customFetch<Trilha>(getGetTrilhaUrl(clinicId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTrilhaQueryKey = (clinicId: string) => {
+  return [`/api/clinics/${clinicId}/trilha`] as const;
+};
+
+export const getGetTrilhaQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTrilha>>,
+  TError = ErrorType<void>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTrilha>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTrilhaQueryKey(clinicId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTrilha>>> = ({
+    signal,
+  }) => getTrilha(clinicId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getTrilha>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetTrilhaQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTrilha>>
+>;
+export type GetTrilhaQueryError = ErrorType<void>;
+
+/**
+ * @summary Get the 15-stage implementation journey for a clinic
+ */
+
+export function useGetTrilha<
+  TData = Awaited<ReturnType<typeof getTrilha>>,
+  TError = ErrorType<void>,
+>(
+  clinicId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTrilha>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTrilhaQueryOptions(clinicId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Hybrid progression — the system only suggests; this endpoint applies an explicit human decision. Updates the stage status (concluir, reabrir, bloquear, marcar não se aplica) and/or its responsável, data prevista and observação. Recomputes the clinic's etapa/progresso and records an audit entry. Returns the full refreshed trilha.
+
+ * @summary Confirm/reopen/block a stage or edit its fields
+ */
+export const getUpdateTrilhaEtapaUrl = (clinicId: string, etapaKey: string) => {
+  return `/api/clinics/${clinicId}/trilha/${etapaKey}`;
+};
+
+export const updateTrilhaEtapa = async (
+  clinicId: string,
+  etapaKey: string,
+  trilhaEtapaUpdate: TrilhaEtapaUpdate,
+  options?: RequestInit,
+): Promise<Trilha> => {
+  return customFetch<Trilha>(getUpdateTrilhaEtapaUrl(clinicId, etapaKey), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(trilhaEtapaUpdate),
+  });
+};
+
+export const getUpdateTrilhaEtapaMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTrilhaEtapa>>,
+    TError,
+    { clinicId: string; etapaKey: string; data: BodyType<TrilhaEtapaUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateTrilhaEtapa>>,
+  TError,
+  { clinicId: string; etapaKey: string; data: BodyType<TrilhaEtapaUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateTrilhaEtapa"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateTrilhaEtapa>>,
+    { clinicId: string; etapaKey: string; data: BodyType<TrilhaEtapaUpdate> }
+  > = (props) => {
+    const { clinicId, etapaKey, data } = props ?? {};
+
+    return updateTrilhaEtapa(clinicId, etapaKey, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateTrilhaEtapaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateTrilhaEtapa>>
+>;
+export type UpdateTrilhaEtapaMutationBody = BodyType<TrilhaEtapaUpdate>;
+export type UpdateTrilhaEtapaMutationError = ErrorType<void>;
+
+/**
+ * @summary Confirm/reopen/block a stage or edit its fields
+ */
+export const useUpdateTrilhaEtapa = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTrilhaEtapa>>,
+    TError,
+    { clinicId: string; etapaKey: string; data: BodyType<TrilhaEtapaUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateTrilhaEtapa>>,
+  TError,
+  { clinicId: string; etapaKey: string; data: BodyType<TrilhaEtapaUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateTrilhaEtapaMutationOptions(options));
 };
 
 /**

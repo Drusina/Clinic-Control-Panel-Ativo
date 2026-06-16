@@ -269,8 +269,6 @@ export const UpdateClinicBody = zod.object({
   whatsapp: zod.string().nullish(),
   cargo: zod.string().nullish(),
   plano: zod.string().nullish(),
-  etapa: zod.number().nullish(),
-  progresso: zod.number().nullish(),
   valorImplantacao: zod.number().nullish(),
   valorRecorrente: zod.number().nullish(),
   formaPagamento: zod.string().nullish(),
@@ -1476,6 +1474,117 @@ export const CommitRisksFromDiagnosticResponse = zod.object({
       createdAt: zod.string(),
     }),
   ),
+});
+
+/**
+ * Returns the fixed 15 stages with their per-clinic state merged with a live "pronto para concluir" suggestion derived from existing module data, plus the derived clinic-level summary (etapa atual + progresso %).
+
+ * @summary Get the 15-stage implementation journey for a clinic
+ */
+export const GetTrilhaParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const GetTrilhaResponse = zod.object({
+  clinicId: zod.string(),
+  etapas: zod.array(
+    zod.object({
+      key: zod.string(),
+      ordem: zod.number(),
+      titulo: zod.string(),
+      descricao: zod.string(),
+      modulo: zod.string().nullish(),
+      manual: zod.boolean(),
+      status: zod.enum([
+        "pendente",
+        "em_andamento",
+        "concluido",
+        "bloqueado",
+        "nao_aplicavel",
+      ]),
+      responsavel: zod.string().nullish(),
+      dataPrevista: zod.string().nullish().describe("ISO date (YYYY-MM-DD)"),
+      dataConcluida: zod.string().nullish().describe("ISO timestamp"),
+      observacao: zod.string().nullish(),
+      sugestao: zod.object({
+        pronto: zod.boolean(),
+        motivo: zod.string(),
+        computedAt: zod.string(),
+      }),
+      confirmadoPor: zod.string().nullish(),
+      confirmadoEm: zod.string().nullish().describe("ISO timestamp"),
+    }),
+  ),
+  resumo: zod.object({
+    etapa: zod.number(),
+    progresso: zod.number(),
+    resolvidas: zod.number(),
+    total: zod.number(),
+  }),
+});
+
+/**
+ * Hybrid progression — the system only suggests; this endpoint applies an explicit human decision. Updates the stage status (concluir, reabrir, bloquear, marcar não se aplica) and/or its responsável, data prevista and observação. Recomputes the clinic's etapa/progresso and records an audit entry. Returns the full refreshed trilha.
+
+ * @summary Confirm/reopen/block a stage or edit its fields
+ */
+export const UpdateTrilhaEtapaParams = zod.object({
+  clinicId: zod.coerce.string(),
+  etapaKey: zod.coerce.string(),
+});
+
+export const UpdateTrilhaEtapaBody = zod.object({
+  status: zod
+    .union([
+      zod.literal("pendente"),
+      zod.literal("em_andamento"),
+      zod.literal("concluido"),
+      zod.literal("bloqueado"),
+      zod.literal("nao_aplicavel"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  responsavel: zod.string().nullish(),
+  dataPrevista: zod.string().nullish().describe("ISO date (YYYY-MM-DD)"),
+  observacao: zod.string().nullish(),
+});
+
+export const UpdateTrilhaEtapaResponse = zod.object({
+  clinicId: zod.string(),
+  etapas: zod.array(
+    zod.object({
+      key: zod.string(),
+      ordem: zod.number(),
+      titulo: zod.string(),
+      descricao: zod.string(),
+      modulo: zod.string().nullish(),
+      manual: zod.boolean(),
+      status: zod.enum([
+        "pendente",
+        "em_andamento",
+        "concluido",
+        "bloqueado",
+        "nao_aplicavel",
+      ]),
+      responsavel: zod.string().nullish(),
+      dataPrevista: zod.string().nullish().describe("ISO date (YYYY-MM-DD)"),
+      dataConcluida: zod.string().nullish().describe("ISO timestamp"),
+      observacao: zod.string().nullish(),
+      sugestao: zod.object({
+        pronto: zod.boolean(),
+        motivo: zod.string(),
+        computedAt: zod.string(),
+      }),
+      confirmadoPor: zod.string().nullish(),
+      confirmadoEm: zod.string().nullish().describe("ISO timestamp"),
+    }),
+  ),
+  resumo: zod.object({
+    etapa: zod.number(),
+    progresso: zod.number(),
+    resolvidas: zod.number(),
+    total: zod.number(),
+  }),
 });
 
 /**

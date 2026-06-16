@@ -39,9 +39,14 @@ vi.mock("@workspace/api-client-react", () => ({
 
 vi.mock("@/hooks/use-auth", () => ({
   getStoredToken: () => null,
+  MY_CLINICS_QUERY_KEY: ["me", "clinics"],
   useMyClinics: () => ({
     data: { clinics: mocks.card ? [mocks.card] : [] },
   }),
+}));
+
+vi.mock("@/components/trilha/trilha-stepper", () => ({
+  TrilhaStepper: () => <div data-testid="trilha-stepper-stub" />,
 }));
 
 import PortalDashboard from "./portal-dashboard";

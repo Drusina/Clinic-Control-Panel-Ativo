@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useGetClinic, getGetClinicQueryKey } from "@workspace/api-client-react";
-import { getStoredToken, useMyClinics } from "@/hooks/use-auth";
+import {
+  getStoredToken,
+  useMyClinics,
+  MY_CLINICS_QUERY_KEY,
+} from "@/hooks/use-auth";
+import { TrilhaStepper } from "@/components/trilha/trilha-stepper";
 import { ClinicLogo } from "@/components/clinic-logo";
 import {
   Card,
@@ -159,6 +164,14 @@ const SHORTCUTS: { secao: string; label: string; icon: IconType; query?: string 
   { secao: "documentos", label: "Enviar documento", icon: Upload },
   { secao: "acao", label: "Ver plano de ação", icon: ListChecks },
 ];
+
+const PORTAL_MODULE_SECOES: Record<string, { secao: string; label: string }> = {
+  documentos: { secao: "documentos", label: "Abrir Documentos" },
+  kickoff: { secao: "kickoff", label: "Abrir Kickoff" },
+  diagnostico: { secao: "diagnostico", label: "Abrir Diagnóstico" },
+  riscos: { secao: "riscos", label: "Abrir Mapa de Riscos" },
+  plano_acao: { secao: "acao", label: "Abrir Plano de Ação" },
+};
 
 function ModuleCard({
   clinicId,
@@ -333,6 +346,21 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
           <Progress value={progresso} className="h-2" />
         </div>
       </section>
+
+      <TrilhaStepper
+        clinicId={clinicId}
+        invalidateKeys={[MY_CLINICS_QUERY_KEY]}
+        moduleNav={(modulo) => {
+          if (!modulo) return null;
+          const m = PORTAL_MODULE_SECOES[modulo];
+          if (!m) return null;
+          return {
+            kind: "link",
+            href: `/portal/clinica/${clinicId}/${m.secao}`,
+            label: m.label,
+          };
+        }}
+      />
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
         {/* Hub de módulos */}

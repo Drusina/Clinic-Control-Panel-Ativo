@@ -232,10 +232,6 @@ export interface UpdateClinicBody {
   /** @nullable */
   plano?: string | null;
   /** @nullable */
-  etapa?: number | null;
-  /** @nullable */
-  progresso?: number | null;
-  /** @nullable */
   valorImplantacao?: number | null;
   /** @nullable */
   valorRecorrente?: number | null;
@@ -973,6 +969,98 @@ export interface UpdateRiskBody {
   status?: string | null;
   /** @nullable */
   pilarSlug?: string | null;
+}
+
+export interface TrilhaSugestao {
+  pronto: boolean;
+  motivo: string;
+  computedAt: string;
+}
+
+export type TrilhaEtapaStatus =
+  (typeof TrilhaEtapaStatus)[keyof typeof TrilhaEtapaStatus];
+
+export const TrilhaEtapaStatus = {
+  pendente: "pendente",
+  em_andamento: "em_andamento",
+  concluido: "concluido",
+  bloqueado: "bloqueado",
+  nao_aplicavel: "nao_aplicavel",
+} as const;
+
+export interface TrilhaEtapa {
+  key: string;
+  ordem: number;
+  titulo: string;
+  descricao: string;
+  /** @nullable */
+  modulo?: string | null;
+  manual: boolean;
+  status: TrilhaEtapaStatus;
+  /** @nullable */
+  responsavel?: string | null;
+  /**
+   * ISO date (YYYY-MM-DD)
+   * @nullable
+   */
+  dataPrevista?: string | null;
+  /**
+   * ISO timestamp
+   * @nullable
+   */
+  dataConcluida?: string | null;
+  /** @nullable */
+  observacao?: string | null;
+  sugestao: TrilhaSugestao;
+  /** @nullable */
+  confirmadoPor?: string | null;
+  /**
+   * ISO timestamp
+   * @nullable
+   */
+  confirmadoEm?: string | null;
+}
+
+export interface TrilhaResumo {
+  etapa: number;
+  progresso: number;
+  resolvidas: number;
+  total: number;
+}
+
+export interface Trilha {
+  clinicId: string;
+  etapas: TrilhaEtapa[];
+  resumo: TrilhaResumo;
+}
+
+/**
+ * @nullable
+ */
+export type TrilhaEtapaUpdateStatus =
+  | (typeof TrilhaEtapaUpdateStatus)[keyof typeof TrilhaEtapaUpdateStatus]
+  | null;
+
+export const TrilhaEtapaUpdateStatus = {
+  pendente: "pendente",
+  em_andamento: "em_andamento",
+  concluido: "concluido",
+  bloqueado: "bloqueado",
+  nao_aplicavel: "nao_aplicavel",
+} as const;
+
+export interface TrilhaEtapaUpdate {
+  /** @nullable */
+  status?: TrilhaEtapaUpdateStatus;
+  /** @nullable */
+  responsavel?: string | null;
+  /**
+   * ISO date (YYYY-MM-DD)
+   * @nullable
+   */
+  dataPrevista?: string | null;
+  /** @nullable */
+  observacao?: string | null;
 }
 
 export interface TeamMember {

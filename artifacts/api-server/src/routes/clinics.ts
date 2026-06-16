@@ -227,8 +227,9 @@ router.patch("/clinics/:id", async (req, res): Promise<void> => {
   if (d.whatsapp !== undefined) updates.whatsapp = d.whatsapp;
   if (d.cargo !== undefined) updates.cargo = d.cargo;
   if (d.plano != null) updates.plano = d.plano;
-  if (d.etapa != null) updates.etapa = d.etapa;
-  if (d.progresso != null) updates.progresso = d.progresso;
+  // NOTE: etapa/progresso are no longer client-writable here. They are derived
+  // fields owned by the Trilha de Implementação (recomputed from confirmed
+  // stages) — see routes/trilha.ts + lib/trilha.ts.
   if (d.valorImplantacao !== undefined) updates.valorImplantacao = d.valorImplantacao?.toString() ?? null;
   if (d.valorRecorrente !== undefined) updates.valorRecorrente = d.valorRecorrente?.toString() ?? null;
   if (d.formaPagamento !== undefined) updates.formaPagamento = d.formaPagamento;

@@ -22,6 +22,8 @@ tags:
     description: Action plan (kanban)
   - name: risks
     description: Risk management
+  - name: trilha
+    description: Implementation journey (15-stage trilha)
   - name: team
     description: Team members
   - name: activity
@@ -1151,6 +1153,72 @@ paths:
               schema:
                 $ref: "#/components/schemas/GenerateRisksResponse"
 
+  # ─── TRILHA DE IMPLEMENTAÇÃO ────────────────────────────────────────────────
+  /clinics/{clinicId}/trilha:
+    get:
+      operationId: getTrilha
+      tags: [trilha]
+      summary: Get the 15-stage implementation journey for a clinic
+      description: >
+        Returns the fixed 15 stages with their per-clinic state merged with a
+        live "pronto para concluir" suggestion derived from existing module
+        data, plus the derived clinic-level summary (etapa atual + progresso %).
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trilha
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trilha"
+        "404":
+          description: Clinic not found
+
+  /clinics/{clinicId}/trilha/{etapaKey}:
+    patch:
+      operationId: updateTrilhaEtapa
+      tags: [trilha]
+      summary: Confirm/reopen/block a stage or edit its fields
+      description: >
+        Hybrid progression — the system only suggests; this endpoint applies an
+        explicit human decision. Updates the stage status (concluir, reabrir,
+        bloquear, marcar não se aplica) and/or its responsável, data prevista
+        and observação. Recomputes the clinic's etapa/progresso and records an
+        audit entry. Returns the full refreshed trilha.
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: etapaKey
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrilhaEtapaUpdate"
+      responses:
+        "200":
+          description: Updated trilha
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trilha"
+        "400":
+          description: Invalid stage key or body
+        "404":
+          description: Clinic not found
+
   # ─── TEAM ───────────────────────────────────────────────────────────────────
   /clinics/{clinicId}/team:
     get:
@@ -2143,10 +2211,6 @@ components:
           type: ["string", "null"]
         plano:
           type: ["string", "null"]
-        etapa:
-          type: ["integer", "null"]
-        progresso:
-          type: ["integer", "null"]
         valorImplantacao:
           type: ["number", "null"]
         valorRecorrente:
@@ -3069,6 +3133,112 @@ components:
         status:
           type: ["string", "null"]
         pilarSlug:
+          type: ["string", "null"]
+
+    # ─── TRILHA ───────────────────────────────────────────────────────────────
+    TrilhaSugestao:
+      type: object
+      properties:
+        pronto:
+          type: boolean
+        motivo:
+          type: string
+        computedAt:
+          type: string
+      required:
+        - pronto
+        - motivo
+        - computedAt
+
+    TrilhaEtapa:
+      type: object
+      properties:
+        key:
+          type: string
+        ordem:
+          type: integer
+        titulo:
+          type: string
+        descricao:
+          type: string
+        modulo:
+          type: ["string", "null"]
+        manual:
+          type: boolean
+        status:
+          type: string
+          enum: [pendente, em_andamento, concluido, bloqueado, nao_aplicavel]
+        responsavel:
+          type: ["string", "null"]
+        dataPrevista:
+          type: ["string", "null"]
+          description: "ISO date (YYYY-MM-DD)"
+        dataConcluida:
+          type: ["string", "null"]
+          description: "ISO timestamp"
+        observacao:
+          type: ["string", "null"]
+        sugestao:
+          $ref: "#/components/schemas/TrilhaSugestao"
+        confirmadoPor:
+          type: ["string", "null"]
+        confirmadoEm:
+          type: ["string", "null"]
+          description: "ISO timestamp"
+      required:
+        - key
+        - ordem
+        - titulo
+        - descricao
+        - manual
+        - status
+        - sugestao
+
+    TrilhaResumo:
+      type: object
+      properties:
+        etapa:
+          type: integer
+        progresso:
+          type: integer
+        resolvidas:
+          type: integer
+        total:
+          type: integer
+      required:
+        - etapa
+        - progresso
+        - resolvidas
+        - total
+
+    Trilha:
+      type: object
+      properties:
+        clinicId:
+          type: string
+        etapas:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrilhaEtapa"
+        resumo:
+          $ref: "#/components/schemas/TrilhaResumo"
+      required:
+        - clinicId
+        - etapas
+        - resumo
+
+    TrilhaEtapaUpdate:
+      type: object
+      properties:
+        status:
+          type: ["string", "null"]
+          enum: [pendente, em_andamento, concluido, bloqueado, nao_aplicavel, null]
+        responsavel:
+          type: ["string", "null"]
+        dataPrevista:
+          type: ["string", "null"]
+          description: "ISO date (YYYY-MM-DD)"
+        observacao:
           type: ["string", "null"]
 
     # ─── TEAM ───────────────────────────────────────────────────────────────

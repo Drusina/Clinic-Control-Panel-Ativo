@@ -5,6 +5,7 @@ import { startScheduler, stopScheduler } from "./lib/scheduler.js";
 import { initTokenSigningSecret } from "./lib/token-secret.js";
 import { bootstrapContratadaDefaults } from "./lib/config.js";
 import { seedPerguntasIfEmpty } from "./lib/perguntas-seed.js";
+import { backfillTrilha } from "./lib/trilha.js";
 
 if (!process.env.SUPER_ADMIN_SECRET || process.env.SUPER_ADMIN_SECRET.length === 0) {
   throw new Error(
@@ -87,6 +88,19 @@ async function main(): Promise<void> {
   await seedPerguntasIfEmpty().catch((e) =>
     logger.error({ err: e }, "Failed to seed perguntas — diagnostic page will start empty"),
   );
+
+  // Materialize Trilha de Implementação rows (all `pendente`) for pre-existing
+  // clinics and recompute clinics.etapa/progresso so cards reflect the
+  // trilha-derived model. NEVER auto-concludes a stage (hybrid rule: only a
+  // consultant PATCH concludes). Runs BEFORE app.listen so it cannot race the
+  // GET materializer. Idempotent (clinics with rows are skipped) and non-fatal.
+  await backfillTrilha()
+    .then((n) => {
+      if (n > 0) logger.info({ clinics: n }, "Trilha backfill seeded clinics");
+    })
+    .catch((e) =>
+      logger.error({ err: e }, "Failed to backfill trilha — stages will materialize lazily on first GET"),
+    );
 
   app.listen(port, async (err) => {
     if (err) {

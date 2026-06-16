@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useParams } from "wouter";
 import {
   useGetClinic,
   getGetClinicQueryKey,
 } from "@workspace/api-client-react";
+import { TrilhaStepper } from "@/components/trilha/trilha-stepper";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,10 +28,23 @@ import UsuariosTab from "./tabs/usuarios-tab";
 import AtividadeTab from "./tabs/atividade-tab";
 import DocumentosTab from "./tabs/documentos-tab";
 
+const ADMIN_MODULE_TABS: Record<string, { tab: string; label: string }> = {
+  cadastro: { tab: "cadastro", label: "Abrir Cadastro" },
+  financeiro: { tab: "financial", label: "Abrir Financeiro" },
+  documentos: { tab: "documentos", label: "Abrir Documentos" },
+  lgpd: { tab: "documentos", label: "Abrir Documentos" },
+  kickoff: { tab: "kickoff", label: "Abrir Kickoff" },
+  diagnostico: { tab: "diagnostics", label: "Abrir Diagnóstico" },
+  riscos: { tab: "risks", label: "Abrir Riscos" },
+  plano_acao: { tab: "actions", label: "Abrir Plano de Ação" },
+  painel: { tab: "overview", label: "Abrir Visão Geral" },
+};
+
 export default function ClinicDetail() {
   const params = useParams();
   const id = params.id as string;
   const backHref = "/admin/clinicas";
+  const [tab, setTab] = useState("cadastro");
 
   const { data: clinic, isLoading } = useGetClinic(id, {
     query: { enabled: !!id, queryKey: getGetClinicQueryKey(id) },
@@ -89,7 +104,24 @@ export default function ClinicDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="cadastro" className="w-full space-y-6">
+      <TrilhaStepper
+        clinicId={id}
+        moduleNav={(modulo) => {
+          if (!modulo) return null;
+          const m = ADMIN_MODULE_TABS[modulo];
+          if (!m) return null;
+          return {
+            kind: "action",
+            label: m.label,
+            onClick: () => {
+              setTab(m.tab);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            },
+          };
+        }}
+      />
+
+      <Tabs value={tab} onValueChange={setTab} className="w-full space-y-6">
         <TabsList className="bg-card border w-full flex overflow-x-auto justify-start rounded-md h-auto flex-wrap gap-1 p-1">
           <TabsTrigger value="cadastro" className="min-w-fit" data-testid="tab-cadastro">Cadastro</TabsTrigger>
           <TabsTrigger value="financial" className="min-w-fit" data-testid="tab-financial">Financeiro & Contrato</TabsTrigger>
