@@ -45,6 +45,7 @@ vi.mock("@/pages/processos/index", () => stub("processos"));
 vi.mock("@/pages/evidencias/index", () => stub("evidencias"));
 vi.mock("@/pages/documentos/index", () => stub("documentos"));
 vi.mock("@/pages/clinics/tabs/kickoff-tab", () => stub("kickoff"));
+vi.mock("@/pages/clinics/tabs/diagnostico-section", () => stub("diagnostico"));
 vi.mock("@/pages/clinics/tabs/diagnostics-tab", () => stub("diagnostico"));
 vi.mock("@/pages/clinics/tabs/team-tab", () => stub("equipe"));
 vi.mock("@/pages/clinics/tabs/rede-externa-tab", () => stub("rede-externa"));
@@ -85,9 +86,9 @@ function renderAt(path: string) {
 
 const current = (history: string[]) => history[history.length - 1];
 
-// [legacy URL module segment, canonical panel section]
+// [legacy URL module segment, canonical panel section (may include query)]
 const LEGACY_MODULES: Array<[string, string]> = [
-  ["delegacao", "delegacao"],
+  ["delegacao", "diagnostico?aba=delegacao"],
   ["riscos", "riscos"],
   ["acao", "acao"],
   ["processos", "processos"],

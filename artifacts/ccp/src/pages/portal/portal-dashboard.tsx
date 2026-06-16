@@ -16,7 +16,6 @@ import {
   LayoutDashboard,
   Rocket,
   Stethoscope,
-  Share2,
   ShieldAlert,
   ListChecks,
   Workflow,
@@ -51,6 +50,7 @@ interface Pendencia {
   key: string;
   label: string;
   secao?: string;
+  query?: string;
 }
 
 type IconType = typeof LayoutDashboard;
@@ -89,13 +89,6 @@ const MODULE_GROUPS: ModuleGroup[] = [
   {
     label: "Operação",
     modules: [
-      {
-        secao: "delegacao",
-        title: "Delegação",
-        description: "Respostas e delegação do diagnóstico",
-        icon: Share2,
-        metric: (ics) => (ics.seeded ? `${ics.delegacoes} delegações` : null),
-      },
       {
         secao: "riscos",
         title: "Mapa de Riscos",
@@ -160,9 +153,9 @@ const MODULE_GROUPS: ModuleGroup[] = [
   },
 ];
 
-const SHORTCUTS: { secao: string; label: string; icon: IconType }[] = [
+const SHORTCUTS: { secao: string; label: string; icon: IconType; query?: string }[] = [
   { secao: "diagnostico", label: "Abrir Diagnóstico", icon: Stethoscope },
-  { secao: "delegacao", label: "Nova delegação", icon: Plus },
+  { secao: "diagnostico", label: "Nova delegação", icon: Plus, query: "?aba=delegacao" },
   { secao: "documentos", label: "Enviar documento", icon: Upload },
   { secao: "acao", label: "Ver plano de ação", icon: ListChecks },
 ];
@@ -255,7 +248,8 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
           list.push({
             key: "delegacao",
             label: "Nenhuma delegação criada",
-            secao: "delegacao",
+            secao: "diagnostico",
+            query: "?aba=delegacao",
           });
         if (ics.risks === 0)
           list.push({
@@ -396,7 +390,7 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
                     return p.secao ? (
                       <Link
                         key={p.key}
-                        href={`/portal/clinica/${clinicId}/${p.secao}`}
+                        href={`/portal/clinica/${clinicId}/${p.secao}${p.query ?? ""}`}
                         className="block transition-opacity hover:opacity-80"
                         data-testid={`pendencia-${p.key}`}
                       >
@@ -426,7 +420,7 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
               {SHORTCUTS.map((s) => {
                 const Icon = s.icon;
                 return (
-                  <Link key={s.label} href={`/portal/clinica/${clinicId}/${s.secao}`}>
+                  <Link key={s.label} href={`/portal/clinica/${clinicId}/${s.secao}${s.query ?? ""}`}>
                     <Button
                       variant="outline"
                       className="w-full justify-start gap-2"

@@ -16,7 +16,7 @@ The project is structured as a pnpm workspace monorepo, utilizing Node.js 24 and
 - **Clinic Detail:** Organized into 11 tabs covering various aspects like 'Cadastro', 'Financeiro & Contrato', 'Status', 'Usuários', and operational modules.
 - **Diagnostic Wizard:** A full-screen, autosaving interface for a 150-question diagnostic, presenting results with a radar chart and AI insights.
 - **Operational Modules:**
-    - **Delegação:** A two-level delegation table for 8 pillars with status management.
+    - **Delegação:** A two-level delegation table for 8 pillars with status management. Lives as the "Delegação & Respostas" tab INSIDE the "Diagnóstico 360°" module (`pages/clinics/tabs/diagnostico-section.tsx`), URL-driven via `?aba=delegacao`; it is no longer a standalone card in the "Operação" section. Legacy entry points (`/portal/delegacao/:id`, `/portal/clinica/:id/delegacao`) redirect to `/portal/clinica/:id/diagnostico?aba=delegacao`.
     - **Mapa de Riscos:** A 5x5 CSS grid risk matrix with color-coding and ranked lists.
     - **Kanban Board:** A drag-and-drop Kanban board with 5 columns for action plans, featuring priority indicators and filtering.
 - **PWA:** Configured with `vite-plugin-pwa` for manifest, icons, and a Workbox service worker for caching.

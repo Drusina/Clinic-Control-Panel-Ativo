@@ -21,7 +21,16 @@ import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
-export default function DiagnosticsTab({ clinicId }: { clinicId: string }) {
+export default function DiagnosticsTab({
+  clinicId,
+  buildDelegacaoHref,
+}: {
+  clinicId: string;
+  buildDelegacaoHref?: (diagnosticoId: string) => string;
+}) {
+  const delegacaoHref =
+    buildDelegacaoHref ??
+    ((id: string) => `/delegacao/${clinicId}?diagnostico=${id}`);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: diagnostics, isLoading } = useListDiagnostics(clinicId, {
@@ -121,7 +130,7 @@ export default function DiagnosticsTab({ clinicId }: { clinicId: string }) {
           <CardContent>
             <div className="bg-muted/50 p-4 rounded-md text-sm text-muted-foreground text-center space-y-3">
               <p>Responda às perguntas e delegue pilares, módulos ou perguntas individuais na tela de Delegação.</p>
-              <Link href={`/delegacao/${clinicId}?diagnostico=${inProgress.id}`}>
+              <Link href={delegacaoHref(inProgress.id)}>
                 <Button size="sm" variant="default">
                   <ListChecks className="h-4 w-4 mr-2" />
                   Abrir delegação e responder
@@ -199,7 +208,7 @@ export default function DiagnosticsTab({ clinicId }: { clinicId: string }) {
                         </AlertDialogContent>
                       </AlertDialog>
                     )}
-                    <Link href={`/delegacao/${clinicId}?diagnostico=${diag.id}`}>
+                    <Link href={delegacaoHref(diag.id)}>
                       <Button size="sm" variant="ghost" className="text-xs">
                         <ListChecks className="h-3 w-3 mr-1" /> Ver respostas
                       </Button>

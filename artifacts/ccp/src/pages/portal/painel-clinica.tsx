@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { setActiveClinicId } from "@/hooks/use-auth";
 import PortalDashboard from "./portal-dashboard";
 import KickoffTab from "@/pages/clinics/tabs/kickoff-tab";
-import DiagnosticsTab from "@/pages/clinics/tabs/diagnostics-tab";
+import DiagnosticoSection from "@/pages/clinics/tabs/diagnostico-section";
 import TeamTab from "@/pages/clinics/tabs/team-tab";
 import RedeExternaTab from "@/pages/clinics/tabs/rede-externa-tab";
 import SistemasAcessosTab from "@/pages/clinics/tabs/sistemas-acessos-tab";
-import DelegacaoPage from "@/pages/delegacao/index";
 import RiscosPage from "@/pages/riscos/index";
 import AcaoPage from "@/pages/acao/index";
 import ProcessosPage from "@/pages/processos/index";
@@ -19,7 +18,6 @@ import DocumentosPage from "@/pages/documentos/index";
 const SECTION_LABELS: Record<string, string> = {
   kickoff: "Kickoff",
   diagnostico: "Diagnóstico 360°",
-  delegacao: "Delegação",
   riscos: "Mapa de Riscos",
   acao: "Plano de Ação",
   processos: "Processos",
@@ -35,9 +33,7 @@ function renderSection(secao: string, clinicId: string) {
     case "kickoff":
       return <KickoffTab clinicId={clinicId} />;
     case "diagnostico":
-      return <DiagnosticsTab clinicId={clinicId} />;
-    case "delegacao":
-      return <DelegacaoPage embedded />;
+      return <DiagnosticoSection clinicId={clinicId} />;
     case "riscos":
       return <RiscosPage embedded />;
     case "acao":
@@ -76,6 +72,12 @@ export default function PainelClinica() {
 
   if (secao === "visao-geral") {
     return <PortalDashboard clinicId={clinicId} />;
+  }
+
+  if (secao === "delegacao") {
+    return (
+      <Redirect to={`/portal/clinica/${clinicId}/diagnostico?aba=delegacao`} />
+    );
   }
 
   const label = SECTION_LABELS[secao];
