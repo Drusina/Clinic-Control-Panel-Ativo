@@ -224,4 +224,69 @@ describe("runReminderCheck — atomic claim + dispatch", () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
     expect(sendPushToEmailMock).toHaveBeenCalledTimes(1);
   });
+
+  it("releases the claim for retry when the reminder cannot be recorded, then succeeds next run", async () => {
+    const [due] = await db
+      .insert(compromissosTable)
+      .values({
+        clinicId,
+        titulo: "Falha transitória",
+        inicio: minutesFromNow(30),
+        status: "agendado",
+        lembreteMinutosAntes: 60,
+        responsavelEmail: `resp-${suffix}@example.com`,
+      })
+      .returning();
+
+    // Force the canonical in-app notification insert to fail on this run. The
+    // claim stamps the row first, so without the release-on-failure safeguard
+    // the reminder would be silently lost forever.
+    const insertSpy = vi.spyOn(db, "insert").mockImplementationOnce(() => {
+      throw new Error("simulated notification insert failure");
+    });
+
+    const failed = await runReminderCheck();
+    insertSpy.mockRestore();
+
+    expect(failed.claimed).toBe(1);
+    expect(failed.requeued).toBe(1);
+    expect(failed.emailsSent).toBe(0);
+    // Nothing reached the user, so no external channel should have fired.
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(sendPushToEmailMock).not.toHaveBeenCalled();
+
+    // The claim must have been released back to NULL so the row is due again.
+    const [afterFail] = await db
+      .select()
+      .from(compromissosTable)
+      .where(eq(compromissosTable.id, due.id));
+    expect(afterFail.lembreteEnviadoEm).toBeNull();
+
+    // No partial in-app notification should linger from the failed run.
+    const notifsAfterFail = await db
+      .select()
+      .from(notificationsTable)
+      .where(eq(notificationsTable.clinicId, clinicId));
+    expect(notifsAfterFail).toHaveLength(0);
+
+    // Next tick retries and delivers cleanly — exactly once.
+    const retried = await runReminderCheck();
+    expect(retried.claimed).toBe(1);
+    expect(retried.requeued).toBe(0);
+    expect(retried.emailsSent).toBe(1);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendPushToEmailMock).toHaveBeenCalledTimes(1);
+
+    const [afterRetry] = await db
+      .select()
+      .from(compromissosTable)
+      .where(eq(compromissosTable.id, due.id));
+    expect(afterRetry.lembreteEnviadoEm).not.toBeNull();
+
+    const notifsAfterRetry = await db
+      .select()
+      .from(notificationsTable)
+      .where(eq(notificationsTable.clinicId, clinicId));
+    expect(notifsAfterRetry).toHaveLength(1);
+  });
 });
