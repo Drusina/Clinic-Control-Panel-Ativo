@@ -1094,6 +1094,139 @@ paths:
         "204":
           description: Deleted
 
+  /clinics/{clinicId}/compromissos:
+    get:
+      operationId: listCompromissos
+      tags: [agenda]
+      summary: List agenda appointments for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          description: ISO instant; only appointments with inicio >= from
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          description: ISO instant; only appointments with inicio <= to
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [reuniao, tarefa, marco]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [agendado, concluido, cancelado]
+        - name: etapaKey
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: acaoId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Appointments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Compromisso"
+    post:
+      operationId: createCompromisso
+      tags: [agenda]
+      summary: Create an appointment
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompromissoInput"
+      responses:
+        "201":
+          description: Created appointment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Compromisso"
+
+  /compromissos/{id}:
+    get:
+      operationId: getCompromisso
+      tags: [agenda]
+      summary: Get an appointment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Appointment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Compromisso"
+    patch:
+      operationId: updateCompromisso
+      tags: [agenda]
+      summary: Update an appointment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompromissoUpdate"
+      responses:
+        "200":
+          description: Updated appointment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Compromisso"
+    delete:
+      operationId: deleteCompromisso
+      tags: [agenda]
+      summary: Delete an appointment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
   /clinics/{clinicId}/diagnostics/{diagnosticId}/generate-risks/preview:
     post:
       operationId: previewRisksFromDiagnostic
@@ -3134,6 +3267,127 @@ components:
           type: ["string", "null"]
         pilarSlug:
           type: ["string", "null"]
+
+    # ─── AGENDA / COMPROMISSOS ──────────────────────────────────────────────
+    Compromisso:
+      type: object
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        tipo:
+          type: string
+          enum: [reuniao, tarefa, marco]
+        titulo:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        inicio:
+          type: string
+        fim:
+          type: ["string", "null"]
+        diaInteiro:
+          type: boolean
+        responsavelNome:
+          type: ["string", "null"]
+        responsavelEmail:
+          type: ["string", "null"]
+        local:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [agendado, concluido, cancelado]
+        etapaKey:
+          type: ["string", "null"]
+        acaoId:
+          type: ["string", "null"]
+        lembreteMinutosAntes:
+          type: ["integer", "null"]
+        lembreteEnviadoEm:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - clinicId
+        - tipo
+        - titulo
+        - inicio
+        - diaInteiro
+        - status
+        - createdAt
+        - updatedAt
+
+    CompromissoInput:
+      type: object
+      properties:
+        tipo:
+          type: string
+          enum: [reuniao, tarefa, marco]
+        titulo:
+          type: string
+          minLength: 1
+        descricao:
+          type: ["string", "null"]
+        inicio:
+          type: string
+        fim:
+          type: ["string", "null"]
+        diaInteiro:
+          type: boolean
+        responsavelNome:
+          type: ["string", "null"]
+        responsavelEmail:
+          type: ["string", "null"]
+        local:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [agendado, concluido, cancelado]
+        etapaKey:
+          type: ["string", "null"]
+        acaoId:
+          type: ["string", "null"]
+        lembreteMinutosAntes:
+          type: ["integer", "null"]
+      required:
+        - titulo
+        - inicio
+
+    CompromissoUpdate:
+      type: object
+      properties:
+        tipo:
+          type: ["string", "null"]
+          enum: [reuniao, tarefa, marco, null]
+        titulo:
+          type: ["string", "null"]
+        descricao:
+          type: ["string", "null"]
+        inicio:
+          type: ["string", "null"]
+        fim:
+          type: ["string", "null"]
+        diaInteiro:
+          type: ["boolean", "null"]
+        responsavelNome:
+          type: ["string", "null"]
+        responsavelEmail:
+          type: ["string", "null"]
+        local:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+          enum: [agendado, concluido, cancelado, null]
+        etapaKey:
+          type: ["string", "null"]
+        acaoId:
+          type: ["string", "null"]
+        lembreteMinutosAntes:
+          type: ["integer", "null"]
 
     # ─── TRILHA ───────────────────────────────────────────────────────────────
     TrilhaSugestao:

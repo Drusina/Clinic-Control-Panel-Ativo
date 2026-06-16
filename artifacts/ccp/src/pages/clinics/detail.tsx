@@ -27,6 +27,7 @@ import StatusTab from "./tabs/status-tab";
 import UsuariosTab from "./tabs/usuarios-tab";
 import AtividadeTab from "./tabs/atividade-tab";
 import DocumentosTab from "./tabs/documentos-tab";
+import AgendaModule from "@/components/agenda/agenda-module";
 
 const ADMIN_MODULE_TABS: Record<string, { tab: string; label: string }> = {
   cadastro: { tab: "cadastro", label: "Abrir Cadastro" },
@@ -134,6 +135,7 @@ export default function ClinicDetail() {
           <TabsTrigger value="diagnostics" className="min-w-fit">Diagnóstico</TabsTrigger>
           <TabsTrigger value="risks" className="min-w-fit">Riscos</TabsTrigger>
           <TabsTrigger value="actions" className="min-w-fit">Plano de Ação</TabsTrigger>
+          <TabsTrigger value="agenda" className="min-w-fit" data-testid="tab-agenda">Agenda</TabsTrigger>
           <TabsTrigger value="team" className="min-w-fit">Equipe</TabsTrigger>
           <TabsTrigger value="rede-externa" className="min-w-fit" data-testid="tab-rede-externa">Rede Externa</TabsTrigger>
           <TabsTrigger value="sistemas-acessos" className="min-w-fit" data-testid="tab-sistemas-acessos">Sistemas e Acessos</TabsTrigger>
@@ -168,6 +170,9 @@ export default function ClinicDetail() {
         </TabsContent>
         <TabsContent value="actions">
           <ActionPlanTab clinicId={id} />
+        </TabsContent>
+        <TabsContent value="agenda">
+          <AgendaModule clinicId={id} />
         </TabsContent>
         <TabsContent value="risks">
           <RisksTab clinicId={id} />

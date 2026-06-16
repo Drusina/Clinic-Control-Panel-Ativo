@@ -448,6 +448,44 @@ export function buildExpiryDigestEmail(params: {
   return baseTemplate("Documentos próximos ao vencimento — IONEX360", body);
 }
 
+export function buildReminderEmail(params: {
+  clinicName: string;
+  titulo: string;
+  tipoLabel: string;
+  quando: string;
+  local?: string | null;
+  descricao?: string | null;
+  appUrl: string;
+  agendaPath?: string;
+}): string {
+  const detailRow = (label: string, value: string) => `
+      <tr>
+        <td style="padding:8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;width:120px;vertical-align:top;">${label}</td>
+        <td style="padding:8px 0;color:#e2e8f0;font-size:14px;">${value}</td>
+      </tr>`;
+
+  const localRow = params.local ? detailRow("Local", params.local) : "";
+  const descricaoRow = params.descricao ? detailRow("Detalhes", params.descricao) : "";
+  const agendaLink = `${params.appUrl}${params.agendaPath ?? "/portal"}`;
+
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Lembrete de compromisso</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      Você tem um(a) <strong style="color:#e2e8f0;">${params.tipoLabel}</strong> agendado(a) na clínica <strong style="color:#e2e8f0;">${params.clinicName}</strong>.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
+      ${detailRow("Título", params.titulo)}
+      ${detailRow("Quando", params.quando)}
+      ${localRow}
+      ${descricaoRow}
+    </table>
+
+    ${primaryButton(agendaLink, "Abrir agenda →")}
+  `;
+  return baseTemplate("Lembrete de compromisso — IONEX360", body);
+}
+
 export function buildSigningConfirmationEmail(params: {
   signatarioNome: string;
   termoNome: string;

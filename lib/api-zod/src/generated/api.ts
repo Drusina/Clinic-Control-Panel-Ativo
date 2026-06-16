@@ -1374,6 +1374,166 @@ export const DeleteRiskParams = zod.object({
 });
 
 /**
+ * @summary List agenda appointments for a clinic
+ */
+export const ListCompromissosParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ListCompromissosQueryParams = zod.object({
+  from: zod.coerce
+    .string()
+    .optional()
+    .describe("ISO instant; only appointments with inicio >= from"),
+  to: zod.coerce
+    .string()
+    .optional()
+    .describe("ISO instant; only appointments with inicio <= to"),
+  tipo: zod.enum(["reuniao", "tarefa", "marco"]).optional(),
+  status: zod.enum(["agendado", "concluido", "cancelado"]).optional(),
+  etapaKey: zod.coerce.string().optional(),
+  acaoId: zod.coerce.string().optional(),
+});
+
+export const ListCompromissosResponseItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  tipo: zod.enum(["reuniao", "tarefa", "marco"]),
+  titulo: zod.string(),
+  descricao: zod.string().nullish(),
+  inicio: zod.string(),
+  fim: zod.string().nullish(),
+  diaInteiro: zod.boolean(),
+  responsavelNome: zod.string().nullish(),
+  responsavelEmail: zod.string().nullish(),
+  local: zod.string().nullish(),
+  status: zod.enum(["agendado", "concluido", "cancelado"]),
+  etapaKey: zod.string().nullish(),
+  acaoId: zod.string().nullish(),
+  lembreteMinutosAntes: zod.number().nullish(),
+  lembreteEnviadoEm: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListCompromissosResponse = zod.array(ListCompromissosResponseItem);
+
+/**
+ * @summary Create an appointment
+ */
+export const CreateCompromissoParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const CreateCompromissoBody = zod.object({
+  tipo: zod.enum(["reuniao", "tarefa", "marco"]).optional(),
+  titulo: zod.string().min(1),
+  descricao: zod.string().nullish(),
+  inicio: zod.string(),
+  fim: zod.string().nullish(),
+  diaInteiro: zod.boolean().optional(),
+  responsavelNome: zod.string().nullish(),
+  responsavelEmail: zod.string().nullish(),
+  local: zod.string().nullish(),
+  status: zod.enum(["agendado", "concluido", "cancelado"]).optional(),
+  etapaKey: zod.string().nullish(),
+  acaoId: zod.string().nullish(),
+  lembreteMinutosAntes: zod.number().nullish(),
+});
+
+/**
+ * @summary Get an appointment
+ */
+export const GetCompromissoParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetCompromissoResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  tipo: zod.enum(["reuniao", "tarefa", "marco"]),
+  titulo: zod.string(),
+  descricao: zod.string().nullish(),
+  inicio: zod.string(),
+  fim: zod.string().nullish(),
+  diaInteiro: zod.boolean(),
+  responsavelNome: zod.string().nullish(),
+  responsavelEmail: zod.string().nullish(),
+  local: zod.string().nullish(),
+  status: zod.enum(["agendado", "concluido", "cancelado"]),
+  etapaKey: zod.string().nullish(),
+  acaoId: zod.string().nullish(),
+  lembreteMinutosAntes: zod.number().nullish(),
+  lembreteEnviadoEm: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Update an appointment
+ */
+export const UpdateCompromissoParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateCompromissoBody = zod.object({
+  tipo: zod
+    .union([
+      zod.literal("reuniao"),
+      zod.literal("tarefa"),
+      zod.literal("marco"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  titulo: zod.string().nullish(),
+  descricao: zod.string().nullish(),
+  inicio: zod.string().nullish(),
+  fim: zod.string().nullish(),
+  diaInteiro: zod.boolean().nullish(),
+  responsavelNome: zod.string().nullish(),
+  responsavelEmail: zod.string().nullish(),
+  local: zod.string().nullish(),
+  status: zod
+    .union([
+      zod.literal("agendado"),
+      zod.literal("concluido"),
+      zod.literal("cancelado"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  etapaKey: zod.string().nullish(),
+  acaoId: zod.string().nullish(),
+  lembreteMinutosAntes: zod.number().nullish(),
+});
+
+export const UpdateCompromissoResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  tipo: zod.enum(["reuniao", "tarefa", "marco"]),
+  titulo: zod.string(),
+  descricao: zod.string().nullish(),
+  inicio: zod.string(),
+  fim: zod.string().nullish(),
+  diaInteiro: zod.boolean(),
+  responsavelNome: zod.string().nullish(),
+  responsavelEmail: zod.string().nullish(),
+  local: zod.string().nullish(),
+  status: zod.enum(["agendado", "concluido", "cancelado"]),
+  etapaKey: zod.string().nullish(),
+  acaoId: zod.string().nullish(),
+  lembreteMinutosAntes: zod.number().nullish(),
+  lembreteEnviadoEm: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Delete an appointment
+ */
+export const DeleteCompromissoParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary Generate thematic risks from a diagnostic's weak answers without persisting them
  */
 export const PreviewRisksFromDiagnosticParams = zod.object({

@@ -48,6 +48,7 @@ import clinicDocumentsRouter from "./clinic-documents";
 import societaryDocsRouter from "./societary-docs";
 import respondentRouter from "./respondent";
 import trilhaRouter from "./trilha";
+import compromissosRouter from "./compromissos";
 import { clinicLogoPublicRouter, clinicLogoScopedRouter } from "./clinic-logo";
 
 const router: IRouter = Router();
@@ -105,6 +106,7 @@ router.use(requireClinicAccess, trilhaRouter);
 router.use(requireClinicAccess, kickoffsRouter);
 router.use(requireClinicAccess, actionsRouter);
 router.use(requireClinicAccess, risksRouter);
+router.use(requireClinicAccess, compromissosRouter);
 router.use(requireClinicAccess, faturasRouter);
 router.use(requireClinicAccess, perfilOperacionalRouter);
 router.use(requireClinicAccess, parceirosExternosRouter);

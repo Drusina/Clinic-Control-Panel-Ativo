@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { 
   useListActions, 
   getListActionsQueryKey, 
   useCreateAction, 
   useUpdateAction, 
-  useDeleteAction 
+  useDeleteAction,
+  useListCompromissos,
+  getListCompromissosQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, Calendar, User, MoreVertical, Trash2 } from "lucide-react";
+import { Plus, Loader2, Calendar, CalendarClock, User, MoreVertical } from "lucide-react";
+import AgendaModule from "@/components/agenda/agenda-module";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -57,9 +60,34 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingAction, setEditingAction] = useState<Action | null>(null);
 
+  const [agendaAction, setAgendaAction] = useState<Action | null>(null);
+
   const { data: actions, isLoading } = useListActions(clinicId, undefined, {
     query: { enabled: !!clinicId, queryKey: getListActionsQueryKey(clinicId) },
   });
+
+  const compromissoParams = useMemo(
+    () => ({ from: new Date().toISOString(), status: "agendado" as const }),
+    [],
+  );
+  const { data: compromissos } = useListCompromissos(clinicId, compromissoParams, {
+    query: {
+      enabled: !!clinicId,
+      queryKey: getListCompromissosQueryKey(clinicId, compromissoParams),
+    },
+  });
+
+  const nextByAction = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of compromissos ?? []) {
+      if (!c.acaoId) continue;
+      const current = map.get(c.acaoId);
+      if (!current || new Date(c.inicio) < new Date(current)) {
+        map.set(c.acaoId, c.inicio);
+      }
+    }
+    return map;
+  }, [compromissos]);
 
   const createAction = useCreateAction();
   const updateAction = useUpdateAction();
@@ -201,6 +229,9 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => openDialog(action)}>Editar</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAgendaAction(action)}>
+                          Agendar
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDelete(action.id)} className="text-destructive">
                           Excluir
                         </DropdownMenuItem>
@@ -225,6 +256,24 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                       <div className="flex items-center gap-1.5 truncate">
                         <User className="h-3 w-3 shrink-0" /> <span className="truncate">{action.responsavelNome}</span>
                       </div>
+                    )}
+                    {nextByAction.get(action.id) && (
+                      <button
+                        type="button"
+                        onClick={() => setAgendaAction(action)}
+                        className="flex items-center gap-1.5 text-primary hover:underline"
+                        data-testid={`acao-proximo-compromisso-${action.id}`}
+                      >
+                        <CalendarClock className="h-3 w-3 shrink-0" />
+                        <span className="truncate">
+                          {new Date(nextByAction.get(action.id)!).toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -339,6 +388,17 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!agendaAction} onOpenChange={(open) => !open && setAgendaAction(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Agenda — {agendaAction?.titulo}</DialogTitle>
+          </DialogHeader>
+          {agendaAction && (
+            <AgendaModule clinicId={clinicId} filterAcaoId={agendaAction.id} embedded />
+          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -1,0 +1,227 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
+import { randomUUID } from "crypto";
+
+const { sendEmailMock, sendPushToEmailMock, getRecipientPrefsMock } = vi.hoisted(() => ({
+  sendEmailMock: vi.fn(async () => true),
+  sendPushToEmailMock: vi.fn(async () => ({ sent: 1, failed: 0 })),
+  getRecipientPrefsMock: vi.fn(async () => ({
+    emailEnabled: true,
+    whatsappEnabled: false,
+  })),
+}));
+
+vi.mock("./email.js", () => ({
+  sendEmail: sendEmailMock,
+  buildReminderEmail: vi.fn(() => "<html>reminder</html>"),
+  resolveAppUrl: vi.fn(async () => "https://app.test"),
+}));
+vi.mock("./push.js", () => ({
+  sendPushToEmail: sendPushToEmailMock,
+}));
+vi.mock("./preferences.js", () => ({
+  getRecipientPrefs: getRecipientPrefsMock,
+}));
+
+import {
+  db,
+  clinicsTable,
+  compromissosTable,
+  notificationsTable,
+} from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { runReminderCheck } from "./reminder-check.js";
+
+const suffix = randomUUID().slice(0, 8);
+let clinicId: string;
+let clinicNoEmailId: string;
+
+function minutesFromNow(min: number): Date {
+  return new Date(Date.now() + min * 60_000);
+}
+
+beforeAll(async () => {
+  const [c1] = await db
+    .insert(clinicsTable)
+    .values({
+      nome: `Reminder Clinic ${suffix}`,
+      cnpj: `rem-${suffix}`,
+      email: `clinic-${suffix}@example.com`,
+    })
+    .returning();
+  clinicId = c1.id;
+
+  const [c2] = await db
+    .insert(clinicsTable)
+    .values({ nome: `Reminder NoEmail ${suffix}`, cnpj: `rem-ne-${suffix}` })
+    .returning();
+  clinicNoEmailId = c2.id;
+});
+
+afterAll(async () => {
+  await db.delete(compromissosTable).where(eq(compromissosTable.clinicId, clinicId));
+  await db.delete(compromissosTable).where(eq(compromissosTable.clinicId, clinicNoEmailId));
+  await db.delete(notificationsTable).where(eq(notificationsTable.clinicId, clinicId));
+  await db.delete(notificationsTable).where(eq(notificationsTable.clinicId, clinicNoEmailId));
+  await db.delete(clinicsTable).where(eq(clinicsTable.id, clinicId));
+  await db.delete(clinicsTable).where(eq(clinicsTable.id, clinicNoEmailId));
+});
+
+beforeEach(async () => {
+  await db.delete(compromissosTable).where(eq(compromissosTable.clinicId, clinicId));
+  await db.delete(compromissosTable).where(eq(compromissosTable.clinicId, clinicNoEmailId));
+  await db.delete(notificationsTable).where(eq(notificationsTable.clinicId, clinicId));
+  await db.delete(notificationsTable).where(eq(notificationsTable.clinicId, clinicNoEmailId));
+  sendEmailMock.mockClear();
+  sendPushToEmailMock.mockClear();
+  getRecipientPrefsMock.mockClear();
+});
+
+describe("runReminderCheck — atomic claim + dispatch", () => {
+  it("claims a due appointment, sends email + push, writes a notification, and is idempotent", async () => {
+    const [due] = await db
+      .insert(compromissosTable)
+      .values({
+        clinicId,
+        tipo: "reuniao",
+        titulo: "Reunião due",
+        inicio: minutesFromNow(30),
+        status: "agendado",
+        lembreteMinutosAntes: 60,
+        responsavelEmail: `resp-${suffix}@example.com`,
+      })
+      .returning();
+
+    const first = await runReminderCheck();
+    expect(first.claimed).toBe(1);
+    expect(first.emailsSent).toBe(1);
+    expect(first.pushSent).toBe(1);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendPushToEmailMock).toHaveBeenCalledTimes(1);
+    // Push must be resolved with the clinicId to prevent cross-clinic leaks,
+    // and the deep link must target the real clinic-scoped agenda route (there
+    // is no bare `/agenda` route in the app).
+    expect(sendPushToEmailMock).toHaveBeenCalledWith(
+      `resp-${suffix}@example.com`,
+      clinicId,
+      expect.objectContaining({ url: `/portal/clinica/${clinicId}/agenda` }),
+    );
+
+    const [row] = await db
+      .select()
+      .from(compromissosTable)
+      .where(eq(compromissosTable.id, due.id));
+    expect(row.lembreteEnviadoEm).not.toBeNull();
+
+    const notifs = await db
+      .select()
+      .from(notificationsTable)
+      .where(eq(notificationsTable.clinicId, clinicId));
+    expect(notifs).toHaveLength(1);
+    expect(notifs[0].tipo).toBe("lembrete_compromisso");
+    // In-app notification must deep link to the real clinic-scoped agenda route.
+    expect(notifs[0].acaoUrl).toBe(`/portal/clinica/${clinicId}/agenda`);
+
+    // Second run must claim nothing — the stamp blocks re-sends.
+    const second = await runReminderCheck();
+    expect(second.claimed).toBe(0);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not claim appointments outside the reminder window, already sent, or not scheduled", async () => {
+    await db.insert(compromissosTable).values([
+      // Too far in the future (window not open yet).
+      {
+        clinicId,
+        titulo: "Far future",
+        inicio: minutesFromNow(60 * 24),
+        status: "agendado",
+        lembreteMinutosAntes: 60,
+        responsavelEmail: `resp-${suffix}@example.com`,
+      },
+      // Already reminded.
+      {
+        clinicId,
+        titulo: "Already sent",
+        inicio: minutesFromNow(30),
+        status: "agendado",
+        lembreteMinutosAntes: 60,
+        lembreteEnviadoEm: new Date(),
+        responsavelEmail: `resp-${suffix}@example.com`,
+      },
+      // Not scheduled.
+      {
+        clinicId,
+        titulo: "Cancelled",
+        inicio: minutesFromNow(30),
+        status: "cancelado",
+        lembreteMinutosAntes: 60,
+        responsavelEmail: `resp-${suffix}@example.com`,
+      },
+      // No reminder offset.
+      {
+        clinicId,
+        titulo: "No offset",
+        inicio: minutesFromNow(30),
+        status: "agendado",
+        responsavelEmail: `resp-${suffix}@example.com`,
+      },
+      // In the past (already started).
+      {
+        clinicId,
+        titulo: "Past",
+        inicio: minutesFromNow(-30),
+        status: "agendado",
+        lembreteMinutosAntes: 60,
+        responsavelEmail: `resp-${suffix}@example.com`,
+      },
+    ]);
+
+    const result = await runReminderCheck();
+    expect(result.claimed).toBe(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("claims an appointment with no recipient but still records the in-app notification without emailing", async () => {
+    await db.insert(compromissosTable).values({
+      clinicId: clinicNoEmailId,
+      titulo: "Sem destinatário",
+      inicio: minutesFromNow(30),
+      status: "agendado",
+      lembreteMinutosAntes: 60,
+    });
+
+    const result = await runReminderCheck();
+    expect(result.claimed).toBe(1);
+    expect(result.skipped).toBe(1);
+    expect(result.emailsSent).toBe(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+
+    const notifs = await db
+      .select()
+      .from(notificationsTable)
+      .where(eq(notificationsTable.clinicId, clinicNoEmailId));
+    expect(notifs).toHaveLength(1);
+  });
+
+  it("skips email when recipient muted email but still sends push", async () => {
+    getRecipientPrefsMock.mockResolvedValueOnce({
+      emailEnabled: false,
+      whatsappEnabled: false,
+    });
+
+    await db.insert(compromissosTable).values({
+      clinicId,
+      titulo: "Email muted",
+      inicio: minutesFromNow(30),
+      status: "agendado",
+      lembreteMinutosAntes: 60,
+      responsavelEmail: `resp-${suffix}@example.com`,
+    });
+
+    const result = await runReminderCheck();
+    expect(result.claimed).toBe(1);
+    expect(result.emailsSent).toBe(0);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(sendPushToEmailMock).toHaveBeenCalledTimes(1);
+  });
+});

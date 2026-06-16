@@ -1,9 +1,12 @@
 import { type JobWithMetadata, PgBoss } from "pg-boss";
 import { logger } from "./logger.js";
 import { runExpiryCheck } from "./expiry-check.js";
+import { runReminderCheck } from "./reminder-check.js";
 
 const EXPIRY_JOB_NAME = "expiry-digest";
 const EXPIRY_CRON = "0 7 * * *";
+const REMINDER_JOB_NAME = "compromisso-reminder";
+const REMINDER_CRON = "*/15 * * * *";
 const RETRY_LIMIT = 3;
 const RETRY_DELAY_SECONDS = 300;
 
@@ -79,6 +82,45 @@ export async function startScheduler(): Promise<void> {
 
   await boss.schedule(EXPIRY_JOB_NAME, EXPIRY_CRON, {}, { tz: "America/Sao_Paulo" });
   logger.info({ cron: EXPIRY_CRON }, "Expiry digest job scheduled");
+
+  await boss.createQueue(REMINDER_JOB_NAME, queueOptions);
+  await boss.updateQueue(REMINDER_JOB_NAME, queueOptions);
+
+  await boss.work(
+    REMINDER_JOB_NAME,
+    { includeMetadata: true },
+    async (jobs: JobWithMetadata[]) => {
+      const job = jobs[0];
+      if (!job) return;
+
+      const retryCount = job.retryCount;
+      const retryLimit = job.retryLimit;
+      logger.info({ jobId: job.id, retryCount, retryLimit }, "Running scheduled compromisso reminder check");
+
+      try {
+        const result = await runReminderCheck();
+        logger.info({ jobId: job.id, retryCount, retryLimit, result }, "Scheduled compromisso reminder check completed");
+        return result;
+      } catch (err: unknown) {
+        const isPermanentFailure = retryCount >= retryLimit;
+        if (isPermanentFailure) {
+          logger.error(
+            { err, jobId: job.id, retryCount, retryLimit },
+            "Compromisso reminder job permanently failed after all retries exhausted"
+          );
+        } else {
+          logger.warn(
+            { err, jobId: job.id, retryCount, retryLimit },
+            "Compromisso reminder job attempt failed; will retry"
+          );
+        }
+        throw err;
+      }
+    }
+  );
+
+  await boss.schedule(REMINDER_JOB_NAME, REMINDER_CRON, {}, { tz: "America/Sao_Paulo" });
+  logger.info({ cron: REMINDER_CRON }, "Compromisso reminder job scheduled");
 }
 
 export async function stopScheduler(): Promise<void> {

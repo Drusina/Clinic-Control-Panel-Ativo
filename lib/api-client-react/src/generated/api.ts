@@ -27,6 +27,9 @@ import type {
   Clinic,
   ClinicListResponse,
   CommitGeneratedRisksBody,
+  Compromisso,
+  CompromissoInput,
+  CompromissoUpdate,
   CreateActionBody,
   CreateActivityBody,
   CreateClinicBody,
@@ -63,6 +66,7 @@ import type {
   Kickoff,
   ListActionsParams,
   ListClinicsParams,
+  ListCompromissosParams,
   Notification,
   ParceiroExterno,
   PerguntaInput,
@@ -4569,6 +4573,468 @@ export const useDeleteRisk = <
   TContext
 > => {
   return useMutation(getDeleteRiskMutationOptions(options));
+};
+
+/**
+ * @summary List agenda appointments for a clinic
+ */
+export const getListCompromissosUrl = (
+  clinicId: string,
+  params?: ListCompromissosParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/clinics/${clinicId}/compromissos?${stringifiedParams}`
+    : `/api/clinics/${clinicId}/compromissos`;
+};
+
+export const listCompromissos = async (
+  clinicId: string,
+  params?: ListCompromissosParams,
+  options?: RequestInit,
+): Promise<Compromisso[]> => {
+  return customFetch<Compromisso[]>(getListCompromissosUrl(clinicId, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCompromissosQueryKey = (
+  clinicId: string,
+  params?: ListCompromissosParams,
+) => {
+  return [
+    `/api/clinics/${clinicId}/compromissos`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListCompromissosQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCompromissos>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  params?: ListCompromissosParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCompromissos>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListCompromissosQueryKey(clinicId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCompromissos>>
+  > = ({ signal }) =>
+    listCompromissos(clinicId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCompromissos>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCompromissosQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCompromissos>>
+>;
+export type ListCompromissosQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List agenda appointments for a clinic
+ */
+
+export function useListCompromissos<
+  TData = Awaited<ReturnType<typeof listCompromissos>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  params?: ListCompromissosParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCompromissos>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCompromissosQueryOptions(
+    clinicId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create an appointment
+ */
+export const getCreateCompromissoUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/compromissos`;
+};
+
+export const createCompromisso = async (
+  clinicId: string,
+  compromissoInput: CompromissoInput,
+  options?: RequestInit,
+): Promise<Compromisso> => {
+  return customFetch<Compromisso>(getCreateCompromissoUrl(clinicId), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(compromissoInput),
+  });
+};
+
+export const getCreateCompromissoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCompromisso>>,
+    TError,
+    { clinicId: string; data: BodyType<CompromissoInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCompromisso>>,
+  TError,
+  { clinicId: string; data: BodyType<CompromissoInput> },
+  TContext
+> => {
+  const mutationKey = ["createCompromisso"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCompromisso>>,
+    { clinicId: string; data: BodyType<CompromissoInput> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return createCompromisso(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCompromissoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCompromisso>>
+>;
+export type CreateCompromissoMutationBody = BodyType<CompromissoInput>;
+export type CreateCompromissoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create an appointment
+ */
+export const useCreateCompromisso = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCompromisso>>,
+    TError,
+    { clinicId: string; data: BodyType<CompromissoInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCompromisso>>,
+  TError,
+  { clinicId: string; data: BodyType<CompromissoInput> },
+  TContext
+> => {
+  return useMutation(getCreateCompromissoMutationOptions(options));
+};
+
+/**
+ * @summary Get an appointment
+ */
+export const getGetCompromissoUrl = (id: string) => {
+  return `/api/compromissos/${id}`;
+};
+
+export const getCompromisso = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Compromisso> => {
+  return customFetch<Compromisso>(getGetCompromissoUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCompromissoQueryKey = (id: string) => {
+  return [`/api/compromissos/${id}`] as const;
+};
+
+export const getGetCompromissoQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCompromisso>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCompromisso>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCompromissoQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompromisso>>> = ({
+    signal,
+  }) => getCompromisso(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCompromisso>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCompromissoQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCompromisso>>
+>;
+export type GetCompromissoQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get an appointment
+ */
+
+export function useGetCompromisso<
+  TData = Awaited<ReturnType<typeof getCompromisso>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getCompromisso>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCompromissoQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update an appointment
+ */
+export const getUpdateCompromissoUrl = (id: string) => {
+  return `/api/compromissos/${id}`;
+};
+
+export const updateCompromisso = async (
+  id: string,
+  compromissoUpdate: CompromissoUpdate,
+  options?: RequestInit,
+): Promise<Compromisso> => {
+  return customFetch<Compromisso>(getUpdateCompromissoUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(compromissoUpdate),
+  });
+};
+
+export const getUpdateCompromissoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCompromisso>>,
+    TError,
+    { id: string; data: BodyType<CompromissoUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateCompromisso>>,
+  TError,
+  { id: string; data: BodyType<CompromissoUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateCompromisso"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateCompromisso>>,
+    { id: string; data: BodyType<CompromissoUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateCompromisso(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateCompromissoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateCompromisso>>
+>;
+export type UpdateCompromissoMutationBody = BodyType<CompromissoUpdate>;
+export type UpdateCompromissoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update an appointment
+ */
+export const useUpdateCompromisso = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCompromisso>>,
+    TError,
+    { id: string; data: BodyType<CompromissoUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateCompromisso>>,
+  TError,
+  { id: string; data: BodyType<CompromissoUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateCompromissoMutationOptions(options));
+};
+
+/**
+ * @summary Delete an appointment
+ */
+export const getDeleteCompromissoUrl = (id: string) => {
+  return `/api/compromissos/${id}`;
+};
+
+export const deleteCompromisso = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteCompromissoUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteCompromissoMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCompromisso>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteCompromisso>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteCompromisso"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteCompromisso>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteCompromisso(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteCompromissoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteCompromisso>>
+>;
+
+export type DeleteCompromissoMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an appointment
+ */
+export const useDeleteCompromisso = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteCompromisso>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteCompromisso>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteCompromissoMutationOptions(options));
 };
 
 /**

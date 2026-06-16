@@ -14,12 +14,14 @@ import AcaoPage from "@/pages/acao/index";
 import ProcessosPage from "@/pages/processos/index";
 import EvidenciasPage from "@/pages/evidencias/index";
 import DocumentosPage from "@/pages/documentos/index";
+import AgendaModule from "@/components/agenda/agenda-module";
 
 const SECTION_LABELS: Record<string, string> = {
   kickoff: "Kickoff",
   diagnostico: "Diagnóstico 360°",
   riscos: "Mapa de Riscos",
   acao: "Plano de Ação",
+  agenda: "Agenda",
   processos: "Processos",
   evidencias: "Evidências",
   documentos: "Documentos",
@@ -38,6 +40,8 @@ function renderSection(secao: string, clinicId: string) {
       return <RiscosPage embedded />;
     case "acao":
       return <AcaoPage embedded />;
+    case "agenda":
+      return <AgendaModule clinicId={clinicId} embedded />;
     case "processos":
       return <ProcessosPage embedded />;
     case "evidencias":

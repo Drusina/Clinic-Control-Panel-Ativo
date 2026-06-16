@@ -36,3 +36,4 @@ export * from "./document_categories";
 export * from "./clinic_documents";
 export * from "./societary_extractions";
 export * from "./trilha_etapas";
+export * from "./compromissos";

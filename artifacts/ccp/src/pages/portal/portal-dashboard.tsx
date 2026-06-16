@@ -23,6 +23,7 @@ import {
   Stethoscope,
   ShieldAlert,
   ListChecks,
+  CalendarDays,
   Workflow,
   FileText,
   Paperclip,
@@ -107,6 +108,12 @@ const MODULE_GROUPS: ModuleGroup[] = [
         description: "Kanban de ações e tarefas",
         icon: ListChecks,
         metric: (ics) => (ics.seeded ? `${ics.actions} ações` : null),
+      },
+      {
+        secao: "agenda",
+        title: "Agenda",
+        description: "Reuniões, tarefas e marcos com lembretes",
+        icon: CalendarDays,
       },
       {
         secao: "processos",

@@ -971,6 +971,152 @@ export interface UpdateRiskBody {
   pilarSlug?: string | null;
 }
 
+export type CompromissoTipo =
+  (typeof CompromissoTipo)[keyof typeof CompromissoTipo];
+
+export const CompromissoTipo = {
+  reuniao: "reuniao",
+  tarefa: "tarefa",
+  marco: "marco",
+} as const;
+
+export type CompromissoStatus =
+  (typeof CompromissoStatus)[keyof typeof CompromissoStatus];
+
+export const CompromissoStatus = {
+  agendado: "agendado",
+  concluido: "concluido",
+  cancelado: "cancelado",
+} as const;
+
+export interface Compromisso {
+  id: string;
+  clinicId: string;
+  tipo: CompromissoTipo;
+  titulo: string;
+  /** @nullable */
+  descricao?: string | null;
+  inicio: string;
+  /** @nullable */
+  fim?: string | null;
+  diaInteiro: boolean;
+  /** @nullable */
+  responsavelNome?: string | null;
+  /** @nullable */
+  responsavelEmail?: string | null;
+  /** @nullable */
+  local?: string | null;
+  status: CompromissoStatus;
+  /** @nullable */
+  etapaKey?: string | null;
+  /** @nullable */
+  acaoId?: string | null;
+  /** @nullable */
+  lembreteMinutosAntes?: number | null;
+  /** @nullable */
+  lembreteEnviadoEm?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CompromissoInputTipo =
+  (typeof CompromissoInputTipo)[keyof typeof CompromissoInputTipo];
+
+export const CompromissoInputTipo = {
+  reuniao: "reuniao",
+  tarefa: "tarefa",
+  marco: "marco",
+} as const;
+
+export type CompromissoInputStatus =
+  (typeof CompromissoInputStatus)[keyof typeof CompromissoInputStatus];
+
+export const CompromissoInputStatus = {
+  agendado: "agendado",
+  concluido: "concluido",
+  cancelado: "cancelado",
+} as const;
+
+export interface CompromissoInput {
+  tipo?: CompromissoInputTipo;
+  /** @minLength 1 */
+  titulo: string;
+  /** @nullable */
+  descricao?: string | null;
+  inicio: string;
+  /** @nullable */
+  fim?: string | null;
+  diaInteiro?: boolean;
+  /** @nullable */
+  responsavelNome?: string | null;
+  /** @nullable */
+  responsavelEmail?: string | null;
+  /** @nullable */
+  local?: string | null;
+  status?: CompromissoInputStatus;
+  /** @nullable */
+  etapaKey?: string | null;
+  /** @nullable */
+  acaoId?: string | null;
+  /** @nullable */
+  lembreteMinutosAntes?: number | null;
+}
+
+/**
+ * @nullable
+ */
+export type CompromissoUpdateTipo =
+  | (typeof CompromissoUpdateTipo)[keyof typeof CompromissoUpdateTipo]
+  | null;
+
+export const CompromissoUpdateTipo = {
+  reuniao: "reuniao",
+  tarefa: "tarefa",
+  marco: "marco",
+} as const;
+
+/**
+ * @nullable
+ */
+export type CompromissoUpdateStatus =
+  | (typeof CompromissoUpdateStatus)[keyof typeof CompromissoUpdateStatus]
+  | null;
+
+export const CompromissoUpdateStatus = {
+  agendado: "agendado",
+  concluido: "concluido",
+  cancelado: "cancelado",
+} as const;
+
+export interface CompromissoUpdate {
+  /** @nullable */
+  tipo?: CompromissoUpdateTipo;
+  /** @nullable */
+  titulo?: string | null;
+  /** @nullable */
+  descricao?: string | null;
+  /** @nullable */
+  inicio?: string | null;
+  /** @nullable */
+  fim?: string | null;
+  /** @nullable */
+  diaInteiro?: boolean | null;
+  /** @nullable */
+  responsavelNome?: string | null;
+  /** @nullable */
+  responsavelEmail?: string | null;
+  /** @nullable */
+  local?: string | null;
+  /** @nullable */
+  status?: CompromissoUpdateStatus;
+  /** @nullable */
+  etapaKey?: string | null;
+  /** @nullable */
+  acaoId?: string | null;
+  /** @nullable */
+  lembreteMinutosAntes?: number | null;
+}
+
 export interface TrilhaSugestao {
   pronto: boolean;
   motivo: string;
@@ -1462,6 +1608,39 @@ export type ListActionsParams = {
    */
   coluna?: string | null;
 };
+
+export type ListCompromissosParams = {
+  /**
+   * ISO instant; only appointments with inicio >= from
+   */
+  from?: string;
+  /**
+   * ISO instant; only appointments with inicio <= to
+   */
+  to?: string;
+  tipo?: ListCompromissosTipo;
+  status?: ListCompromissosStatus;
+  etapaKey?: string;
+  acaoId?: string;
+};
+
+export type ListCompromissosTipo =
+  (typeof ListCompromissosTipo)[keyof typeof ListCompromissosTipo];
+
+export const ListCompromissosTipo = {
+  reuniao: "reuniao",
+  tarefa: "tarefa",
+  marco: "marco",
+} as const;
+
+export type ListCompromissosStatus =
+  (typeof ListCompromissosStatus)[keyof typeof ListCompromissosStatus];
+
+export const ListCompromissosStatus = {
+  agendado: "agendado",
+  concluido: "concluido",
+  cancelado: "cancelado",
+} as const;
 
 export type BulkInviteTeamMembersBody = {
   /** @maxItems 200 */
