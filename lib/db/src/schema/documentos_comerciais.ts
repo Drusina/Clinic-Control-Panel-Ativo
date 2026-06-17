@@ -6,6 +6,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -82,6 +83,8 @@ export const documentosComerciaisTable = pgTable(
     snapshot: jsonb("snapshot").$type<CondicoesComerciaisSnapshot>(),
     pdfPath: text("pdf_path"),
     docHash: text("doc_hash"),
+    // Nome de quem gerou esta versão (autor exibido no histórico de versões).
+    geradoPorNome: text("gerado_por_nome"),
 
     // Assinatura simples de parte única (proposta) — espelha lgpd_signature_requests.
     signingToken: text("signing_token").unique(),
@@ -114,6 +117,13 @@ export const documentosComerciaisTable = pgTable(
   (t) => [
     index("documentos_comerciais_clinic_tipo_idx").on(t.clinicId, t.tipo),
     index("documentos_comerciais_status_idx").on(t.status),
+    // Garante que duas gerações concorrentes nunca colidam na mesma versão
+    // (backstop ao pg_advisory_xact_lock usado na geração).
+    uniqueIndex("documentos_comerciais_clinic_tipo_versao_uniq").on(
+      t.clinicId,
+      t.tipo,
+      t.versao,
+    ),
   ],
 );
 
