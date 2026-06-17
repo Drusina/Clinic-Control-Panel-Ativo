@@ -16,6 +16,11 @@ import {
   trilhaEtapasTable,
   lgpdTermosTable,
   risksTable,
+  docsConstitutivoTable,
+  docsConstitutivoFilesTable,
+  societaryExtractionsTable,
+  clinicDocumentsTable,
+  documentCategoriesTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { signToken, requireClinicAccess } from "../middleware/auth";
@@ -40,6 +45,10 @@ let backfillClinicId: string;
 let lgpdClinicId: string;
 let revertClinicId: string;
 let overrideClinicId: string;
+let docsSocietaryClinicId: string;
+let docsChildFileClinicId: string;
+let docsLegacyClinicId: string;
+let docsEmptyClinicId: string;
 
 const SYSTEM_ACTOR = "Sistema (automático)";
 
@@ -84,6 +93,67 @@ beforeAll(async () => {
   lgpdClinicId = await makeClinic("lgpd");
   revertClinicId = await makeClinic("revert");
   overrideClinicId = await makeClinic("override");
+  docsSocietaryClinicId = await makeClinic("docs-societary");
+  docsChildFileClinicId = await makeClinic("docs-childfile");
+  docsLegacyClinicId = await makeClinic("docs-legacy");
+  docsEmptyClinicId = await makeClinic("docs-empty");
+
+  // Path 3 — "Documentos Societários (com análise por IA)": writes to
+  // clinic_documents + societary_extractions, never docs_constitutivos.
+  const [societaryCategory] = await db
+    .insert(documentCategoriesTable)
+    .values({ clinicId: docsSocietaryClinicId, name: "Contratos e Aditivos" })
+    .returning();
+  const [societaryDoc] = await db
+    .insert(clinicDocumentsTable)
+    .values({
+      clinicId: docsSocietaryClinicId,
+      categoryId: societaryCategory.id,
+      title: "Contrato Social",
+      fileName: "contrato-social.pdf",
+      storagePath: "/objects/test/contrato-social.pdf",
+    })
+    .returning();
+  await db.insert(societaryExtractionsTable).values({
+    clinicId: docsSocietaryClinicId,
+    documentId: societaryDoc.id,
+    tipo: "contrato_social",
+    extraction: { resumo: "Resumo de teste" },
+    status: "ready",
+  });
+
+  // Path 2 — multi-file slot: parent docs_constitutivos row with storage_path
+  // NULL, the actual file in a child docs_constitutivos_files row.
+  const [childParent] = await db
+    .insert(docsConstitutivoTable)
+    .values({
+      clinicId: docsChildFileClinicId,
+      categoria: "Jurídico",
+      nome: "Contrato Social",
+    })
+    .returning();
+  await db.insert(docsConstitutivoFilesTable).values({
+    docId: childParent.id,
+    storagePath: "/objects/test/child-file.pdf",
+    fileName: "child-file.pdf",
+    sequenceNumber: 1,
+  });
+
+  // Path 1 — legacy single-file slot: parent row carries storage_path directly.
+  await db.insert(docsConstitutivoTable).values({
+    clinicId: docsLegacyClinicId,
+    categoria: "Jurídico",
+    nome: "Contrato Social",
+    storagePath: "/objects/test/legacy.pdf",
+  });
+
+  // Negative — a seeded-but-empty slot (no storage_path, no child files) must
+  // NOT count as an uploaded document.
+  await db.insert(docsConstitutivoTable).values({
+    clinicId: docsEmptyClinicId,
+    categoria: "Jurídico",
+    nome: "Contrato Social",
+  });
 });
 
 afterAll(async () => {
@@ -91,6 +161,20 @@ afterAll(async () => {
     await db
       .delete(trilhaEtapasTable)
       .where(eq(trilhaEtapasTable.clinicId, id));
+    // clinic_documents must be removed before document_categories — the
+    // category FK is ON DELETE RESTRICT, so deleting the category first (or
+    // letting the clinic cascade race) would fail. Removing clinic_documents
+    // also cascades its societary_extractions rows.
+    await db
+      .delete(clinicDocumentsTable)
+      .where(eq(clinicDocumentsTable.clinicId, id));
+    await db
+      .delete(documentCategoriesTable)
+      .where(eq(documentCategoriesTable.clinicId, id));
+    // docs_constitutivos cascades to docs_constitutivos_files.
+    await db
+      .delete(docsConstitutivoTable)
+      .where(eq(docsConstitutivoTable.clinicId, id));
     await db.delete(clinicsTable).where(eq(clinicsTable.id, id));
   }
 });
@@ -284,5 +368,38 @@ describe("Trilha de Implementação — automatic completion", () => {
       .set("Authorization", `Bearer ${superAdminToken()}`)
       .send({ status: "concluido" });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("Trilha — 'Documentos Constitutivos' detects all upload surfaces", () => {
+  it("auto-concludes from a societary_extractions row (Documentos Societários / IA path)", async () => {
+    const res = await getTrilha(docsSocietaryClinicId);
+    const docs = findEtapa(res.body.etapas, "docs_constitutivos")!;
+    expect(docs.status).toBe("concluido");
+    expect(docs.confirmadoPor).toBe(SYSTEM_ACTOR);
+    expect(docs.sugestao.pronto).toBe(true);
+  });
+
+  it("auto-concludes from a multi-file slot whose file lives only in docs_constitutivos_files", async () => {
+    const res = await getTrilha(docsChildFileClinicId);
+    const docs = findEtapa(res.body.etapas, "docs_constitutivos")!;
+    expect(docs.status).toBe("concluido");
+    expect(docs.confirmadoPor).toBe(SYSTEM_ACTOR);
+    expect(docs.sugestao.pronto).toBe(true);
+  });
+
+  it("auto-concludes from a legacy parent storage_path (backward compat)", async () => {
+    const res = await getTrilha(docsLegacyClinicId);
+    const docs = findEtapa(res.body.etapas, "docs_constitutivos")!;
+    expect(docs.status).toBe("concluido");
+    expect(docs.confirmadoPor).toBe(SYSTEM_ACTOR);
+    expect(docs.sugestao.pronto).toBe(true);
+  });
+
+  it("stays pendente for a seeded-but-empty slot (no storage_path, no child files)", async () => {
+    const res = await getTrilha(docsEmptyClinicId);
+    const docs = findEtapa(res.body.etapas, "docs_constitutivos")!;
+    expect(docs.status).toBe("pendente");
+    expect(docs.sugestao.pronto).toBe(false);
   });
 });

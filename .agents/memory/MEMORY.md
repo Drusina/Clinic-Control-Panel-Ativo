@@ -5,4 +5,5 @@
 - [wouter Link renders its own anchor](wouter-link-anchor.md) — in ccp, `<Link href>` IS the `<a>`; never nest `<a>` inside it; style the Link directly for clickable cards.
 - [Portal section deep-links](portal-section-deeplinks.md) — portal modules are sections at /portal/clinica/:clinicId/:secao (no bare /:secao route); server notification/push/email links must be clinic-scoped.
 - [Document preview disposition](document-preview-disposition.md) — private objects serve attachment by default; inline preview is opt-in, gated server-side on a PDF/raster allowlist (excl HTML/SVG) to avoid stored XSS.
-- [Trilha hybrid progression](trilha-hybrid-progression.md) — system suggests "pronto", consultant confirms via PATCH; backfill/GET must seed pendente only and NEVER auto-conclude; clinics.etapa/progresso are derived, not hand-typed.
+- [Trilha auto-progression](trilha-hybrid-progression.md) — reconcileTrilha auto-concludes detectable stages on GET+boot (actor "Sistema (automático)"); only manual marcos + human overrides stay human-driven; etapa/progresso derived.
+- [Constitutive docs surfaces](constitutive-docs-surfaces.md) — "has constitutive docs?" must union 3 disjoint stores: docs_constitutivos.storage_path, docs_constitutivos_files, societary_extractions.

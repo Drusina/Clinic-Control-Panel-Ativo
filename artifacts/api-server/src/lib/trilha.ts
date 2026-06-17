@@ -1,6 +1,9 @@
 import {
   eq,
   and,
+  or,
+  exists,
+  sql,
   count,
   countDistinct,
   isNotNull,
@@ -13,6 +16,8 @@ import {
   clinicsTable,
   trilhaEtapasTable,
   docsConstitutivoTable,
+  docsConstitutivoFilesTable,
+  societaryExtractionsTable,
   lgpdTermosTable,
   clinicActivityTable,
   kickoffsTable,
@@ -83,6 +88,48 @@ async function countLgpdFormalizados(cid: string): Promise<number> {
   return Number(row?.c ?? 0);
 }
 
+/**
+ * Count the constitutive documents a clinic has on file, across ALL real upload
+ * surfaces. A clinic can populate this stage through three independent paths:
+ *   1. Legacy single-file slot — `docs_constitutivos.storage_path` is set.
+ *   2. Multi-file slot — files live in child `docs_constitutivos_files` rows
+ *      while the parent `storage_path` stays NULL.
+ *   3. "Documentos Societários (com análise por IA)" — writes to
+ *      `societary_extractions` (+ `clinic_documents`), never `docs_constitutivos`.
+ * The previous signal only counted path 1, so clinics that uploaded via paths 2
+ * or 3 were stuck on "Pendente". The two sources are disjoint tables, so no row
+ * is ever counted twice (a clinic that happens to use both features just shows a
+ * higher total — only the `docsCount > 0` completion check matters here).
+ */
+async function countConstitutiveDocs(cid: string): Promise<number> {
+  const [docsRow, societaryRow] = await Promise.all([
+    db
+      .select({ c: count() })
+      .from(docsConstitutivoTable)
+      .where(
+        and(
+          eq(docsConstitutivoTable.clinicId, cid),
+          or(
+            isNotNull(docsConstitutivoTable.storagePath),
+            exists(
+              db
+                .select({ x: sql`1` })
+                .from(docsConstitutivoFilesTable)
+                .where(
+                  eq(docsConstitutivoFilesTable.docId, docsConstitutivoTable.id),
+                ),
+            ),
+          ),
+        ),
+      ),
+    db
+      .select({ c: count() })
+      .from(societaryExtractionsTable)
+      .where(eq(societaryExtractionsTable.clinicId, cid)),
+  ]);
+  return Number(docsRow[0]?.c ?? 0) + Number(societaryRow[0]?.c ?? 0);
+}
+
 function nonEmpty(s: string | null | undefined): boolean {
   return typeof s === "string" && s.trim().length > 0;
 }
@@ -105,13 +152,7 @@ async function gatherSignals(clinic: Clinic): Promise<TrilhaSignals> {
     risksCount,
     actionsCount,
   ] = await Promise.all([
-    countRows(
-      docsConstitutivoTable,
-      and(
-        eq(docsConstitutivoTable.clinicId, cid),
-        isNotNull(docsConstitutivoTable.storagePath),
-      ),
-    ),
+    countConstitutiveDocs(cid),
     countLgpdFormalizados(cid),
     countRows(kickoffsTable, eq(kickoffsTable.clinicId, cid)),
     countRows(teamTable, eq(teamTable.clinicId, cid)),
