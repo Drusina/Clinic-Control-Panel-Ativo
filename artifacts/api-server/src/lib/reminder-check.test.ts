@@ -1,13 +1,21 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { randomUUID } from "crypto";
 
-const { sendEmailMock, sendPushToEmailMock, getRecipientPrefsMock } = vi.hoisted(() => ({
+const {
+  sendEmailMock,
+  sendPushToEmailMock,
+  getRecipientPrefsMock,
+  sendReminderWhatsAppMock,
+  isWhatsAppConfiguredMock,
+} = vi.hoisted(() => ({
   sendEmailMock: vi.fn(async () => true),
   sendPushToEmailMock: vi.fn(async () => ({ sent: 1, failed: 0 })),
   getRecipientPrefsMock: vi.fn(async () => ({
     emailEnabled: true,
     whatsappEnabled: false,
   })),
+  sendReminderWhatsAppMock: vi.fn(async () => true),
+  isWhatsAppConfiguredMock: vi.fn(() => true),
 }));
 
 vi.mock("./email.js", () => ({
@@ -21,12 +29,17 @@ vi.mock("./push.js", () => ({
 vi.mock("./preferences.js", () => ({
   getRecipientPrefs: getRecipientPrefsMock,
 }));
+vi.mock("./whatsapp.js", () => ({
+  sendReminderWhatsApp: sendReminderWhatsAppMock,
+  isWhatsAppConfigured: isWhatsAppConfiguredMock,
+}));
 
 import {
   db,
   clinicsTable,
   compromissosTable,
   notificationsTable,
+  teamTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { runReminderCheck } from "./reminder-check.js";
@@ -58,6 +71,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.delete(teamTable).where(eq(teamTable.clinicId, clinicId));
   await db.delete(compromissosTable).where(eq(compromissosTable.clinicId, clinicId));
   await db.delete(compromissosTable).where(eq(compromissosTable.clinicId, clinicNoEmailId));
   await db.delete(notificationsTable).where(eq(notificationsTable.clinicId, clinicId));
@@ -71,9 +85,14 @@ beforeEach(async () => {
   await db.delete(compromissosTable).where(eq(compromissosTable.clinicId, clinicNoEmailId));
   await db.delete(notificationsTable).where(eq(notificationsTable.clinicId, clinicId));
   await db.delete(notificationsTable).where(eq(notificationsTable.clinicId, clinicNoEmailId));
+  await db.delete(teamTable).where(eq(teamTable.clinicId, clinicId));
   sendEmailMock.mockClear();
   sendPushToEmailMock.mockClear();
   getRecipientPrefsMock.mockClear();
+  sendReminderWhatsAppMock.mockClear();
+  sendReminderWhatsAppMock.mockResolvedValue(true);
+  isWhatsAppConfiguredMock.mockClear();
+  isWhatsAppConfiguredMock.mockReturnValue(true);
 });
 
 describe("runReminderCheck — atomic claim + dispatch", () => {
@@ -223,6 +242,87 @@ describe("runReminderCheck — atomic claim + dispatch", () => {
     expect(result.emailsSent).toBe(0);
     expect(sendEmailMock).not.toHaveBeenCalled();
     expect(sendPushToEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends a WhatsApp reminder when the recipient opted in and has a clinic-scoped phone", async () => {
+    getRecipientPrefsMock.mockResolvedValueOnce({
+      emailEnabled: true,
+      whatsappEnabled: true,
+    });
+    await db.insert(teamTable).values({
+      clinicId,
+      nome: "Resp WhatsApp",
+      email: `resp-${suffix}@example.com`,
+      whatsapp: "+55 11 99999-0000",
+    });
+
+    await db.insert(compromissosTable).values({
+      clinicId,
+      titulo: "WhatsApp reminder",
+      inicio: minutesFromNow(30),
+      status: "agendado",
+      lembreteMinutosAntes: 60,
+      responsavelEmail: `resp-${suffix}@example.com`,
+    });
+
+    const result = await runReminderCheck();
+    expect(result.claimed).toBe(1);
+    expect(result.whatsappSent).toBe(1);
+    expect(sendReminderWhatsAppMock).toHaveBeenCalledTimes(1);
+    expect(sendReminderWhatsAppMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phone: "+55 11 99999-0000",
+        titulo: "WhatsApp reminder",
+      }),
+    );
+  });
+
+  it("does not send WhatsApp when the recipient muted the channel", async () => {
+    getRecipientPrefsMock.mockResolvedValueOnce({
+      emailEnabled: true,
+      whatsappEnabled: false,
+    });
+    await db.insert(teamTable).values({
+      clinicId,
+      nome: "Resp WhatsApp Muted",
+      email: `resp-${suffix}@example.com`,
+      whatsapp: "+55 11 99999-0000",
+    });
+
+    await db.insert(compromissosTable).values({
+      clinicId,
+      titulo: "WhatsApp muted",
+      inicio: minutesFromNow(30),
+      status: "agendado",
+      lembreteMinutosAntes: 60,
+      responsavelEmail: `resp-${suffix}@example.com`,
+    });
+
+    const result = await runReminderCheck();
+    expect(result.claimed).toBe(1);
+    expect(result.whatsappSent).toBe(0);
+    expect(sendReminderWhatsAppMock).not.toHaveBeenCalled();
+  });
+
+  it("does not send WhatsApp when the recipient has no phone on record", async () => {
+    getRecipientPrefsMock.mockResolvedValueOnce({
+      emailEnabled: true,
+      whatsappEnabled: true,
+    });
+
+    await db.insert(compromissosTable).values({
+      clinicId,
+      titulo: "WhatsApp no phone",
+      inicio: minutesFromNow(30),
+      status: "agendado",
+      lembreteMinutosAntes: 60,
+      responsavelEmail: `resp-${suffix}@example.com`,
+    });
+
+    const result = await runReminderCheck();
+    expect(result.claimed).toBe(1);
+    expect(result.whatsappSent).toBe(0);
+    expect(sendReminderWhatsAppMock).not.toHaveBeenCalled();
   });
 
   it("releases the claim for retry when the reminder cannot be recorded, then succeeds next run", async () => {

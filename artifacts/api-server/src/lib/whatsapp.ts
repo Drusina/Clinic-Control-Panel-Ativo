@@ -9,7 +9,7 @@ export function isWhatsAppConfigured(): boolean {
 
 export async function sendWhatsAppTemplate(params: {
   to: string;
-  templateName: "delegacao_pilar" | "aprovacao_termo";
+  templateName: "delegacao_pilar" | "aprovacao_termo" | "lembrete_compromisso";
   components?: Array<{
     type: "body";
     parameters: Array<{ type: "text"; text: string }>;
@@ -82,6 +82,28 @@ export async function sendApprovalWhatsApp(params: {
         parameters: [
           { type: "text", text: params.responsavelNome },
           { type: "text", text: params.termoNome },
+        ],
+      },
+    ],
+  });
+}
+
+export async function sendReminderWhatsApp(params: {
+  phone: string;
+  titulo: string;
+  quando: string;
+  clinicName: string;
+}): Promise<boolean> {
+  return sendWhatsAppTemplate({
+    to: params.phone,
+    templateName: "lembrete_compromisso",
+    components: [
+      {
+        type: "body",
+        parameters: [
+          { type: "text", text: params.titulo },
+          { type: "text", text: params.quando },
+          { type: "text", text: params.clinicName },
         ],
       },
     ],

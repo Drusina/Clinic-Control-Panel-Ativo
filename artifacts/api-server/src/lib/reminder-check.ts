@@ -3,11 +3,13 @@ import {
   compromissosTable,
   clinicsTable,
   notificationsTable,
+  teamTable,
 } from "@workspace/db";
 import { and, eq, gt, lte, isNull, isNotNull, sql } from "drizzle-orm";
 import { sendEmail, buildReminderEmail, resolveAppUrl } from "./email.js";
 import { getRecipientPrefs } from "./preferences.js";
 import { sendPushToEmail } from "./push.js";
+import { sendReminderWhatsApp, isWhatsAppConfigured } from "./whatsapp.js";
 import { logger } from "./logger.js";
 
 const TIPO_LABEL: Record<string, string> = {
@@ -46,8 +48,8 @@ function formatQuando(inicio: Date, diaInteiro: boolean): string {
  *  - In-app notification (the bell) is the CANONICAL reminder record. It is
  *    persisted regardless of channel preferences, so the user always has the
  *    reminder in-app even when email is muted.
- *  - Web push + email are best-effort enhancements layered on top; their
- *    failures are swallowed and never resurface the reminder (which would
+ *  - Web push + email + WhatsApp are best-effort enhancements layered on top;
+ *    their failures are swallowed and never resurface the reminder (which would
  *    duplicate the bell entry / risk a duplicate email).
  *
  * Fault tolerance: because the claim stamps the row BEFORE dispatch, a failure
@@ -56,15 +58,18 @@ function formatQuando(inicio: Date, diaInteiro: boolean): string {
  * To avoid that, when a row could not be recorded we RELEASE the claim
  * (`lembrete_enviado_em` back to NULL) so the next cron tick retries it.
  *
- * WhatsApp is intentionally NOT a channel here — there is no approved Meta
- * Cloud template for appointment reminders, and adding one is a separate,
- * externally-gated task (tracked as a follow-up). Email + push + the in-app
- * bell fully cover the recipient in the meantime.
+ * WhatsApp uses the pre-approved `lembrete_compromisso` Meta Cloud template and
+ * follows the same graceful-fallback pattern as the delegation/approval senders:
+ * it only fires when the channel is configured, the recipient has a phone on
+ * their `equipe_interna` record, and they have not muted WhatsApp in their
+ * notification preferences. A send failure is swallowed (best-effort) just like
+ * push and email.
  */
 export async function runReminderCheck(): Promise<{
   claimed: number;
   emailsSent: number;
   pushSent: number;
+  whatsappSent: number;
   skipped: number;
   requeued: number;
 }> {
@@ -86,12 +91,13 @@ export async function runReminderCheck(): Promise<{
     .returning();
 
   if (claimed.length === 0) {
-    return { claimed: 0, emailsSent: 0, pushSent: 0, skipped: 0, requeued: 0 };
+    return { claimed: 0, emailsSent: 0, pushSent: 0, whatsappSent: 0, skipped: 0, requeued: 0 };
   }
 
   const appUrl = await resolveAppUrl();
   let emailsSent = 0;
   let pushSent = 0;
+  let whatsappSent = 0;
   let skipped = 0;
   let requeued = 0;
 
@@ -163,6 +169,34 @@ export async function runReminderCheck(): Promise<{
         }).catch(() => false);
         if (ok) emailsSent++;
       }
+
+      // WhatsApp — uses the pre-approved `lembrete_compromisso` template. Only
+      // fires when the channel is configured, the recipient opted in, and they
+      // have a phone on their `equipe_interna` record for this clinic. Resolved
+      // clinic-scoped (email + clinicId) so a duplicate email across clinics can
+      // never receive another clinic's number. Best-effort: failures swallowed.
+      if (prefs.whatsappEnabled && isWhatsAppConfigured()) {
+        const [member] = await db
+          .select({ whatsapp: teamTable.whatsapp })
+          .from(teamTable)
+          .where(
+            and(
+              eq(teamTable.clinicId, appt.clinicId),
+              sql`lower(${teamTable.email}) = lower(${recipient})`,
+            ),
+          )
+          .limit(1);
+        const phone = member?.whatsapp?.trim();
+        if (phone) {
+          const sent = await sendReminderWhatsApp({
+            phone,
+            titulo: appt.titulo,
+            quando,
+            clinicName,
+          }).catch(() => false);
+          if (sent) whatsappSent++;
+        }
+      }
     } catch (err) {
       logger.error(
         { err, compromissoId: appt.id, clinicId: appt.clinicId },
@@ -189,5 +223,5 @@ export async function runReminderCheck(): Promise<{
     }
   }
 
-  return { claimed: claimed.length, emailsSent, pushSent, skipped, requeued };
+  return { claimed: claimed.length, emailsSent, pushSent, whatsappSent, skipped, requeued };
 }
