@@ -2297,6 +2297,12 @@ export const GerarFaturasDoContratoBody = zod.object({
   confirmar: zod
     .boolean()
     .describe("Confirmação explícita do super-admin para liberar a geração."),
+  chaveLiberacao: zod
+    .string()
+    .min(1)
+    .describe(
+      "Chave de liberação manual do super-admin (igual ao segredo de super-admin), exigida para liberar a geração em lote.",
+    ),
 });
 
 /**

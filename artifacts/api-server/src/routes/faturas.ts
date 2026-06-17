@@ -1,19 +1,29 @@
+import { timingSafeEqual } from "crypto";
 import { Router, type IRouter, type Request } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, faturasTable, clinicsTable, clinicActivityTable } from "@workspace/db";
-import { assertClinicAccess } from "../middleware/auth";
+import { assertClinicAccess, requireSuperAdmin } from "../middleware/auth";
 import {
   CreateFaturaBody,
   UpdateFaturaBody,
   UpdateFaturaResponse,
   GerarFaturasDoContratoBody,
 } from "@workspace/api-zod";
+import { normalizeFaturaStatus } from "../lib/faturas-status.js";
 
 const router: IRouter = Router();
 
 function resolveActor(req: Request): string {
   const u = (req as { user?: { nome?: string; email?: string } }).user;
   return u?.nome ?? u?.email ?? "Super Admin";
+}
+
+/** Constant-time comparison for the manual super-admin release key. */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
 }
 
 /**
@@ -41,7 +51,7 @@ function mapFatura(f: typeof faturasTable.$inferSelect) {
     numero: f.numero,
     vencimento: f.vencimento,
     valor: Number(f.valor),
-    status: f.status,
+    status: normalizeFaturaStatus(f.status),
     pagoEm: f.pagoEm,
     formaPagamento: f.formaPagamento,
     observacao: f.observacao,
@@ -126,11 +136,13 @@ router.patch("/faturas/:id", async (req, res): Promise<void> => {
 /**
  * Generate the invoice schedule from a clinic's commercial conditions:
  * one optional implantação (one-off) invoice + N monthly invoices, where
- * N = prazoContratoMeses. Gated behind an explicit super-admin confirmation
+ * N = prazoContratoMeses. This is a controlled batch financial action: gated
+ * behind `requireSuperAdmin` PLUS a manual release key (the super-admin secret)
  * and a duplicate-generation guard. Invoices start "aberta".
  */
 router.post(
   "/clinics/:clinicId/faturas/gerar-do-contrato",
+  requireSuperAdmin,
   async (req, res): Promise<void> => {
     const clinicId = Array.isArray(req.params.clinicId)
       ? req.params.clinicId[0]
@@ -145,6 +157,18 @@ router.post(
       res
         .status(400)
         .json({ error: "Confirmação explícita necessária para gerar as faturas." });
+      return;
+    }
+
+    // Manual release key: the super-admin must re-enter the super-admin secret
+    // to authorize this batch financial action (liberação controlada).
+    const releaseSecret = process.env.SUPER_ADMIN_SECRET;
+    if (!releaseSecret) {
+      res.status(503).json({ error: "Super Admin não configurado no servidor." });
+      return;
+    }
+    if (!safeEqual(parsed.data.chaveLiberacao, releaseSecret)) {
+      res.status(403).json({ error: "Chave de liberação inválida." });
       return;
     }
 

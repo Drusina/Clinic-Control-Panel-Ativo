@@ -1666,6 +1666,11 @@ export interface DocumentoComercial {
 export interface GerarFaturasContratoInput {
   /** Confirmação explícita do super-admin para liberar a geração. */
   confirmar: boolean;
+  /**
+   * Chave de liberação manual do super-admin (igual ao segredo de super-admin), exigida para liberar a geração em lote.
+   * @minLength 1
+   */
+  chaveLiberacao: string;
 }
 
 export interface GerarFaturasContratoResponse {

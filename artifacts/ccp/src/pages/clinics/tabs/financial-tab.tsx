@@ -26,8 +26,8 @@ export default function FinancialTab({
     },
   });
 
-  const latestProposta = documentos?.find((d) => d.tipo === "proposta");
-  const latestContrato = documentos?.find((d) => d.tipo === "contrato");
+  const propostaVersions = (documentos ?? []).filter((d) => d.tipo === "proposta");
+  const contratoVersions = (documentos ?? []).filter((d) => d.tipo === "contrato");
 
   const invalidateClinic = () =>
     queryClient.invalidateQueries({ queryKey: getGetClinicQueryKey(clinicId) });
@@ -52,13 +52,15 @@ export default function FinancialTab({
             <DocumentoComercialCard
               clinic={clinic}
               tipo="proposta"
-              latestDoc={latestProposta}
+              versions={propostaVersions}
+              latestDoc={propostaVersions[0]}
               onChanged={invalidateClinic}
             />
             <DocumentoComercialCard
               clinic={clinic}
               tipo="contrato"
-              latestDoc={latestContrato}
+              versions={contratoVersions}
+              latestDoc={contratoVersions[0]}
               onChanged={invalidateClinic}
             />
           </div>

@@ -6,6 +6,7 @@ import { initTokenSigningSecret } from "./lib/token-secret.js";
 import { bootstrapContratadaDefaults } from "./lib/config.js";
 import { seedPerguntasIfEmpty } from "./lib/perguntas-seed.js";
 import { backfillTrilha } from "./lib/trilha.js";
+import { normalizeLegacyFaturaStatuses } from "./lib/faturas-status.js";
 
 if (!process.env.SUPER_ADMIN_SECRET || process.env.SUPER_ADMIN_SECRET.length === 0) {
   throw new Error(
@@ -100,6 +101,16 @@ async function main(): Promise<void> {
     })
     .catch((e) =>
       logger.error({ err: e }, "Failed to backfill trilha — stages will materialize lazily on first GET"),
+    );
+
+  // Normalize any legacy fatura statuses (pendente/pago/atrasado/cancelado) to
+  // the canonical Central Comercial vocabulary. Idempotent and non-fatal.
+  await normalizeLegacyFaturaStatuses()
+    .then((n) => {
+      if (n > 0) logger.info({ faturas: n }, "Normalized legacy fatura statuses");
+    })
+    .catch((e) =>
+      logger.error({ err: e }, "Failed to normalize legacy fatura statuses"),
     );
 
   app.listen(port, async (err) => {

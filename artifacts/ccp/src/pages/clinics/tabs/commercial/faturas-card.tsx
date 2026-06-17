@@ -78,6 +78,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useCurrentRole } from "@/hooks/use-auth";
 import {
   FATURA_STATUS_OPTIONS,
   formatCurrency,
@@ -110,6 +111,9 @@ export function FaturasCard({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingFatura, setEditingFatura] = useState<Fatura | null>(null);
   const [confirmGerar, setConfirmGerar] = useState(false);
+  const [chaveLiberacao, setChaveLiberacao] = useState("");
+  const { data: currentUser } = useCurrentRole();
+  const isSuperAdmin = currentUser?.role === "super_admin";
 
   const { data: faturas, isLoading } = useListFaturas(clinicId, {
     query: { enabled: !!clinicId, queryKey: getListFaturasQueryKey(clinicId) },
@@ -211,7 +215,7 @@ export function FaturasCard({
 
   const handleGerar = () => {
     gerarFaturas.mutate(
-      { clinicId, data: { confirmar: true } },
+      { clinicId, data: { confirmar: true, chaveLiberacao } },
       {
         onSuccess: (res) => {
           toast({
@@ -219,6 +223,7 @@ export function FaturasCard({
             description: `${res.criadas} fatura(s) criadas a partir das condições comerciais.`,
           });
           invalidateFaturas();
+          setChaveLiberacao("");
         },
         onError: (err) =>
           toast({
@@ -243,7 +248,7 @@ export function FaturasCard({
           </CardDescription>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!hasFaturas && clinic && (
+          {!hasFaturas && clinic && isSuperAdmin && (
             <Button
               size="sm"
               variant="outline"
@@ -477,7 +482,13 @@ export function FaturasCard({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={confirmGerar} onOpenChange={setConfirmGerar}>
+      <AlertDialog
+        open={confirmGerar}
+        onOpenChange={(open) => {
+          setConfirmGerar(open);
+          if (!open) setChaveLiberacao("");
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Gerar faturas do contrato</AlertDialogTitle>
@@ -488,10 +499,31 @@ export function FaturasCard({
               há faturas registradas.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2">
+            <label
+              htmlFor="chave-liberacao"
+              className="text-sm font-medium text-[#0B1F33]"
+            >
+              Chave de liberação do super-admin
+            </label>
+            <Input
+              id="chave-liberacao"
+              type="password"
+              autoComplete="off"
+              placeholder="Informe a chave de liberação"
+              value={chaveLiberacao}
+              onChange={(e) => setChaveLiberacao(e.target.value)}
+              data-testid="input-chave-liberacao"
+            />
+            <p className="text-xs text-[#4A5568]">
+              A geração em lote exige a chave de liberação manual do super-admin.
+            </p>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="bg-[#0F5F8F] text-white hover:bg-[#0B1F33]"
+              disabled={chaveLiberacao.trim() === ""}
               onClick={() => {
                 setConfirmGerar(false);
                 handleGerar();

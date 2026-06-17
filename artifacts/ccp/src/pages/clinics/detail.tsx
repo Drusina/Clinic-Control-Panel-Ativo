@@ -125,7 +125,7 @@ export default function ClinicDetail() {
       <Tabs value={tab} onValueChange={setTab} className="w-full space-y-6">
         <TabsList className="bg-card border w-full flex overflow-x-auto justify-start rounded-md h-auto flex-wrap gap-1 p-1">
           <TabsTrigger value="cadastro" className="min-w-fit" data-testid="tab-cadastro">Cadastro</TabsTrigger>
-          <TabsTrigger value="financial" className="min-w-fit" data-testid="tab-financial">Financeiro & Contrato</TabsTrigger>
+          <TabsTrigger value="financial" className="min-w-fit" data-testid="tab-financial">Central Comercial</TabsTrigger>
           <TabsTrigger value="status" className="min-w-fit" data-testid="tab-status">Status</TabsTrigger>
           <TabsTrigger value="usuarios" className="min-w-fit" data-testid="tab-usuarios">Usuários</TabsTrigger>
           <TabsTrigger value="atividade" className="min-w-fit" data-testid="tab-atividade">Atividade</TabsTrigger>

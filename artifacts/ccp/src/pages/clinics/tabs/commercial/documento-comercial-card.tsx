@@ -20,6 +20,7 @@ import {
   Send,
   AlertTriangle,
   CheckCircle2,
+  History,
 } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -33,7 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { clinicToSnapshot, conditionsDiffer } from "./shared";
+import { clinicToSnapshot, conditionsDiffer, formatCurrency } from "./shared";
 
 type Tipo = "proposta" | "contrato";
 
@@ -66,14 +67,30 @@ const META: Record<
   },
 };
 
+function fmtCurrency(v: number | null | undefined): string {
+  return v == null ? "—" : formatCurrency(v);
+}
+
+function fmtText(v: string | null | undefined): string {
+  return v && v.trim() !== "" ? v : "—";
+}
+
+function fmtDate(v: string | null | undefined): string {
+  if (!v) return "—";
+  const [y, m, d] = v.split("T")[0].split("-");
+  return y && m && d ? `${d}/${m}/${y}` : v;
+}
+
 export function DocumentoComercialCard({
   clinic,
   tipo,
+  versions,
   latestDoc,
   onChanged,
 }: {
   clinic: Clinic;
   tipo: Tipo;
+  versions: DocumentoComercial[];
   latestDoc?: DocumentoComercial;
   onChanged: () => void;
 }) {
@@ -90,6 +107,49 @@ export function DocumentoComercialCard({
   const showDrift =
     !!latestDoc?.snapshot &&
     conditionsDiffer(clinicToSnapshot(clinic), latestDoc.snapshot);
+
+  const statusLabel = latestDoc?.status ?? "Não gerado";
+
+  const conferenceRows: { label: string; value: string }[] = [
+    { label: "Cliente", value: fmtText(clinic.nome) },
+    { label: "CNPJ", value: fmtText(clinic.cnpj) },
+    { label: "Implantação", value: fmtCurrency(clinic.valorImplantacao) },
+    { label: "Recorrência (MRR)", value: fmtCurrency(clinic.valorRecorrente) },
+    { label: "Forma de pagamento", value: fmtText(clinic.formaPagamento) },
+    ...(tipo === "contrato"
+      ? [
+          {
+            label: "Prazo do contrato",
+            value:
+              clinic.prazoContratoMeses != null
+                ? `${clinic.prazoContratoMeses} meses`
+                : "—",
+          },
+          {
+            label: "Dia de vencimento",
+            value:
+              clinic.diaVencimento != null ? String(clinic.diaVencimento) : "—",
+          },
+          { label: "Índice de reajuste", value: fmtText(clinic.reajusteIndice) },
+          {
+            label: "Início previsto",
+            value: fmtDate(clinic.inicioRecorrencia ?? clinic.dataPrevistaInicio),
+          },
+        ]
+      : [
+          {
+            label: "Validade da proposta",
+            value:
+              clinic.validadePropostaDias != null
+                ? `${clinic.validadePropostaDias} dias`
+                : "—",
+          },
+          {
+            label: "Responsável comercial",
+            value: fmtText(clinic.responsavelComercial),
+          },
+        ]),
+  ];
 
   const openDocument = async (u: string) => {
     if (!u.startsWith("/api/storage/objects/")) {
@@ -194,6 +254,19 @@ export function DocumentoComercialCard({
         <CardDescription>{meta.desc}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[#4A5568]">
+            Status
+          </span>
+          <Badge
+            variant={latestDoc ? "secondary" : "outline"}
+            className="capitalize"
+            data-testid={`status-${tipo}`}
+          >
+            {statusLabel}
+          </Badge>
+        </div>
+
         {showDrift && (
           <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -203,6 +276,53 @@ export function DocumentoComercialCard({
             </span>
           </div>
         )}
+
+        <div className="rounded-md border border-[#0F5F8F]/15 bg-[#F4F7FA] p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#0F5F8F]">
+            Dados da clínica para conferência
+          </p>
+          <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+            {conferenceRows.map((row) => (
+              <div
+                key={row.label}
+                className="flex justify-between gap-2 text-sm"
+              >
+                <dt className="text-[#4A5568]">{row.label}</dt>
+                <dd className="text-right font-medium text-[#0B1F33]">
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <div>
+          <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-[#4A5568]">
+            <History className="h-3.5 w-3.5" /> Histórico de versões
+          </p>
+          {versions.length === 0 ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Nenhuma versão gerada ainda.
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-1" data-testid={`historico-${tipo}`}>
+              {versions.map((v) => (
+                <li
+                  key={v.id}
+                  className="flex items-center justify-between gap-2 rounded border bg-white px-2 py-1 text-sm"
+                >
+                  <span className="font-medium text-[#0B1F33]">v{v.versao}</span>
+                  <Badge variant="outline" className="capitalize">
+                    {v.status}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {fmtDate(v.geradoEm)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         <input
           ref={inputRef}
