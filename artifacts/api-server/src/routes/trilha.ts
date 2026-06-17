@@ -73,6 +73,23 @@ router.patch(
     }
     const d = parsed.data;
 
+    // Non-manual stages are concluded/reopened automatically by reconcileTrilha
+    // from live clinic data — a human cannot hand-set them to "concluido" or
+    // "em_andamento" (the reconciler would just overturn it on the next GET).
+    // Overrides ("bloqueado"/"nao_aplicavel"), reopening to "pendente", and
+    // metadata-only edits remain allowed.
+    if (
+      d.status != null &&
+      !def.manual &&
+      (d.status === "concluido" || d.status === "em_andamento")
+    ) {
+      res.status(400).json({
+        error:
+          "Esta etapa é concluída automaticamente pelo sistema conforme os dados da clínica. Use 'Bloquear' ou 'Não se aplica' para ajustes manuais.",
+      });
+      return;
+    }
+
     const [clinic] = await db
       .select()
       .from(clinicsTable)

@@ -48,7 +48,6 @@ import {
   Pencil,
   PlayCircle,
   RotateCcw,
-  Sparkles,
   Map as MapIcon,
 } from "lucide-react";
 
@@ -219,8 +218,6 @@ export function TrilhaStepper({
               const target = moduleNav(etapa.modulo ?? null, etapa);
               const isPending = pendingKey === etapa.key;
               const last = idx === trilha.etapas.length - 1;
-              const showSuggestion =
-                etapa.sugestao.pronto && !resolved && etapa.status !== "bloqueado";
               const responsavel = etapa.responsavel?.trim();
               const dataPrevista = formatDate(etapa.dataPrevista);
               const dataConcluida = formatDate(etapa.dataConcluida);
@@ -304,38 +301,14 @@ export function TrilhaStepper({
                       </p>
                     )}
 
-                    {showSuggestion && (
-                      <div
-                        className="mt-0.5 flex flex-wrap items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-700 dark:text-emerald-400"
-                        data-testid={`trilha-sugestao-${etapa.key}`}
-                      >
-                        <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                        <span className="min-w-0 flex-1">
-                          Pronto para concluir — {etapa.sugestao.motivo}
-                        </span>
-                        <Button
-                          size="sm"
-                          className="h-7 gap-1 bg-emerald-600 hover:bg-emerald-600/90"
-                          disabled={isPending}
-                          onClick={() => setStatus(etapa.key, "concluido")}
-                          data-testid={`trilha-confirmar-${etapa.key}`}
-                        >
-                          {isPending ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          )}
-                          Concluir
-                        </Button>
-                      </div>
-                    )}
-
                     {!resolved &&
-                      !showSuggestion &&
                       !etapa.manual &&
                       etapa.status !== "bloqueado" &&
                       etapa.sugestao.motivo && (
-                        <p className="text-xs text-muted-foreground/80">
+                        <p
+                          className="text-xs text-muted-foreground/80"
+                          data-testid={`trilha-aguardando-${etapa.key}`}
+                        >
                           Aguardando: {etapa.sugestao.motivo}
                         </p>
                       )}
@@ -385,7 +358,7 @@ export function TrilhaStepper({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="w-52">
-                          {etapa.status !== "concluido" && (
+                          {etapa.manual && etapa.status !== "concluido" && (
                             <DropdownMenuItem
                               onClick={() => setStatus(etapa.key, "concluido")}
                               data-testid={`trilha-acao-concluir-${etapa.key}`}
@@ -394,7 +367,7 @@ export function TrilhaStepper({
                               Concluir etapa
                             </DropdownMenuItem>
                           )}
-                          {etapa.status === "pendente" && (
+                          {etapa.manual && etapa.status === "pendente" && (
                             <DropdownMenuItem
                               onClick={() => setStatus(etapa.key, "em_andamento")}
                             >
@@ -402,15 +375,15 @@ export function TrilhaStepper({
                               Marcar em andamento
                             </DropdownMenuItem>
                           )}
-                          {(etapa.status === "concluido" ||
-                            etapa.status === "bloqueado" ||
-                            etapa.status === "nao_aplicavel") && (
+                          {(etapa.status === "bloqueado" ||
+                            etapa.status === "nao_aplicavel" ||
+                            (etapa.manual && etapa.status === "concluido")) && (
                             <DropdownMenuItem
                               onClick={() => setStatus(etapa.key, "pendente")}
                               data-testid={`trilha-acao-reabrir-${etapa.key}`}
                             >
                               <RotateCcw className="h-4 w-4" />
-                              Reabrir etapa
+                              {etapa.manual ? "Reabrir etapa" : "Remover marcação"}
                             </DropdownMenuItem>
                           )}
                           {etapa.status !== "bloqueado" &&

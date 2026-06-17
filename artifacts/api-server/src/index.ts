@@ -89,14 +89,14 @@ async function main(): Promise<void> {
     logger.error({ err: e }, "Failed to seed perguntas — diagnostic page will start empty"),
   );
 
-  // Materialize Trilha de Implementação rows (all `pendente`) for pre-existing
-  // clinics and recompute clinics.etapa/progresso so cards reflect the
-  // trilha-derived model. NEVER auto-concludes a stage (hybrid rule: only a
-  // consultant PATCH concludes). Runs BEFORE app.listen so it cannot race the
-  // GET materializer. Idempotent (clinics with rows are skipped) and non-fatal.
+  // Reconcile Trilha de Implementação rows for every clinic: materialize
+  // missing stages, auto-conclude the data-detectable ones, reopen any whose
+  // signal lapsed, and recompute clinics.etapa/progresso so cards reflect the
+  // trilha-derived model. Runs BEFORE app.listen so it cannot race the GET
+  // reconciler. Idempotent (writes only on a real transition) and non-fatal.
   await backfillTrilha()
     .then((n) => {
-      if (n > 0) logger.info({ clinics: n }, "Trilha backfill seeded clinics");
+      if (n > 0) logger.info({ clinics: n }, "Trilha reconciled clinics");
     })
     .catch((e) =>
       logger.error({ err: e }, "Failed to backfill trilha — stages will materialize lazily on first GET"),
