@@ -125,6 +125,12 @@ export const ListClinicsResponse = zod.object({
       situacaoCadastral: zod.string().nullish(),
       capitalSocial: zod.number().nullish(),
       dataAbertura: zod.string().nullish(),
+      prazoContratoMeses: zod.number().nullish(),
+      validadePropostaDias: zod.number().nullish(),
+      dataPrevistaInicio: zod.string().nullish(),
+      responsavelComercial: zod.string().nullish(),
+      observacoesComerciais: zod.string().nullish(),
+      condicoesEspeciais: zod.string().nullish(),
       propostaUrl: zod
         .string()
         .nullish()
@@ -230,6 +236,12 @@ export const GetClinicResponse = zod.object({
   situacaoCadastral: zod.string().nullish(),
   capitalSocial: zod.number().nullish(),
   dataAbertura: zod.string().nullish(),
+  prazoContratoMeses: zod.number().nullish(),
+  validadePropostaDias: zod.number().nullish(),
+  dataPrevistaInicio: zod.string().nullish(),
+  responsavelComercial: zod.string().nullish(),
+  observacoesComerciais: zod.string().nullish(),
+  condicoesEspeciais: zod.string().nullish(),
   propostaUrl: zod
     .string()
     .nullish()
@@ -320,6 +332,12 @@ export const UpdateClinicResponse = zod.object({
   situacaoCadastral: zod.string().nullish(),
   capitalSocial: zod.number().nullish(),
   dataAbertura: zod.string().nullish(),
+  prazoContratoMeses: zod.number().nullish(),
+  validadePropostaDias: zod.number().nullish(),
+  dataPrevistaInicio: zod.string().nullish(),
+  responsavelComercial: zod.string().nullish(),
+  observacoesComerciais: zod.string().nullish(),
+  condicoesEspeciais: zod.string().nullish(),
   propostaUrl: zod
     .string()
     .nullish()
@@ -403,6 +421,12 @@ export const UpdateClinicStatusResponse = zod.object({
   situacaoCadastral: zod.string().nullish(),
   capitalSocial: zod.number().nullish(),
   dataAbertura: zod.string().nullish(),
+  prazoContratoMeses: zod.number().nullish(),
+  validadePropostaDias: zod.number().nullish(),
+  dataPrevistaInicio: zod.string().nullish(),
+  responsavelComercial: zod.string().nullish(),
+  observacoesComerciais: zod.string().nullish(),
+  condicoesEspeciais: zod.string().nullish(),
   propostaUrl: zod
     .string()
     .nullish()
@@ -2236,7 +2260,7 @@ export const ListFaturasResponseItem = zod.object({
   numero: zod.string(),
   vencimento: zod.string(),
   valor: zod.number(),
-  status: zod.enum(["pendente", "pago", "atrasado", "cancelado"]),
+  status: zod.enum(["aberta", "enviada", "paga", "vencida", "cancelada"]),
   pagoEm: zod.string().nullish(),
   formaPagamento: zod.string().nullish(),
   observacao: zod.string().nullish(),
@@ -2255,10 +2279,171 @@ export const CreateFaturaBody = zod.object({
   numero: zod.string(),
   vencimento: zod.string(),
   valor: zod.number(),
-  status: zod.enum(["pendente", "pago", "atrasado", "cancelado"]).optional(),
+  status: zod
+    .enum(["aberta", "enviada", "paga", "vencida", "cancelada"])
+    .optional(),
   formaPagamento: zod.string().nullish(),
   observacao: zod.string().nullish(),
 });
+
+/**
+ * @summary Generate invoices (implantação + monthly) from commercial conditions
+ */
+export const GerarFaturasDoContratoParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const GerarFaturasDoContratoBody = zod.object({
+  confirmar: zod
+    .boolean()
+    .describe("Confirmação explícita do super-admin para liberar a geração."),
+});
+
+/**
+ * @summary Save commercial conditions for a clinic
+ */
+export const SaveCondicoesComerciaisParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const SaveCondicoesComerciaisBody = zod.object({
+  valorImplantacao: zod.number().nullish(),
+  valorRecorrente: zod.number().nullish(),
+  formaPagamento: zod.string().nullish(),
+  diaVencimento: zod.number().nullish(),
+  reajusteIndice: zod.string().nullish(),
+  inicioRecorrencia: zod.string().nullish(),
+  prazoContratoMeses: zod.number().nullish(),
+  validadePropostaDias: zod.number().nullish(),
+  dataPrevistaInicio: zod.string().nullish(),
+  responsavelComercial: zod.string().nullish(),
+  observacoesComerciais: zod.string().nullish(),
+  condicoesEspeciais: zod.string().nullish(),
+});
+
+export const SaveCondicoesComerciaisResponse = zod.object({
+  id: zod.string(),
+  nome: zod.string(),
+  fantasia: zod.string().nullish(),
+  cnpj: zod.string(),
+  razaoSocial: zod.string().nullish(),
+  cidade: zod.string().nullish(),
+  uf: zod.string().nullish(),
+  cep: zod.string().nullish(),
+  endereco: zod.string().nullish(),
+  responsavel: zod.string().nullish(),
+  email: zod.string().nullish(),
+  whatsapp: zod.string().nullish(),
+  cargo: zod.string().nullish(),
+  plano: zod.enum(["starter", "pro", "enterprise"]),
+  status: zod.enum([
+    "prospect",
+    "proposta",
+    "contrato",
+    "trial",
+    "ativa",
+    "suspensa",
+    "desativada",
+  ]),
+  etapa: zod.number(),
+  progresso: zod.number(),
+  valorImplantacao: zod.number().nullish(),
+  valorRecorrente: zod.number().nullish(),
+  suspensoMotivo: zod.string().nullish(),
+  formaPagamento: zod.string().nullish(),
+  diaVencimento: zod.number().nullish(),
+  reajusteIndice: zod.string().nullish(),
+  inicioRecorrencia: zod.string().nullish(),
+  cnae: zod.string().nullish(),
+  situacaoCadastral: zod.string().nullish(),
+  capitalSocial: zod.number().nullish(),
+  dataAbertura: zod.string().nullish(),
+  prazoContratoMeses: zod.number().nullish(),
+  validadePropostaDias: zod.number().nullish(),
+  dataPrevistaInicio: zod.string().nullish(),
+  responsavelComercial: zod.string().nullish(),
+  observacoesComerciais: zod.string().nullish(),
+  condicoesEspeciais: zod.string().nullish(),
+  propostaUrl: zod
+    .string()
+    .nullish()
+    .describe("URL to the uploaded proposal PDF in Supabase Storage"),
+  contratoUrl: zod
+    .string()
+    .nullish()
+    .describe("URL to the uploaded signed contract PDF in Supabase Storage"),
+  logoUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Storage path of the clinic logo. When set, the image is served at GET \/api\/clinics\/{id}\/logo",
+    ),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary List commercial documents (proposta/contrato) for a clinic
+ */
+export const ListDocumentosComerciaisParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ListDocumentosComerciaisQueryParams = zod.object({
+  tipo: zod.coerce.string().nullish(),
+});
+
+export const ListDocumentosComerciaisResponseItem = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  tipo: zod.enum(["proposta", "contrato"]),
+  versao: zod.number(),
+  status: zod.string(),
+  titulo: zod.string().nullish(),
+  pdfPath: zod.string().nullish(),
+  docHash: zod.string().nullish(),
+  snapshot: zod
+    .union([
+      zod.object({
+        valorImplantacao: zod.number().nullish(),
+        valorRecorrente: zod.number().nullish(),
+        formaPagamento: zod.string().nullish(),
+        diaVencimento: zod.number().nullish(),
+        reajusteIndice: zod.string().nullish(),
+        inicioRecorrencia: zod.string().nullish(),
+        prazoContratoMeses: zod.number().nullish(),
+        validadePropostaDias: zod.number().nullish(),
+        dataPrevistaInicio: zod.string().nullish(),
+        responsavelComercial: zod.string().nullish(),
+        observacoesComerciais: zod.string().nullish(),
+        condicoesEspeciais: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  signatarios: zod
+    .array(
+      zod.object({
+        nome: zod.string(),
+        email: zod.string(),
+        cargo: zod.string().nullish(),
+        papel: zod.string().nullish(),
+        ordem: zod.number().nullish(),
+        status: zod.string().nullish(),
+        signedAt: zod.string().nullish(),
+      }),
+    )
+    .nullish(),
+  geradoEm: zod.string().nullish(),
+  enviadoEm: zod.string().nullish(),
+  aceitoEm: zod.string().nullish(),
+  validadeAte: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListDocumentosComerciaisResponse = zod.array(
+  ListDocumentosComerciaisResponseItem,
+);
 
 /**
  * @summary Update invoice status
@@ -2268,7 +2453,12 @@ export const UpdateFaturaParams = zod.object({
 });
 
 export const UpdateFaturaBody = zod.object({
-  status: zod.string().nullish(),
+  numero: zod.string().optional(),
+  vencimento: zod.string().optional(),
+  valor: zod.number().optional(),
+  status: zod
+    .enum(["aberta", "enviada", "paga", "vencida", "cancelada"])
+    .optional(),
   pagoEm: zod.string().nullish(),
   formaPagamento: zod.string().nullish(),
   observacao: zod.string().nullish(),
@@ -2280,7 +2470,7 @@ export const UpdateFaturaResponse = zod.object({
   numero: zod.string(),
   vencimento: zod.string(),
   valor: zod.number(),
-  status: zod.enum(["pendente", "pago", "atrasado", "cancelado"]),
+  status: zod.enum(["aberta", "enviada", "paga", "vencida", "cancelada"]),
   pagoEm: zod.string().nullish(),
   formaPagamento: zod.string().nullish(),
   observacao: zod.string().nullish(),

@@ -40,6 +40,14 @@ export const clinicsTable = pgTable("clinics", {
   situacaoCadastral: text("situacao_cadastral"),
   capitalSocial: numeric("capital_social", { precision: 14, scale: 2 }),
   dataAbertura: text("data_abertura"),
+  // Central Comercial CLINIONEX360 — condições comerciais estendidas. A fonte
+  // dessas informações é a própria ficha da clínica (sem recadastro).
+  prazoContratoMeses: integer("prazo_contrato_meses"),
+  validadePropostaDias: integer("validade_proposta_dias"),
+  dataPrevistaInicio: date("data_prevista_inicio"),
+  responsavelComercial: text("responsavel_comercial"),
+  observacoesComerciais: text("observacoes_comerciais"),
+  condicoesEspeciais: text("condicoes_especiais"),
   propostaUrl: text("proposta_url"),
   contratoUrl: text("contrato_url"),
   logoUrl: text("logo_url"),

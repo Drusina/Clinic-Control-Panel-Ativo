@@ -39,7 +39,7 @@ const InviteUserBody = z.object({
 const clinicsAdminRouter: IRouter = Router();
 const router: IRouter = Router();
 
-function mapClinic(c: typeof clinicsTable.$inferSelect) {
+export function mapClinic(c: typeof clinicsTable.$inferSelect) {
   return {
     id: c.id,
     nome: c.nome,
@@ -69,6 +69,12 @@ function mapClinic(c: typeof clinicsTable.$inferSelect) {
     situacaoCadastral: c.situacaoCadastral,
     capitalSocial: c.capitalSocial != null ? Number(c.capitalSocial) : null,
     dataAbertura: c.dataAbertura,
+    prazoContratoMeses: c.prazoContratoMeses,
+    validadePropostaDias: c.validadePropostaDias,
+    dataPrevistaInicio: c.dataPrevistaInicio,
+    responsavelComercial: c.responsavelComercial,
+    observacoesComerciais: c.observacoesComerciais,
+    condicoesEspeciais: c.condicoesEspeciais,
     propostaUrl: c.propostaUrl,
     contratoUrl: c.contratoUrl,
     logoUrl: c.logoUrl,

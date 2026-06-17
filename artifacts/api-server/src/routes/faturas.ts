@@ -1,10 +1,38 @@
-import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, faturasTable } from "@workspace/db";
+import { Router, type IRouter, type Request } from "express";
+import { eq, sql } from "drizzle-orm";
+import { db, faturasTable, clinicsTable, clinicActivityTable } from "@workspace/db";
 import { assertClinicAccess } from "../middleware/auth";
-import { CreateFaturaBody, UpdateFaturaBody, UpdateFaturaResponse } from "@workspace/api-zod";
+import {
+  CreateFaturaBody,
+  UpdateFaturaBody,
+  UpdateFaturaResponse,
+  GerarFaturasDoContratoBody,
+} from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+function resolveActor(req: Request): string {
+  const u = (req as { user?: { nome?: string; email?: string } }).user;
+  return u?.nome ?? u?.email ?? "Super Admin";
+}
+
+/**
+ * Returns the due date `monthsToAdd` months after the (year, month0) start,
+ * pinned to `day` and clamped to the last valid day of the resulting month.
+ */
+function addMonthsClampDay(
+  startYear: number,
+  startMonth0: number,
+  monthsToAdd: number,
+  day: number,
+): string {
+  const first = new Date(Date.UTC(startYear, startMonth0 + monthsToAdd, 1));
+  const y = first.getUTCFullYear();
+  const m0 = first.getUTCMonth();
+  const lastDay = new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
+  const useDay = Math.min(Math.max(day, 1), lastDay);
+  return `${y}-${String(m0 + 1).padStart(2, "0")}-${String(useDay).padStart(2, "0")}`;
+}
 
 function mapFatura(f: typeof faturasTable.$inferSelect) {
   return {
@@ -48,7 +76,7 @@ router.post("/clinics/:clinicId/faturas", async (req, res): Promise<void> => {
       numero: parsed.data.numero,
       vencimento: parsed.data.vencimento,
       valor: parsed.data.valor.toString(),
-      status: parsed.data.status ?? "pendente",
+      status: parsed.data.status ?? "aberta",
       formaPagamento: parsed.data.formaPagamento ?? null,
       observacao: parsed.data.observacao ?? null,
     })
@@ -78,6 +106,9 @@ router.patch("/faturas/:id", async (req, res): Promise<void> => {
 
   const updates: Partial<typeof faturasTable.$inferInsert> = {};
   const d = parsed.data;
+  if (d.numero !== undefined) updates.numero = d.numero;
+  if (d.vencimento !== undefined) updates.vencimento = d.vencimento;
+  if (d.valor !== undefined) updates.valor = d.valor.toString();
   if (d.status != null) updates.status = d.status;
   if (d.pagoEm !== undefined) updates.pagoEm = d.pagoEm;
   if (d.formaPagamento !== undefined) updates.formaPagamento = d.formaPagamento;
@@ -91,5 +122,137 @@ router.patch("/faturas/:id", async (req, res): Promise<void> => {
 
   res.json(UpdateFaturaResponse.parse(mapFatura(fatura)));
 });
+
+/**
+ * Generate the invoice schedule from a clinic's commercial conditions:
+ * one optional implantação (one-off) invoice + N monthly invoices, where
+ * N = prazoContratoMeses. Gated behind an explicit super-admin confirmation
+ * and a duplicate-generation guard. Invoices start "aberta".
+ */
+router.post(
+  "/clinics/:clinicId/faturas/gerar-do-contrato",
+  async (req, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId)
+      ? req.params.clinicId[0]
+      : req.params.clinicId;
+
+    const parsed = GerarFaturasDoContratoBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    if (!parsed.data.confirmar) {
+      res
+        .status(400)
+        .json({ error: "Confirmação explícita necessária para gerar as faturas." });
+      return;
+    }
+
+    const [clinic] = await db
+      .select()
+      .from(clinicsTable)
+      .where(eq(clinicsTable.id, clinicId))
+      .limit(1);
+    if (!clinic) {
+      res.status(404).json({ error: "Clinic not found" });
+      return;
+    }
+
+    const valorRecorrente =
+      clinic.valorRecorrente != null ? Number(clinic.valorRecorrente) : null;
+    const valorImplantacao =
+      clinic.valorImplantacao != null ? Number(clinic.valorImplantacao) : null;
+    const diaVencimento = clinic.diaVencimento;
+    const prazo = clinic.prazoContratoMeses;
+    const startDateStr = clinic.inicioRecorrencia ?? clinic.dataPrevistaInicio;
+
+    const missing: string[] = [];
+    if (valorRecorrente == null || valorRecorrente <= 0)
+      missing.push("valor recorrente");
+    if (diaVencimento == null) missing.push("dia de vencimento");
+    if (prazo == null || prazo < 1) missing.push("prazo do contrato (meses)");
+    if (!startDateStr)
+      missing.push("início da recorrência ou data prevista de início");
+
+    if (missing.length > 0) {
+      res
+        .status(400)
+        .json({ error: `Condições comerciais incompletas: ${missing.join(", ")}.` });
+      return;
+    }
+
+    const [startY, startM] = startDateStr!
+      .split("-")
+      .map((n) => parseInt(n, 10));
+    const startMonth0 = startM - 1;
+
+    const toInsert: (typeof faturasTable.$inferInsert)[] = [];
+
+    if (valorImplantacao != null && valorImplantacao > 0) {
+      toInsert.push({
+        clinicId,
+        numero: "IMPL",
+        vencimento: startDateStr!,
+        valor: valorImplantacao.toString(),
+        status: "aberta",
+        formaPagamento: clinic.formaPagamento ?? null,
+        observacao: "Implantação",
+      });
+    }
+
+    for (let i = 0; i < prazo!; i++) {
+      toInsert.push({
+        clinicId,
+        numero: `M${String(i + 1).padStart(2, "0")}`,
+        vencimento: addMonthsClampDay(startY, startMonth0, i, diaVencimento!),
+        valor: valorRecorrente!.toString(),
+        status: "aberta",
+        formaPagamento: clinic.formaPagamento ?? null,
+        observacao: `Mensalidade ${i + 1}/${prazo}`,
+      });
+    }
+
+    const outcome = await db.transaction(async (tx) => {
+      // Serialize concurrent generations for this clinic so a double-submit
+      // cannot bypass the duplicate guard and create two invoice schedules.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`gerar-faturas:${clinicId}`}))`,
+      );
+
+      const existing = await tx
+        .select({ id: faturasTable.id })
+        .from(faturasTable)
+        .where(eq(faturasTable.clinicId, clinicId))
+        .limit(1);
+      if (existing.length > 0) {
+        return { conflict: true as const };
+      }
+
+      const created = await tx.insert(faturasTable).values(toInsert).returning();
+
+      await tx.insert(clinicActivityTable).values({
+        clinicId,
+        tipo: "comercial",
+        titulo: "Faturas geradas",
+        descricao: `${created.length} fatura(s) geradas a partir das condições comerciais.`,
+        autorNome: resolveActor(req),
+      });
+
+      return { conflict: false as const, created };
+    });
+
+    if (outcome.conflict) {
+      res.status(409).json({
+        error:
+          "Já existem faturas para esta clínica. Remova as faturas existentes antes de gerar novamente.",
+      });
+      return;
+    }
+
+    res
+      .status(201)
+      .json({ criadas: outcome.created.length, faturas: outcome.created.map(mapFatura) });
+  },
+);
 
 export default router;

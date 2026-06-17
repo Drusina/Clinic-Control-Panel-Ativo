@@ -11,7 +11,8 @@ export const faturasTable = pgTable("faturas", {
   numero: text("numero").notNull(),
   vencimento: date("vencimento").notNull(),
   valor: numeric("valor", { precision: 12, scale: 2 }).notNull(),
-  status: text("status").notNull().default("pendente"),
+  // aberta | enviada | paga | vencida | cancelada
+  status: text("status").notNull().default("aberta"),
   pagoEm: date("pago_em"),
   formaPagamento: text("forma_pagamento"),
   observacao: text("observacao"),

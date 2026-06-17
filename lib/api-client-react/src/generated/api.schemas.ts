@@ -118,6 +118,18 @@ export interface Clinic {
   capitalSocial?: number | null;
   /** @nullable */
   dataAbertura?: string | null;
+  /** @nullable */
+  prazoContratoMeses?: number | null;
+  /** @nullable */
+  validadePropostaDias?: number | null;
+  /** @nullable */
+  dataPrevistaInicio?: string | null;
+  /** @nullable */
+  responsavelComercial?: string | null;
+  /** @nullable */
+  observacoesComerciais?: string | null;
+  /** @nullable */
+  condicoesEspeciais?: string | null;
   /**
    * URL to the uploaded proposal PDF in Supabase Storage
    * @nullable
@@ -1478,10 +1490,11 @@ export interface UpdateSistemaUsoBody {
 export type FaturaStatus = (typeof FaturaStatus)[keyof typeof FaturaStatus];
 
 export const FaturaStatus = {
-  pendente: "pendente",
-  pago: "pago",
-  atrasado: "atrasado",
-  cancelado: "cancelado",
+  aberta: "aberta",
+  enviada: "enviada",
+  paga: "paga",
+  vencida: "vencida",
+  cancelada: "cancelada",
 } as const;
 
 export interface Fatura {
@@ -1504,10 +1517,11 @@ export type CreateFaturaBodyStatus =
   (typeof CreateFaturaBodyStatus)[keyof typeof CreateFaturaBodyStatus];
 
 export const CreateFaturaBodyStatus = {
-  pendente: "pendente",
-  pago: "pago",
-  atrasado: "atrasado",
-  cancelado: "cancelado",
+  aberta: "aberta",
+  enviada: "enviada",
+  paga: "paga",
+  vencida: "vencida",
+  cancelada: "cancelada",
 } as const;
 
 export interface CreateFaturaBody {
@@ -1521,15 +1535,142 @@ export interface CreateFaturaBody {
   observacao?: string | null;
 }
 
+export type UpdateFaturaBodyStatus =
+  (typeof UpdateFaturaBodyStatus)[keyof typeof UpdateFaturaBodyStatus];
+
+export const UpdateFaturaBodyStatus = {
+  aberta: "aberta",
+  enviada: "enviada",
+  paga: "paga",
+  vencida: "vencida",
+  cancelada: "cancelada",
+} as const;
+
 export interface UpdateFaturaBody {
-  /** @nullable */
-  status?: string | null;
+  numero?: string;
+  vencimento?: string;
+  valor?: number;
+  status?: UpdateFaturaBodyStatus;
   /** @nullable */
   pagoEm?: string | null;
   /** @nullable */
   formaPagamento?: string | null;
   /** @nullable */
   observacao?: string | null;
+}
+
+export interface CondicoesComerciaisSnapshot {
+  /** @nullable */
+  valorImplantacao?: number | null;
+  /** @nullable */
+  valorRecorrente?: number | null;
+  /** @nullable */
+  formaPagamento?: string | null;
+  /** @nullable */
+  diaVencimento?: number | null;
+  /** @nullable */
+  reajusteIndice?: string | null;
+  /** @nullable */
+  inicioRecorrencia?: string | null;
+  /** @nullable */
+  prazoContratoMeses?: number | null;
+  /** @nullable */
+  validadePropostaDias?: number | null;
+  /** @nullable */
+  dataPrevistaInicio?: string | null;
+  /** @nullable */
+  responsavelComercial?: string | null;
+  /** @nullable */
+  observacoesComerciais?: string | null;
+  /** @nullable */
+  condicoesEspeciais?: string | null;
+}
+
+export interface CondicoesComerciaisInput {
+  /** @nullable */
+  valorImplantacao?: number | null;
+  /** @nullable */
+  valorRecorrente?: number | null;
+  /** @nullable */
+  formaPagamento?: string | null;
+  /** @nullable */
+  diaVencimento?: number | null;
+  /** @nullable */
+  reajusteIndice?: string | null;
+  /** @nullable */
+  inicioRecorrencia?: string | null;
+  /** @nullable */
+  prazoContratoMeses?: number | null;
+  /** @nullable */
+  validadePropostaDias?: number | null;
+  /** @nullable */
+  dataPrevistaInicio?: string | null;
+  /** @nullable */
+  responsavelComercial?: string | null;
+  /** @nullable */
+  observacoesComerciais?: string | null;
+  /** @nullable */
+  condicoesEspeciais?: string | null;
+}
+
+export interface DocumentoComercialSignatario {
+  nome: string;
+  email: string;
+  /** @nullable */
+  cargo?: string | null;
+  /** @nullable */
+  papel?: string | null;
+  /** @nullable */
+  ordem?: number | null;
+  /** @nullable */
+  status?: string | null;
+  /** @nullable */
+  signedAt?: string | null;
+}
+
+export type DocumentoComercialTipo =
+  (typeof DocumentoComercialTipo)[keyof typeof DocumentoComercialTipo];
+
+export const DocumentoComercialTipo = {
+  proposta: "proposta",
+  contrato: "contrato",
+} as const;
+
+export interface DocumentoComercial {
+  id: string;
+  clinicId: string;
+  tipo: DocumentoComercialTipo;
+  versao: number;
+  status: string;
+  /** @nullable */
+  titulo?: string | null;
+  /** @nullable */
+  pdfPath?: string | null;
+  /** @nullable */
+  docHash?: string | null;
+  snapshot?: CondicoesComerciaisSnapshot | null;
+  /** @nullable */
+  signatarios?: DocumentoComercialSignatario[] | null;
+  /** @nullable */
+  geradoEm?: string | null;
+  /** @nullable */
+  enviadoEm?: string | null;
+  /** @nullable */
+  aceitoEm?: string | null;
+  /** @nullable */
+  validadeAte?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GerarFaturasContratoInput {
+  /** Confirmação explícita do super-admin para liberar a geração. */
+  confirmar: boolean;
+}
+
+export interface GerarFaturasContratoResponse {
+  criadas: number;
+  faturas: Fatura[];
 }
 
 export interface Notification {
@@ -1730,4 +1871,11 @@ export type ImportSistemasUsoSpreadsheet200 = {
   updated: number;
   skipped: number;
   errors: ImportSistemasUsoSpreadsheet200ErrorsItem[];
+};
+
+export type ListDocumentosComerciaisParams = {
+  /**
+   * @nullable
+   */
+  tipo?: string | null;
 };

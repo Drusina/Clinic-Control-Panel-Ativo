@@ -32,6 +32,8 @@ tags:
     description: Notifications
   - name: faturas
     description: Invoices/Faturas
+  - name: comercial
+    description: Central Comercial (condições comerciais e documentos comerciais)
 
 paths:
   /healthz:
@@ -1999,6 +2001,86 @@ paths:
               schema:
                 $ref: "#/components/schemas/Fatura"
 
+  /clinics/{clinicId}/faturas/gerar-do-contrato:
+    post:
+      operationId: gerarFaturasDoContrato
+      tags: [faturas]
+      summary: Generate invoices (implantação + monthly) from commercial conditions
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GerarFaturasContratoInput"
+      responses:
+        "201":
+          description: Generated invoices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GerarFaturasContratoResponse"
+        "400":
+          description: Validation error
+
+  # ─── CENTRAL COMERCIAL ──────────────────────────────────────────────────────
+  /clinics/{clinicId}/condicoes-comerciais:
+    put:
+      operationId: saveCondicoesComerciais
+      tags: [comercial]
+      summary: Save commercial conditions for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CondicoesComerciaisInput"
+      responses:
+        "200":
+          description: Updated clinic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clinic"
+        "400":
+          description: Validation error
+
+  /clinics/{clinicId}/documentos-comerciais:
+    get:
+      operationId: listDocumentosComerciais
+      tags: [comercial]
+      summary: List commercial documents (proposta/contrato) for a clinic
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Commercial documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentoComercial"
+
   /faturas/{id}:
     patch:
       operationId: updateFatura
@@ -2207,6 +2289,18 @@ components:
         capitalSocial:
           type: ["number", "null"]
         dataAbertura:
+          type: ["string", "null"]
+        prazoContratoMeses:
+          type: ["integer", "null"]
+        validadePropostaDias:
+          type: ["integer", "null"]
+        dataPrevistaInicio:
+          type: ["string", "null"]
+        responsavelComercial:
+          type: ["string", "null"]
+        observacoesComerciais:
+          type: ["string", "null"]
+        condicoesEspeciais:
           type: ["string", "null"]
         propostaUrl:
           type: ["string", "null"]
@@ -3730,7 +3824,7 @@ components:
           type: number
         status:
           type: string
-          enum: [pendente, pago, atrasado, cancelado]
+          enum: [aberta, enviada, paga, vencida, cancelada]
         pagoEm:
           type: ["string", "null"]
         formaPagamento:
@@ -3759,7 +3853,7 @@ components:
           type: number
         status:
           type: string
-          enum: [pendente, pago, atrasado, cancelado]
+          enum: [aberta, enviada, paga, vencida, cancelada]
         formaPagamento:
           type: ["string", "null"]
         observacao:
@@ -3772,14 +3866,125 @@ components:
     UpdateFaturaBody:
       type: object
       properties:
+        numero:
+          type: string
+        vencimento:
+          type: string
+        valor:
+          type: number
         status:
-          type: ["string", "null"]
+          type: string
+          enum: [aberta, enviada, paga, vencida, cancelada]
         pagoEm:
           type: ["string", "null"]
         formaPagamento:
           type: ["string", "null"]
         observacao:
           type: ["string", "null"]
+
+    # ─── CENTRAL COMERCIAL ──────────────────────────────────────────────────
+    CondicoesComerciaisSnapshot:
+      type: object
+      properties:
+        valorImplantacao: { type: ["number", "null"] }
+        valorRecorrente: { type: ["number", "null"] }
+        formaPagamento: { type: ["string", "null"] }
+        diaVencimento: { type: ["integer", "null"] }
+        reajusteIndice: { type: ["string", "null"] }
+        inicioRecorrencia: { type: ["string", "null"] }
+        prazoContratoMeses: { type: ["integer", "null"] }
+        validadePropostaDias: { type: ["integer", "null"] }
+        dataPrevistaInicio: { type: ["string", "null"] }
+        responsavelComercial: { type: ["string", "null"] }
+        observacoesComerciais: { type: ["string", "null"] }
+        condicoesEspeciais: { type: ["string", "null"] }
+
+    CondicoesComerciaisInput:
+      type: object
+      properties:
+        valorImplantacao: { type: ["number", "null"] }
+        valorRecorrente: { type: ["number", "null"] }
+        formaPagamento: { type: ["string", "null"] }
+        diaVencimento: { type: ["integer", "null"] }
+        reajusteIndice: { type: ["string", "null"] }
+        inicioRecorrencia: { type: ["string", "null"] }
+        prazoContratoMeses: { type: ["integer", "null"] }
+        validadePropostaDias: { type: ["integer", "null"] }
+        dataPrevistaInicio: { type: ["string", "null"] }
+        responsavelComercial: { type: ["string", "null"] }
+        observacoesComerciais: { type: ["string", "null"] }
+        condicoesEspeciais: { type: ["string", "null"] }
+
+    DocumentoComercialSignatario:
+      type: object
+      properties:
+        nome: { type: string }
+        email: { type: string }
+        cargo: { type: ["string", "null"] }
+        papel: { type: ["string", "null"] }
+        ordem: { type: ["integer", "null"] }
+        status: { type: ["string", "null"] }
+        signedAt: { type: ["string", "null"] }
+      required:
+        - nome
+        - email
+
+    DocumentoComercial:
+      type: object
+      properties:
+        id: { type: string }
+        clinicId: { type: string }
+        tipo:
+          type: string
+          enum: [proposta, contrato]
+        versao: { type: integer }
+        status: { type: string }
+        titulo: { type: ["string", "null"] }
+        pdfPath: { type: ["string", "null"] }
+        docHash: { type: ["string", "null"] }
+        snapshot:
+          anyOf:
+            - $ref: "#/components/schemas/CondicoesComerciaisSnapshot"
+            - type: "null"
+        signatarios:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/DocumentoComercialSignatario"
+        geradoEm: { type: ["string", "null"] }
+        enviadoEm: { type: ["string", "null"] }
+        aceitoEm: { type: ["string", "null"] }
+        validadeAte: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required:
+        - id
+        - clinicId
+        - tipo
+        - versao
+        - status
+        - createdAt
+        - updatedAt
+
+    GerarFaturasContratoInput:
+      type: object
+      properties:
+        confirmar:
+          type: boolean
+          description: "Confirmação explícita do super-admin para liberar a geração."
+      required:
+        - confirmar
+
+    GerarFaturasContratoResponse:
+      type: object
+      properties:
+        criadas: { type: integer }
+        faturas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fatura"
+      required:
+        - criadas
+        - faturas
 
     # ─── NOTIFICATION ───────────────────────────────────────────────────────
     Notification:

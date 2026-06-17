@@ -30,6 +30,7 @@ import type {
   Compromisso,
   CompromissoInput,
   CompromissoUpdate,
+  CondicoesComerciaisInput,
   CreateActionBody,
   CreateActivityBody,
   CreateClinicBody,
@@ -47,8 +48,11 @@ import type {
   DiagnosticQuestion,
   DiagnosticResposta,
   DiagnosticsOverviewItem,
+  DocumentoComercial,
   Fatura,
   GenerateRisksResponse,
+  GerarFaturasContratoInput,
+  GerarFaturasContratoResponse,
   GetSocietaryDocSignedUrl200,
   HealthStatus,
   HydratedDiagnostic,
@@ -67,6 +71,7 @@ import type {
   ListActionsParams,
   ListClinicsParams,
   ListCompromissosParams,
+  ListDocumentosComerciaisParams,
   Notification,
   ParceiroExterno,
   PerguntaInput,
@@ -7541,6 +7546,306 @@ export const useCreateFatura = <
 > => {
   return useMutation(getCreateFaturaMutationOptions(options));
 };
+
+/**
+ * @summary Generate invoices (implantação + monthly) from commercial conditions
+ */
+export const getGerarFaturasDoContratoUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/faturas/gerar-do-contrato`;
+};
+
+export const gerarFaturasDoContrato = async (
+  clinicId: string,
+  gerarFaturasContratoInput: GerarFaturasContratoInput,
+  options?: RequestInit,
+): Promise<GerarFaturasContratoResponse> => {
+  return customFetch<GerarFaturasContratoResponse>(
+    getGerarFaturasDoContratoUrl(clinicId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(gerarFaturasContratoInput),
+    },
+  );
+};
+
+export const getGerarFaturasDoContratoMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof gerarFaturasDoContrato>>,
+    TError,
+    { clinicId: string; data: BodyType<GerarFaturasContratoInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof gerarFaturasDoContrato>>,
+  TError,
+  { clinicId: string; data: BodyType<GerarFaturasContratoInput> },
+  TContext
+> => {
+  const mutationKey = ["gerarFaturasDoContrato"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof gerarFaturasDoContrato>>,
+    { clinicId: string; data: BodyType<GerarFaturasContratoInput> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return gerarFaturasDoContrato(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GerarFaturasDoContratoMutationResult = NonNullable<
+  Awaited<ReturnType<typeof gerarFaturasDoContrato>>
+>;
+export type GerarFaturasDoContratoMutationBody =
+  BodyType<GerarFaturasContratoInput>;
+export type GerarFaturasDoContratoMutationError = ErrorType<void>;
+
+/**
+ * @summary Generate invoices (implantação + monthly) from commercial conditions
+ */
+export const useGerarFaturasDoContrato = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof gerarFaturasDoContrato>>,
+    TError,
+    { clinicId: string; data: BodyType<GerarFaturasContratoInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof gerarFaturasDoContrato>>,
+  TError,
+  { clinicId: string; data: BodyType<GerarFaturasContratoInput> },
+  TContext
+> => {
+  return useMutation(getGerarFaturasDoContratoMutationOptions(options));
+};
+
+/**
+ * @summary Save commercial conditions for a clinic
+ */
+export const getSaveCondicoesComerciaisUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/condicoes-comerciais`;
+};
+
+export const saveCondicoesComerciais = async (
+  clinicId: string,
+  condicoesComerciaisInput: CondicoesComerciaisInput,
+  options?: RequestInit,
+): Promise<Clinic> => {
+  return customFetch<Clinic>(getSaveCondicoesComerciaisUrl(clinicId), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(condicoesComerciaisInput),
+  });
+};
+
+export const getSaveCondicoesComerciaisMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveCondicoesComerciais>>,
+    TError,
+    { clinicId: string; data: BodyType<CondicoesComerciaisInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof saveCondicoesComerciais>>,
+  TError,
+  { clinicId: string; data: BodyType<CondicoesComerciaisInput> },
+  TContext
+> => {
+  const mutationKey = ["saveCondicoesComerciais"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof saveCondicoesComerciais>>,
+    { clinicId: string; data: BodyType<CondicoesComerciaisInput> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return saveCondicoesComerciais(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SaveCondicoesComerciaisMutationResult = NonNullable<
+  Awaited<ReturnType<typeof saveCondicoesComerciais>>
+>;
+export type SaveCondicoesComerciaisMutationBody =
+  BodyType<CondicoesComerciaisInput>;
+export type SaveCondicoesComerciaisMutationError = ErrorType<void>;
+
+/**
+ * @summary Save commercial conditions for a clinic
+ */
+export const useSaveCondicoesComerciais = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof saveCondicoesComerciais>>,
+    TError,
+    { clinicId: string; data: BodyType<CondicoesComerciaisInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof saveCondicoesComerciais>>,
+  TError,
+  { clinicId: string; data: BodyType<CondicoesComerciaisInput> },
+  TContext
+> => {
+  return useMutation(getSaveCondicoesComerciaisMutationOptions(options));
+};
+
+/**
+ * @summary List commercial documents (proposta/contrato) for a clinic
+ */
+export const getListDocumentosComerciaisUrl = (
+  clinicId: string,
+  params?: ListDocumentosComerciaisParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/clinics/${clinicId}/documentos-comerciais?${stringifiedParams}`
+    : `/api/clinics/${clinicId}/documentos-comerciais`;
+};
+
+export const listDocumentosComerciais = async (
+  clinicId: string,
+  params?: ListDocumentosComerciaisParams,
+  options?: RequestInit,
+): Promise<DocumentoComercial[]> => {
+  return customFetch<DocumentoComercial[]>(
+    getListDocumentosComerciaisUrl(clinicId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListDocumentosComerciaisQueryKey = (
+  clinicId: string,
+  params?: ListDocumentosComerciaisParams,
+) => {
+  return [
+    `/api/clinics/${clinicId}/documentos-comerciais`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListDocumentosComerciaisQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDocumentosComerciais>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  params?: ListDocumentosComerciaisParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDocumentosComerciais>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getListDocumentosComerciaisQueryKey(clinicId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listDocumentosComerciais>>
+  > = ({ signal }) =>
+    listDocumentosComerciais(clinicId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDocumentosComerciais>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDocumentosComerciaisQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDocumentosComerciais>>
+>;
+export type ListDocumentosComerciaisQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List commercial documents (proposta/contrato) for a clinic
+ */
+
+export function useListDocumentosComerciais<
+  TData = Awaited<ReturnType<typeof listDocumentosComerciais>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  params?: ListDocumentosComerciaisParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listDocumentosComerciais>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDocumentosComerciaisQueryOptions(
+    clinicId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Update invoice status

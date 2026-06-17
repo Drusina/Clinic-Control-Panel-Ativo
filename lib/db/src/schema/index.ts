@@ -11,6 +11,7 @@ export * from "./risks";
 export * from "./team";
 export * from "./team_credentials";
 export * from "./faturas";
+export * from "./documentos_comerciais";
 export * from "./notifications";
 export * from "./perfil_operacional";
 export * from "./parceiros_externos";
