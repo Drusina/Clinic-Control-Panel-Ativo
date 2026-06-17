@@ -1,0 +1,1203 @@
+Preciso refatorar e ampliar a aba “Financeiro & Contrato” da ficha da clínica, transformando-a em uma central completa de proposta comercial, contrato, assinatura eletrônica via Autentique e faturamento.
+
+CONTEXTO DO SISTEMA
+
+O sistema já possui uma ficha da clínica criada a partir do CNPJ. Os dados cadastrais da clínica já foram capturados anteriormente e estão salvos no banco de dados.
+
+Portanto, nesta etapa NÃO devemos recadastrar dados da empresa.
+
+A aba “Financeiro & Contrato” deve sempre usar a ficha da clínica já existente como fonte única da verdade.
+
+Dados que já devem ser puxados automaticamente da ficha da clínica:
+
+* razão social;
+* nome fantasia;
+* CNPJ;
+* endereço completo;
+* município;
+* UF;
+* CEP;
+* e-mail;
+* telefone;
+* CNAE principal;
+* CNAEs secundários, se houver;
+* natureza jurídica;
+* data de abertura;
+* situação cadastral;
+* quadro societário, se já estiver salvo;
+* responsável legal ou representante vinculado, se já estiver salvo.
+
+NÃO criar novo cadastro de empresa.
+NÃO duplicar clínica.
+NÃO pedir novamente dados do CNPJ.
+Proposta e contrato devem sempre estar vinculados ao ID da clínica já cadastrada.
+
+MARCA E POSICIONAMENTO
+
+Empresa: IONEX360
+Produto: CLINIONEX360
+Segmento: exclusivo para clínicas
+Posicionamento: Inteligência Empresarial através de Assessoria Consultiva para Clínicas
+
+Substituir termos comerciais ligados a “governança” por:
+
+* Inteligência Empresarial;
+* Assessoria Consultiva Empresarial;
+* Painel de Inteligência Empresarial;
+* Rotina de acompanhamento executivo;
+* Gestão orientada por dados;
+* Diagnóstico 360;
+* Mapeamento de riscos;
+* Plano de ação;
+* Organização documental;
+* Controle de evidências;
+* Acompanhamento consultivo.
+
+Evitar usar “governança” na proposta comercial. No contrato, se necessário, usar com moderação apenas em sentido jurídico/organizacional, mas priorizar “inteligência empresarial”, “assessoria consultiva” e “gestão orientada por dados”.
+
+OBJETIVO DA REFATORAÇÃO
+
+Transformar a aba “Financeiro & Contrato” em uma central com 4 blocos:
+
+1. Condições Comerciais
+2. Proposta Comercial
+3. Contrato
+4. Faturas / Cobranças
+
+FLUXO GERAL
+
+O fluxo deve funcionar assim:
+
+1. Clínica já cadastrada no sistema.
+2. Usuário acessa a aba “Financeiro & Contrato”.
+3. Sistema exibe os dados comerciais editáveis.
+4. Usuário preenche ou altera as condições comerciais.
+5. Usuário salva as condições comerciais.
+6. Usuário clica em “Gerar Proposta”.
+7. Sistema gera PDF da proposta comercial usando:
+
+   * dados da clínica já cadastrada;
+   * condições comerciais preenchidas;
+   * modelo padrão da proposta CLINIONEX360.
+8. Usuário visualiza a proposta.
+9. Usuário envia a proposta via Autentique.
+10. Sistema acompanha status da proposta.
+11. Após proposta assinada/aceita, sistema libera botão “Gerar Contrato”.
+12. Usuário pode revisar condições comerciais antes de gerar o contrato.
+13. Sistema gera PDF do contrato usando:
+
+* dados da clínica;
+* condições comerciais finais;
+* modelo padrão do contrato CLINIONEX360.
+
+14. Usuário visualiza o contrato.
+15. Usuário envia contrato via Autentique.
+16. Sistema acompanha status do contrato.
+17. Após contrato assinado, sistema muda status da clínica para:
+    “Contrato assinado / Kick-off pendente”.
+18. Após contrato assinado, liberar:
+
+* criação de faturas;
+* avanço para etapa de Kick-off;
+* botão “Agendar Kick-off” ou “Ir para Kick-off”.
+
+STATUS PRINCIPAIS DA JORNADA
+
+Criar ou ajustar o status da clínica para acompanhar o fluxo:
+
+* Cadastro iniciado
+* Cadastro concluído
+* Condições comerciais em edição
+* Proposta em edição
+* Proposta gerada
+* Proposta enviada
+* Proposta aceita
+* Proposta recusada
+* Contrato em edição
+* Contrato gerado
+* Contrato enviado
+* Contrato assinado
+* Kick-off pendente
+* Kick-off realizado
+* Implantação iniciada
+* Diagnóstico 360 em andamento
+* Mapeamento de riscos em andamento
+* Plano de ação em andamento
+* Painel em desenvolvimento
+* Painel em validação
+* Painel implantado
+* Acompanhamento recorrente
+
+ESTRUTURA DA ABA “FINANCEIRO & CONTRATO”
+
+Renomear o título interno da área de “Contrato & Valores” para:
+
+“Condições Comerciais, Proposta e Contrato”
+
+Subtítulo:
+
+“Configure os valores, gere a proposta comercial, envie para aceite, gere o contrato e acompanhe a assinatura eletrônica.”
+
+CARD 1 — CONDIÇÕES COMERCIAIS
+
+Título:
+“Condições Comerciais”
+
+Subtítulo:
+“Defina os valores, prazos e condições que serão usados na proposta e no contrato.”
+
+Campos:
+
+* valor_implantacao
+  Label: “Valor de implantação”
+  Tipo: moeda BRL
+  Exemplo: R$ 30.000,00
+
+* valor_mensal
+  Label: “Recorrência / MRR”
+  Tipo: moeda BRL
+  Exemplo: R$ 5.000,00
+
+* dia_vencimento
+  Label: “Dia de vencimento”
+  Tipo: número inteiro de 1 a 31
+  Exemplo: 15
+
+* data_inicio_recorrencia
+  Label: “Início da recorrência”
+  Tipo: data
+  Exemplo: 15/08/2026
+
+* forma_pagamento
+  Label: “Forma de pagamento”
+  Tipo: select
+  Opções:
+
+  * Boleto Bancário
+  * PIX
+  * Transferência Bancária
+  * Cartão de Crédito
+  * Outro
+
+* indice_reajuste
+  Label: “Índice de reajuste”
+  Tipo: select
+  Opções:
+
+  * IPCA/IBGE
+  * IGPM/FGV
+  * INPC/IBGE
+  * Sem reajuste no primeiro ciclo
+  * Outro
+
+* prazo_contrato_meses
+  Label: “Prazo contratual”
+  Tipo: número inteiro
+  Exemplo: 12
+
+* validade_proposta_dias
+  Label: “Validade da proposta”
+  Tipo: número inteiro
+  Exemplo: 15
+
+* data_prevista_inicio
+  Label: “Data prevista de início do projeto”
+  Tipo: data
+
+* responsavel_comercial
+  Label: “Responsável comercial”
+  Tipo: texto
+
+* observacoes_comerciais
+  Label: “Observações comerciais”
+  Tipo: textarea
+
+* condicoes_especiais
+  Label: “Condições especiais”
+  Tipo: textarea
+
+Botões:
+
+* “Salvar Condições Comerciais”
+* “Pré-visualizar Dados da Proposta”
+
+Regras:
+
+* O botão “Gerar Proposta” só deve ficar ativo depois que as condições comerciais mínimas forem salvas.
+* Campos obrigatórios mínimos:
+
+  * valor_implantacao;
+  * valor_mensal;
+  * dia_vencimento;
+  * data_inicio_recorrencia;
+  * forma_pagamento;
+  * prazo_contrato_meses;
+  * validade_proposta_dias;
+  * responsável comercial.
+* Sempre que as condições comerciais forem alteradas após uma proposta já gerada, exibir aviso:
+  “Existem alterações comerciais ainda não refletidas na proposta. Gere uma nova versão antes de enviar.”
+
+CARD 2 — PROPOSTA COMERCIAL
+
+Título:
+“Proposta Comercial”
+
+Subtítulo:
+“Gere, revise, envie para aceite e acompanhe a assinatura da proposta.”
+
+Campos exibidos:
+
+* status_proposta
+* versao_proposta
+* data_geracao_proposta
+* data_envio_proposta
+* data_aceite_proposta
+* validade_proposta
+* pdf_proposta_url
+* autentique_document_id_proposta
+* autentique_status_proposta
+* signatarios_proposta
+
+Status possíveis:
+
+* Não gerada
+* Gerada
+* Enviada
+* Visualizada
+* Assinada/Aceita
+* Recusada
+* Expirada
+* Cancelada
+* Regerada
+
+Botões:
+
+* “Gerar Proposta”
+* “Visualizar Proposta”
+* “Enviar Proposta via Autentique”
+* “Atualizar Status da Proposta”
+* “Regerar Proposta”
+* “Baixar PDF”
+
+Regras:
+
+* “Visualizar Proposta” só aparece se houver PDF gerado.
+* “Enviar Proposta via Autentique” só aparece se houver PDF gerado.
+* “Atualizar Status da Proposta” só aparece se houver ID do documento no Autentique.
+* “Gerar Contrato” fica bloqueado até status da proposta ser “Assinada/Aceita”.
+* Se a proposta for alterada ou regerada após envio, criar nova versão.
+* Não sobrescrever PDF anterior. Manter histórico de versões.
+* Mostrar alerta antes de regerar:
+  “Ao regerar a proposta, será criada uma nova versão com as condições comerciais atuais. Deseja continuar?”
+
+CARD 3 — CONTRATO
+
+Título:
+“Contrato”
+
+Subtítulo:
+“Gere o contrato após o aceite da proposta e envie para assinatura eletrônica.”
+
+Campos exibidos:
+
+* status_contrato
+* versao_contrato
+* data_geracao_contrato
+* data_envio_contrato
+* data_assinatura_contrato
+* pdf_contrato_url
+* autentique_document_id_contrato
+* autentique_status_contrato
+* signatarios_contrato
+
+Status possíveis:
+
+* Bloqueado
+* Não gerado
+* Gerado
+* Enviado
+* Visualizado
+* Assinado
+* Recusado
+* Expirado
+* Cancelado
+* Regerado
+
+Botões:
+
+* “Gerar Contrato”
+* “Visualizar Contrato”
+* “Enviar Contrato via Autentique”
+* “Atualizar Status do Contrato”
+* “Regerar Contrato”
+* “Baixar PDF”
+
+Regras:
+
+* O contrato só pode ser gerado após a proposta estar assinada/aceita.
+* O contrato deve usar os dados atuais da clínica e as condições comerciais confirmadas.
+* Antes de gerar o contrato, exibir modal de revisão:
+  “Revise os dados comerciais antes de gerar o contrato.”
+* Se o contrato já foi enviado ao Autentique, ao regerar deve criar nova versão e alertar o usuário.
+* Após contrato assinado:
+
+  * atualizar status da clínica para “Contrato assinado / Kick-off pendente”;
+  * liberar criação de faturas;
+  * liberar etapa Kick-off;
+  * registrar atividade no histórico.
+
+CARD 4 — FATURAS / COBRANÇAS
+
+Título:
+“Faturas”
+
+Subtítulo:
+“Acompanhe cobranças, vencimentos e pagamentos.”
+
+Campos da fatura:
+
+* numero_fatura
+* vencimento
+* valor
+* status
+* data_pagamento
+* forma_pagamento
+* observacoes
+* pdf_fatura_url, se houver
+
+Status da fatura:
+
+* Aberta
+* Enviada
+* Paga
+* Vencida
+* Cancelada
+
+Botões:
+
+* “Nova Fatura”
+* “Gerar Faturas do Contrato”
+* “Marcar como Paga”
+* “Cancelar”
+* “Visualizar”
+* “Baixar”
+
+Regras:
+
+* Por padrão, só liberar criação de faturas após contrato assinado.
+* Permitir liberação manual por usuário administrador.
+* Ao clicar em “Gerar Faturas do Contrato”, criar faturas mensais com base:
+
+  * no valor mensal;
+  * no dia de vencimento;
+  * na data de início da recorrência;
+  * no prazo contratual.
+* Permitir também criar fatura separada da implantação.
+
+ATIVIDADES / LOG
+
+Registrar no histórico da clínica:
+
+* condições comerciais salvas;
+* proposta gerada;
+* proposta enviada via Autentique;
+* proposta assinada;
+* proposta recusada;
+* contrato gerado;
+* contrato enviado via Autentique;
+* contrato assinado;
+* fatura criada;
+* fatura paga;
+* kick-off liberado.
+
+Cada log deve conter:
+
+* data/hora;
+* usuário responsável;
+* ação;
+* descrição;
+* versão do documento, se aplicável.
+
+INTEGRAÇÃO COM AUTENTIQUE
+
+Criar integração com Autentique para envio da proposta e do contrato.
+
+Variáveis de ambiente:
+
+* AUTENTIQUE_API_TOKEN
+* AUTENTIQUE_API_URL
+
+Funcionalidades necessárias:
+
+1. Enviar PDF para assinatura.
+2. Informar nome do documento.
+3. Informar signatários.
+4. Definir se documento é proposta ou contrato.
+5. Armazenar document_id retornado.
+6. Consultar status do documento.
+7. Atualizar status no sistema.
+8. Salvar link de visualização, se a API retornar.
+9. Tratar erros de envio.
+10. Permitir reenvio quando houver falha.
+
+Signatários:
+
+* representante da clínica;
+* representante da IONEX360;
+* testemunhas, se necessário no contrato.
+
+Campos de signatário:
+
+* nome;
+* e-mail;
+* CPF, se disponível;
+* papel:
+
+  * contratante;
+  * contratada;
+  * testemunha;
+  * aprovador;
+  * outro.
+
+Para proposta:
+
+* assinatura do representante da clínica;
+* assinatura ou ciência da IONEX360, se necessário.
+
+Para contrato:
+
+* assinatura do representante da clínica;
+* assinatura do representante da IONEX360;
+* testemunhas, se aplicável.
+
+GERAÇÃO DE PDF
+
+Implementar geração de PDF para:
+
+1. Proposta Comercial CLINIONEX360
+2. Contrato de Prestação de Serviços CLINIONEX360
+
+Os PDFs devem seguir um layout profissional, moderno e executivo.
+
+Estilo visual:
+
+* fundo predominante claro;
+* cabeçalho com azul escuro;
+* detalhes em azul/ciano;
+* cartões com bordas arredondadas;
+* tipografia moderna;
+* tabelas limpas;
+* rodapé com nome do produto e número da página;
+* espaço reservado para logotipo IONEX360.
+
+Paleta sugerida:
+
+* Azul escuro: #0B1F33
+* Azul principal: #0F5F8F
+* Ciano/acento: #00A3D9
+* Cinza fundo: #F4F7FA
+* Cinza texto: #4A5568
+* Branco: #FFFFFF
+* Verde status: #16A34A
+* Vermelho alerta: #DC2626
+* Laranja atenção: #F97316
+
+Tipografia sugerida:
+
+* Inter, Arial ou Helvetica.
+* Títulos com peso 700.
+* Texto com peso 400 ou 500.
+
+LAYOUT DA PROPOSTA COMERCIAL
+
+A proposta deve ter de 5 a 7 páginas no máximo.
+
+Estrutura recomendada:
+
+PÁGINA 1 — CAPA EXECUTIVA
+Título:
+“Proposta Comercial CLINIONEX360”
+
+Subtítulo:
+“Inteligência Empresarial através de Assessoria Consultiva para Clínicas”
+
+Dados:
+
+* Proposta para: [nome fantasia ou razão social da clínica]
+* CNPJ: [cnpj]
+* Cidade/UF: [cidade/uf]
+* Data de emissão: [data]
+* Validade: [validade] dias
+* Responsável comercial: [responsável]
+
+Blocos visuais:
+
+* Diagnóstico 360
+* Mapeamento de riscos
+* Plano de ação
+* Painel de Inteligência Empresarial
+* Acompanhamento consultivo
+
+Texto de abertura:
+“A CLINIONEX360 foi desenvolvida para transformar dados, documentos, rotinas, riscos e decisões em uma gestão mais clara, acompanhável e orientada por informação.”
+
+PÁGINA 2 — CONTEXTO E DESAFIO
+Título:
+“A clínica cresce. A gestão precisa acompanhar.”
+
+Texto:
+“Clínicas em crescimento acumulam sistemas, planilhas, documentos, controles paralelos e informações espalhadas entre diferentes áreas. O financeiro enxerga uma parte. A recepção enxerga outra. O estoque possui seus próprios controles. A manutenção possui prazos e riscos. A diretoria, muitas vezes, precisa decidir sem uma visão consolidada da operação.”
+
+Lista de dores:
+
+* informações dispersas;
+* controles paralelos;
+* documentos sem acompanhamento;
+* dificuldade para enxergar margem e resultado;
+* riscos não priorizados;
+* decisões sem base consolidada;
+* tarefas sem responsável e prazo;
+* dificuldade de acompanhamento pela diretoria.
+
+Fechamento:
+“A CLINIONEX360 organiza esse cenário e transforma informação dispersa em inteligência empresarial aplicada à rotina da clínica.”
+
+PÁGINA 3 — SOLUÇÃO PROPOSTA
+Título:
+“Assessoria Consultiva + Diagnóstico 360 + Painel de Inteligência Empresarial”
+
+Três blocos:
+
+1. Assessoria Consultiva Empresarial
+   Texto:
+   “Equipe multidisciplinar para apoiar a leitura dos dados, a identificação de riscos, a organização das prioridades e o acompanhamento das decisões.”
+
+2. Diagnóstico 360
+   Texto:
+   “Análise estruturada da clínica em pilares como estratégia, financeiro, processos, pessoas, tecnologia, comercial, documentos, contratos e riscos.”
+
+3. Painel de Inteligência Empresarial
+   Texto:
+   “Painel personalizado para consolidar indicadores, riscos, tarefas, documentos, fontes de dados e pontos de atenção em uma visão executiva.”
+
+Rodapé da página:
+“Não é apenas um painel. É uma rotina de gestão orientada por dados, com acompanhamento consultivo.”
+
+PÁGINA 4 — JORNADA DE IMPLANTAÇÃO
+Título:
+“Jornada de implantação CLINIONEX360”
+
+Apresentar linha do tempo:
+
+1. Cadastro da clínica
+2. Proposta e aceite
+3. Contrato e assinatura
+4. Kick-off
+5. Captação de documentos e dados
+6. Diagnóstico 360
+7. Mapeamento de riscos
+8. Plano de ação
+9. Desenho do painel
+10. Validação e treinamento
+11. Acompanhamento consultivo
+
+Também apresentar blocos por fase:
+
+Fase 1 — Alinhamento e coleta
+
+* kick-off;
+* responsáveis;
+* documentos;
+* sistemas;
+* fontes de dados.
+
+Fase 2 — Diagnóstico e inteligência
+
+* análise 360;
+* riscos;
+* indicadores;
+* prioridades.
+
+Fase 3 — Painel e execução
+
+* desenho do painel;
+* validação;
+* treinamento;
+* plano de ação;
+* acompanhamento.
+
+PÁGINA 5 — ESCOPO E ENTREGAS
+Título:
+“O que está incluído”
+
+Lista:
+
+* cadastro e estruturação inicial;
+* reunião de kick-off;
+* levantamento de documentos, sistemas e fontes de dados;
+* diagnóstico empresarial 360;
+* mapeamento de riscos;
+* estruturação do plano de ação;
+* desenho do painel de inteligência empresarial;
+* parametrização dos módulos prioritários;
+* treinamento inicial;
+* acompanhamento consultivo recorrente;
+* reuniões periódicas de leitura e acompanhamento;
+* apoio na interpretação de dados, riscos e prioridades.
+
+Título secundário:
+“Módulos possíveis do painel”
+
+Lista:
+
+* visão executiva;
+* financeiro;
+* agenda e produtividade;
+* estoque;
+* manutenção;
+* documentos;
+* contratos;
+* tarefas;
+* riscos;
+* redes sociais;
+* plano de ação;
+* relatórios executivos.
+
+PÁGINA 6 — INVESTIMENTO
+Título:
+“Investimento e condições comerciais”
+
+Blocos:
+
+* Valor de implantação: R$ [valor_implantacao]
+* Recorrência mensal: R$ [valor_mensal]
+* Prazo contratual: [prazo] meses
+* Vencimento: dia [dia_vencimento]
+* Início da recorrência: [data_inicio_recorrencia]
+* Forma de pagamento: [forma_pagamento]
+* Reajuste: [indice_reajuste]
+* Validade da proposta: [validade] dias
+
+Texto:
+“O investimento contempla a implantação, diagnóstico, estruturação inicial, desenho do painel, parametrização dos módulos prioritários, treinamento e acompanhamento consultivo conforme o escopo definido nesta proposta.”
+
+Título secundário:
+“O que não está incluído”
+
+Lista:
+
+* execução operacional diária da clínica;
+* BPO financeiro;
+* contas a pagar e contas a receber;
+* conciliação bancária operacional;
+* atuação como departamento jurídico interno;
+* execução de campanhas de marketing;
+* substituição da equipe administrativa;
+* desenvolvimento ilimitado;
+* integrações não viáveis ou não previstas inicialmente.
+
+PÁGINA 7 — ACEITE E PRÓXIMOS PASSOS
+Título:
+“Próximos passos”
+
+Fluxo:
+
+1. Aceite da proposta
+2. Geração do contrato
+3. Assinatura via Autentique
+4. Agendamento do kick-off
+5. Início da coleta de documentos
+6. Diagnóstico 360
+7. Mapeamento de riscos
+8. Plano de ação
+9. Painel de Inteligência Empresarial
+10. Acompanhamento consultivo
+
+Texto de aceite:
+“Ao aceitar esta proposta, a CONTRATANTE declara estar ciente do escopo, condições comerciais, etapas de implantação e premissas apresentadas, autorizando a geração do contrato de prestação de serviços correspondente.”
+
+Campos:
+
+* Nome da clínica
+* Representante
+* CPF
+* Data
+* Assinatura eletrônica via Autentique
+
+LAYOUT DO CONTRATO
+
+O contrato deve ser mais jurídico e menos visual, mas ainda com layout profissional.
+
+Estrutura:
+
+* Cabeçalho com IONEX360 | CLINIONEX360
+* Título: Contrato de Prestação de Serviços de Inteligência Empresarial através de Assessoria Consultiva
+* Texto em páginas A4
+* Numeração de páginas
+* Rodapé com CNPJ da IONEX360
+* Tabelas para valores, escopo e módulos
+
+CLÁUSULAS DO CONTRATO
+
+1. Das Partes
+2. Do Objeto
+3. Do Escopo dos Serviços
+4. Da Jornada de Implantação
+5. Do Painel de Inteligência Empresarial
+6. Da Assessoria Consultiva
+7. Dos Prazos
+8. Do Investimento e Forma de Pagamento
+9. Das Obrigações da Contratada
+10. Das Obrigações da Contratante
+11. Das Exclusões de Escopo
+12. Dos Resultados Esperados
+13. Da Confidencialidade
+14. Da Proteção de Dados — LGPD
+15. Da Propriedade Intelectual
+16. Do Suporte
+17. Da Gestão de Mudanças de Escopo
+18. Da Rescisão
+19. Das Disposições Gerais
+20. Do Foro
+21. Assinaturas
+
+TEXTO-BASE DO CONTRATO
+
+CLÁUSULA 1 — DAS PARTES
+
+CONTRATANTE: [RAZÃO SOCIAL DA CLÍNICA], pessoa jurídica de direito privado, inscrita no CNPJ sob nº [CNPJ], com sede em [ENDEREÇO COMPLETO], neste ato representada por [NOME DO REPRESENTANTE], [QUALIFICAÇÃO], CPF nº [CPF], doravante denominada simplesmente CONTRATANTE.
+
+CONTRATADA: IONEX360 [RAZÃO SOCIAL COMPLETA], pessoa jurídica de direito privado, inscrita no CNPJ sob nº [CNPJ IONEX360], com sede em [ENDEREÇO IONEX360], neste ato representada por [REPRESENTANTE IONEX360], doravante denominada simplesmente CONTRATADA.
+
+As partes resolvem celebrar o presente Contrato de Prestação de Serviços de Inteligência Empresarial através de Assessoria Consultiva, mediante as cláusulas e condições seguintes.
+
+CLÁUSULA 2 — DO OBJETO
+
+O presente contrato tem por objeto a prestação, pela CONTRATADA, de serviços de Inteligência Empresarial através de Assessoria Consultiva para Clínicas, por meio da solução CLINIONEX360, abrangendo diagnóstico empresarial, mapeamento de riscos, plano de ação, estruturação de indicadores, organização de informações gerenciais, implantação de painel de inteligência empresarial e acompanhamento consultivo recorrente.
+
+Parágrafo único. A atuação da CONTRATADA tem natureza consultiva, estratégica, técnica e organizacional, não implicando substituição da administração da CONTRATANTE, execução operacional diária de suas áreas internas ou tomada de decisão em nome dos sócios, administradores ou gestores da clínica.
+
+CLÁUSULA 3 — DO ESCOPO DOS SERVIÇOS
+
+Os serviços contemplam:
+
+I. cadastro e estruturação inicial da clínica na plataforma;
+II. reunião de alinhamento e kick-off;
+III. levantamento de documentos, sistemas, fontes de dados, processos e responsáveis;
+IV. realização de Diagnóstico 360;
+V. mapeamento de riscos financeiros, operacionais, jurídicos, documentais, comerciais, tecnológicos e administrativos;
+VI. estruturação de plano de ação com responsáveis, prazos, prioridades e status;
+VII. desenho e parametrização do Painel de Inteligência Empresarial;
+VIII. treinamento inicial dos usuários;
+IX. acompanhamento consultivo recorrente;
+X. reuniões periódicas de leitura, acompanhamento e priorização.
+
+CLÁUSULA 4 — DA JORNADA DE IMPLANTAÇÃO
+
+A implantação observará as seguintes etapas:
+
+I. Cadastro da clínica;
+II. Aceite da proposta;
+III. Assinatura do contrato;
+IV. Kick-off;
+V. Captação de documentos e informações;
+VI. Diagnóstico 360;
+VII. Mapeamento de riscos;
+VIII. Plano de ação;
+IX. Desenho do painel;
+X. Validação;
+XI. Treinamento;
+XII. Acompanhamento consultivo.
+
+Parágrafo único. O cronograma poderá ser ajustado conforme disponibilidade de informações, participação da equipe da CONTRATANTE, complexidade das integrações e prioridades definidas em conjunto.
+
+CLÁUSULA 5 — DO PAINEL DE INTELIGÊNCIA EMPRESARIAL
+
+O Painel de Inteligência Empresarial será personalizado conforme a realidade da CONTRATANTE e poderá contemplar, de acordo com viabilidade técnica e prioridades definidas no diagnóstico:
+
+I. visão executiva;
+II. indicadores financeiros;
+III. agenda e produtividade;
+IV. estoque;
+V. manutenção;
+VI. documentos e vencimentos;
+VII. contratos;
+VIII. tarefas e plano de ação;
+IX. mapa de riscos;
+X. redes sociais e indicadores comerciais;
+XI. relatórios executivos.
+
+Parágrafo primeiro. A integração com sistemas externos dependerá da disponibilidade técnica, existência de API, possibilidade de exportação de dados, autorização de acesso ou importação estruturada.
+
+Parágrafo segundo. Quando a integração automática não for tecnicamente viável no primeiro momento, poderá ser adotada alimentação manual assistida ou importação periódica de dados.
+
+CLÁUSULA 6 — DA ASSESSORIA CONSULTIVA
+
+A CONTRATADA prestará assessoria consultiva para apoiar a leitura de dados, identificação de riscos, organização de prioridades, acompanhamento do plano de ação e estruturação de informações úteis à tomada de decisão.
+
+Parágrafo único. A assessoria não caracteriza administração direta da clínica, gestão operacional, BPO financeiro, departamento jurídico interno, contabilidade, agência de marketing ou execução direta de tarefas internas da CONTRATANTE.
+
+CLÁUSULA 7 — DO PRAZO
+
+O presente contrato terá vigência de [PRAZO_CONTRATO_MESES] meses, contados da data de assinatura.
+
+Parágrafo primeiro. A fase inicial de implantação terá prazo estimado conforme definido na proposta comercial, podendo variar de acordo com a complexidade do projeto, disponibilidade de dados e colaboração da CONTRATANTE.
+
+Parágrafo segundo. A recorrência terá início em [DATA_INICIO_RECORRENCIA].
+
+CLÁUSULA 8 — DO INVESTIMENTO E FORMA DE PAGAMENTO
+
+Pelos serviços contratados, a CONTRATANTE pagará à CONTRATADA:
+
+I. Valor de implantação: R$ [VALOR_IMPLANTACAO];
+II. Valor mensal recorrente: R$ [VALOR_MENSAL];
+III. Vencimento mensal: dia [DIA_VENCIMENTO] de cada mês;
+IV. Forma de pagamento: [FORMA_PAGAMENTO];
+V. Índice de reajuste: [INDICE_REAJUSTE].
+
+Parágrafo primeiro. Os valores mensais serão devidos durante toda a vigência contratual.
+
+Parágrafo segundo. O atraso no pagamento sujeitará a CONTRATANTE ao pagamento de multa de 2% sobre o valor em atraso, juros de mora de 1% ao mês, pro rata die, e correção monetária pelo índice contratual indicado.
+
+Parágrafo terceiro. Os valores poderão ser revistos em caso de ampliação relevante de escopo, inclusão de novos módulos, integrações adicionais, aumento significativo de volume de dados ou contratação de serviços complementares.
+
+CLÁUSULA 9 — DAS OBRIGAÇÕES DA CONTRATADA
+
+São obrigações da CONTRATADA:
+
+I. conduzir a metodologia CLINIONEX360;
+II. realizar o diagnóstico e análise das informações disponibilizadas;
+III. estruturar mapa de riscos e plano de ação;
+IV. desenhar e parametrizar o painel conforme escopo contratado;
+V. orientar a CONTRATANTE quanto à utilização da plataforma;
+VI. realizar reuniões periódicas de acompanhamento;
+VII. manter sigilo sobre as informações acessadas;
+VIII. observar a legislação aplicável de proteção de dados;
+IX. prestar suporte nos canais e condições definidos;
+X. comunicar limitações técnicas ou necessidades adicionais identificadas durante a execução.
+
+CLÁUSULA 10 — DAS OBRIGAÇÕES DA CONTRATANTE
+
+São obrigações da CONTRATANTE:
+
+I. disponibilizar informações, documentos e dados necessários;
+II. indicar responsáveis internos para interação com a CONTRATADA;
+III. garantir acesso aos sistemas, quando necessário e autorizado;
+IV. validar informações, indicadores, riscos e plano de ação;
+V. executar internamente as ações aprovadas;
+VI. participar das reuniões agendadas;
+VII. efetuar os pagamentos nos prazos contratados;
+VIII. manter sigilo sobre metodologia, plataforma e materiais da CONTRATADA;
+IX. comunicar alterações relevantes em sua operação;
+X. cumprir as normas legais, regulatórias e administrativas aplicáveis à sua atividade.
+
+CLÁUSULA 11 — DAS EXCLUSÕES DE ESCOPO
+
+Não estão incluídos neste contrato, salvo contratação específica:
+
+I. execução operacional diária das áreas da CONTRATANTE;
+II. BPO financeiro;
+III. contas a pagar;
+IV. contas a receber;
+V. conciliação bancária operacional;
+VI. atuação como departamento jurídico interno;
+VII. atuação como contabilidade da CONTRATANTE;
+VIII. execução de campanhas de marketing;
+IX. substituição da equipe administrativa da clínica;
+X. desenvolvimento ilimitado de funcionalidades;
+XI. integrações não previstas ou inviáveis tecnicamente;
+XII. suporte ilimitado fora das condições contratadas.
+
+CLÁUSULA 12 — DOS RESULTADOS ESPERADOS
+
+A metodologia tem por finalidade proporcionar maior clareza gerencial, organização de informações, identificação de riscos, acompanhamento de indicadores, plano de ação estruturado e melhor suporte à tomada de decisão.
+
+Parágrafo único. Os resultados dependem da participação ativa da CONTRATANTE, da qualidade das informações fornecidas, da validação das decisões e da execução interna do plano de ação, não constituindo garantia de resultado financeiro, operacional ou comercial específico.
+
+CLÁUSULA 13 — DA CONFIDENCIALIDADE
+
+As partes obrigam-se a manter sigilo sobre todas as informações estratégicas, comerciais, financeiras, técnicas, operacionais, contratuais, cadastrais e documentais a que tiverem acesso em razão deste contrato.
+
+Parágrafo único. A obrigação de confidencialidade permanecerá vigente mesmo após o término contratual, pelo prazo de 2 anos, salvo informações que por lei devam permanecer protegidas por prazo superior.
+
+CLÁUSULA 14 — DA PROTEÇÃO DE DADOS — LGPD
+
+As partes comprometem-se a cumprir a Lei Geral de Proteção de Dados Pessoais — Lei nº 13.709/2018.
+
+Parágrafo primeiro. A CONTRATADA tratará dados pessoais exclusivamente para as finalidades relacionadas à execução deste contrato.
+
+Parágrafo segundo. A CONTRATANTE declara ser responsável pela legalidade, legitimidade e autorização de uso dos dados disponibilizados à CONTRATADA.
+
+Parágrafo terceiro. Em caso de incidente de segurança envolvendo dados pessoais, a parte que tiver ciência deverá comunicar a outra em prazo razoável, observadas as exigências legais aplicáveis.
+
+CLÁUSULA 15 — DA PROPRIEDADE INTELECTUAL
+
+A plataforma, metodologia, fluxos, layouts, dashboards, modelos, documentos, códigos, estruturas, componentes tecnológicos e materiais da CLINIONEX360 pertencem exclusivamente à CONTRATADA.
+
+Parágrafo primeiro. A CONTRATANTE recebe apenas direito de uso limitado, não exclusivo, intransferível e condicionado à vigência do contrato.
+
+Parágrafo segundo. É vedada a cópia, reprodução, cessão, revenda, adaptação, engenharia reversa ou uso da metodologia e plataforma para criação de solução concorrente ou semelhante.
+
+CLÁUSULA 16 — DO SUPORTE
+
+A CONTRATADA prestará suporte nos canais definidos no kick-off, durante horário comercial, para dúvidas de uso, falhas técnicas e orientações relacionadas à plataforma.
+
+Parágrafo único. Demandas fora do escopo contratado, treinamentos adicionais, alterações relevantes, novos módulos ou customizações específicas poderão ser objeto de proposta complementar.
+
+CLÁUSULA 17 — DA GESTÃO DE MUDANÇAS DE ESCOPO
+
+Qualquer alteração relevante de escopo deverá ser formalizada por aditivo ou proposta complementar, contendo descrição da demanda, prazo, investimento e responsabilidades das partes.
+
+CLÁUSULA 18 — DA RESCISÃO
+
+O contrato poderá ser rescindido:
+
+I. por acordo entre as partes;
+II. por inadimplemento não sanado;
+III. por descumprimento contratual relevante;
+IV. por manifestação unilateral, mediante aviso prévio de 60 dias;
+V. por impossibilidade técnica, jurídica ou operacional superveniente.
+
+Parágrafo único. Em caso de rescisão, os valores vencidos e proporcionais até a data de encerramento serão devidos.
+
+CLÁUSULA 19 — DAS DISPOSIÇÕES GERAIS
+
+A tolerância de uma parte quanto ao descumprimento de qualquer obrigação não implicará novação ou renúncia de direito.
+
+A comunicação entre as partes poderá ocorrer por e-mail, plataforma, WhatsApp corporativo ou outro canal definido no kick-off.
+
+CLÁUSULA 20 — DO FORO
+
+Fica eleito o foro da comarca de [FORO], com renúncia a qualquer outro, por mais privilegiado que seja, para dirimir controvérsias oriundas deste contrato.
+
+CLÁUSULA 21 — ASSINATURAS
+
+E, por estarem justas e contratadas, as partes assinam eletronicamente o presente instrumento.
+
+[LOCAL], [DATA].
+
+CONTRATANTE:
+[RAZÃO SOCIAL DA CLÍNICA]
+Representante: [NOME]
+CPF: [CPF]
+
+CONTRATADA:
+IONEX360
+Representante: [NOME]
+CPF: [CPF]
+
+TESTEMUNHAS, se aplicável:
+Nome:
+CPF:
+
+Nome:
+CPF:
+
+BANCO DE DADOS — CAMPOS RECOMENDADOS
+
+Tabela ou campos vinculados à clínica:
+
+commercial_terms:
+
+* id
+* clinic_id
+* valor_implantacao
+* valor_mensal
+* dia_vencimento
+* data_inicio_recorrencia
+* forma_pagamento
+* indice_reajuste
+* prazo_contrato_meses
+* validade_proposta_dias
+* data_prevista_inicio
+* responsavel_comercial
+* observacoes_comerciais
+* condicoes_especiais
+* created_at
+* updated_at
+* updated_by
+
+documents:
+
+* id
+* clinic_id
+* type
+  valores:
+
+  * proposal
+  * contract
+  * invoice
+* version
+* status
+* pdf_url
+* autentique_document_id
+* autentique_status
+* generated_at
+* sent_at
+* signed_at
+* expires_at
+* created_by
+* created_at
+* updated_at
+
+document_signers:
+
+* id
+* document_id
+* name
+* email
+* cpf
+* role
+* status
+* signed_at
+
+invoices:
+
+* id
+* clinic_id
+* contract_document_id
+* numero
+* vencimento
+* valor
+* status
+* data_pagamento
+* forma_pagamento
+* observacoes
+* pdf_url
+* created_at
+* updated_at
+
+activity_logs:
+
+* id
+* clinic_id
+* user_id
+* action
+* description
+* metadata
+* created_at
+
+REGRAS DE INTERFACE
+
+Na aba “Financeiro & Contrato”, exibir no topo um indicador de progresso:
+
+1. Condições comerciais
+2. Proposta
+3. Aceite
+4. Contrato
+5. Assinatura
+6. Kick-off
+
+Cada etapa deve ter status visual:
+
+* cinza: pendente;
+* azul: em andamento;
+* verde: concluído;
+* vermelho: problema/recusado;
+* laranja: atenção/expirado.
+
+EXEMPLO DE TÍTULOS DOS BOTÕES
+
+Condições Comerciais:
+
+* Salvar Condições Comerciais
+
+Proposta:
+
+* Gerar Proposta
+* Visualizar Proposta
+* Enviar Proposta via Autentique
+* Atualizar Status da Proposta
+* Regerar Proposta
+
+Contrato:
+
+* Gerar Contrato
+* Visualizar Contrato
+* Enviar Contrato via Autentique
+* Atualizar Status do Contrato
+* Regerar Contrato
+
+Faturas:
+
+* Nova Fatura
+* Gerar Faturas do Contrato
+* Marcar como Paga
+* Cancelar Fatura
+
+VALIDAÇÕES IMPORTANTES
+
+Antes de gerar proposta:
+
+* verificar se existem condições comerciais salvas;
+* verificar se a clínica possui razão social;
+* verificar se a clínica possui CNPJ;
+* verificar se existe e-mail do representante ou signatário;
+* verificar se existe valor de implantação;
+* verificar se existe valor mensal;
+* verificar se existe prazo contratual;
+* verificar se existe validade da proposta.
+
+Antes de enviar proposta:
+
+* verificar se PDF foi gerado;
+* verificar se há signatário;
+* verificar se documento ainda está válido;
+* verificar se token Autentique está configurado.
+
+Antes de gerar contrato:
+
+* verificar se proposta está assinada/aceita;
+* verificar se condições comerciais não foram alteradas sem confirmação;
+* permitir revisão final.
+
+Antes de enviar contrato:
+
+* verificar se PDF foi gerado;
+* verificar se há signatários obrigatórios;
+* verificar se token Autentique está configurado.
+
+Após contrato assinado:
+
+* atualizar status da clínica;
+* liberar kick-off;
+* liberar faturas;
+* registrar log;
+* exibir alerta:
+  “Contrato assinado com sucesso. A etapa de Kick-off foi liberada.”
+
+MENSAGENS DE ALERTA
+
+Quando tentar gerar contrato sem proposta aceita:
+“Contrato bloqueado. É necessário que a proposta esteja assinada/aceita antes da geração do contrato.”
+
+Quando alterar condição comercial após proposta gerada:
+“As condições comerciais foram alteradas após a geração da proposta. Gere uma nova versão antes de enviar ou confirme que deseja manter a versão anterior.”
+
+Quando proposta expirar:
+“A proposta expirou. Gere uma nova versão antes de reenviar ao cliente.”
+
+Quando contrato assinado:
+“Contrato assinado. A clínica está liberada para a etapa de Kick-off.”
+
+Quando Autentique falhar:
+“Não foi possível enviar o documento ao Autentique. Verifique os dados dos signatários, o token da API e tente novamente.”
+
+RESULTADO ESPERADO
+
+Ao final da implementação, a aba “Financeiro & Contrato” deve permitir:
+
+1. editar condições comerciais;
+2. gerar proposta comercial em PDF com layout profissional;
+3. enviar proposta via Autentique;
+4. acompanhar status da proposta;
+5. liberar contrato somente após aceite da proposta;
+6. gerar contrato em PDF;
+7. enviar contrato via Autentique;
+8. acompanhar status do contrato;
+9. liberar Kick-off após assinatura;
+10. gerar e acompanhar faturas;
+11. manter histórico de versões;
+12. registrar atividades relevantes;
+13. evitar duplicidade de dados cadastrais;
+14. manter a ficha da clínica como fonte única da verdade.

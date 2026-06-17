@@ -1,0 +1,264 @@
+# PROPOSTA COMERCIAL
+
+## CLINIONEX360
+
+### Inteligência Empresarial através de Assessoria Consultiva para Clínicas
+
+**Proposta para:** {{nome_cliente}}
+**CNPJ:** {{cnpj_cliente}}
+**Cidade/UF:** {{cidade_uf}}
+**Data de emissão:** {{data_emissao}}
+**Validade da proposta:** {{validade_proposta}} dias
+**Responsável comercial:** {{responsavel_comercial}}
+
+---
+
+# 1. Visão Geral
+
+A CLINIONEX360 é uma solução de Inteligência Empresarial desenvolvida pela IONEX360 para clínicas que precisam transformar dados, documentos, rotinas, riscos e decisões em uma gestão mais clara, organizada e acompanhável.
+
+O objetivo não é entregar apenas um sistema ou um painel visual. A proposta é estruturar uma rotina de gestão baseada em informação confiável, leitura técnica, acompanhamento consultivo e execução organizada.
+
+Por meio de uma assessoria consultiva multidisciplinar, a IONEX360 apoia a clínica na identificação de pontos críticos, organização das informações, construção de indicadores, mapeamento de riscos, elaboração de plano de ação e implantação de um painel de gestão personalizado conforme a realidade do cliente.
+
+Ao final da implantação, a clínica passa a contar com uma visão mais clara sobre o que está acontecendo, o que precisa de atenção, quem é responsável por cada ação e quais informações devem orientar as decisões dos sócios, diretoria e equipe administrativa.
+
+---
+
+# 2. O Desafio
+
+Clínicas em crescimento normalmente acumulam sistemas, planilhas, documentos, controles paralelos e informações espalhadas entre áreas diferentes.
+
+O financeiro enxerga uma parte. A recepção enxerga outra. O estoque possui seus próprios controles. Os documentos ficam dispersos. As redes sociais geram dados que nem sempre conversam com o comercial. A manutenção possui prazos e riscos próprios. A diretoria, muitas vezes, precisa decidir sem ter uma visão consolidada da operação.
+
+Esse cenário gera problemas como:
+
+* dificuldade para entender a real performance da clínica;
+* excesso de dependência de pessoas específicas;
+* baixa previsibilidade financeira e operacional;
+* riscos não mapeados;
+* documentos sem controle centralizado;
+* decisões tomadas com base em percepções, e não em dados;
+* tarefas sem responsável, prazo ou evidência;
+* dificuldade para acompanhar a execução do que foi decidido.
+
+A CLINIONEX360 nasce para resolver esse problema: transformar informações dispersas em inteligência empresarial aplicada à rotina da clínica.
+
+---
+
+# 3. A Solução Proposta
+
+A IONEX360 atuará em três frentes integradas.
+
+## 3.1 Assessoria Consultiva Empresarial
+
+Uma equipe multidisciplinar acompanha a clínica com olhar técnico, estratégico e operacional.
+
+A atuação envolve análise de informações, identificação de riscos, leitura de indicadores, apoio à tomada de decisão e acompanhamento das ações definidas.
+
+## 3.2 Diagnóstico 360
+
+Será realizado um diagnóstico estruturado para compreender a situação atual da clínica, considerando áreas como:
+
+* estratégia e posicionamento;
+* financeiro e rentabilidade;
+* contabilidade e obrigações;
+* processos internos;
+* pessoas e responsabilidades;
+* tecnologia e dados;
+* comercial e marketing;
+* documentos, contratos e riscos relevantes.
+
+O diagnóstico permite identificar maturidade, lacunas, gargalos, riscos e oportunidades de melhoria.
+
+## 3.3 Painel de Inteligência Empresarial
+
+Após o diagnóstico e o entendimento das necessidades da clínica, será desenhado um painel personalizado de gestão.
+
+Esse painel poderá consolidar informações de diferentes fontes, como sistemas financeiros, agenda, estoque, manutenção, documentos, tarefas, redes sociais, planilhas e outros sistemas utilizados pela clínica.
+
+O objetivo do painel é responder às perguntas que realmente importam para a gestão:
+
+* O que está acontecendo?
+* Onde estão os riscos?
+* Quais indicadores precisam de atenção?
+* Quais tarefas estão atrasadas?
+* Quem é responsável por cada ação?
+* Quais documentos vencem nos próximos dias?
+* Quais áreas precisam de decisão?
+* O que deve ser acompanhado pela diretoria?
+
+---
+
+# 4. Jornada de Implantação
+
+A implantação seguirá uma jornada estruturada, com etapas encadeadas.
+
+## Etapa 1 — Cadastro da Clínica
+
+Coleta e validação dos dados cadastrais, societários, operacionais e comerciais da clínica, aproveitando as informações já existentes no sistema.
+
+## Etapa 2 — Proposta e Aceite
+
+A proposta comercial é apresentada ao cliente com escopo, investimento, prazo, etapas e condições comerciais. Após aceite, será gerado o contrato de prestação de serviços.
+
+## Etapa 3 — Contrato e Assinatura Eletrônica
+
+Após o aceite da proposta, o contrato será gerado com os dados atualizados e enviado para assinatura eletrônica via Autentique.
+
+## Etapa 4 — Reunião de Alinhamento / Kick-off
+
+Após a assinatura, será realizada a reunião inicial para alinhamento da metodologia, responsáveis, cronograma, canais de comunicação, documentos necessários e próximos passos.
+
+## Etapa 5 — Captação de Documentos e Informações
+
+A clínica disponibilizará os documentos, acessos e informações necessários para a análise inicial.
+
+Poderão ser solicitados documentos societários, contratos, relatórios financeiros, informações contábeis, dados operacionais, lista de sistemas, controles internos, documentos regulatórios e demais informações relevantes.
+
+## Etapa 6 — Diagnóstico 360
+
+A equipe IONEX360 realizará a leitura estruturada das informações coletadas, entrevistas, análise documental e avaliação dos principais pilares da gestão.
+
+## Etapa 7 — Mapeamento de Riscos
+
+Os riscos identificados serão classificados por área, impacto, probabilidade, prioridade, responsável e prazo de tratamento.
+
+## Etapa 8 — Plano de Ação
+
+As oportunidades, riscos e prioridades serão convertidas em plano de ação, com tarefas, responsáveis, prazos, status e evidências.
+
+## Etapa 9 — Desenho do Painel
+
+Com base nas necessidades reais da clínica, será definido o desenho do Painel de Inteligência Empresarial, incluindo indicadores, módulos, fontes de dados e visualizações prioritárias.
+
+## Etapa 10 — Validação, Criação e Treinamento
+
+A estrutura do painel será validada com a clínica. Após aprovação, será realizada a criação, parametrização, treinamento dos usuários e orientação sobre a rotina de uso.
+
+## Etapa 11 — Acompanhamento Consultivo
+
+Após a implantação, a IONEX360 acompanhará a evolução dos indicadores, tarefas, riscos e decisões, apoiando a clínica na leitura das informações e na organização da execução.
+
+---
+
+# 5. Entregas Incluídas
+
+A presente proposta contempla:
+
+* cadastro e estruturação inicial da clínica na plataforma;
+* reunião de kick-off;
+* levantamento de documentos, sistemas, fontes de dados e responsáveis;
+* diagnóstico empresarial 360;
+* mapeamento de riscos;
+* estruturação de plano de ação;
+* desenho do painel de inteligência empresarial;
+* criação e parametrização dos módulos prioritários;
+* treinamento inicial dos usuários;
+* acompanhamento consultivo recorrente;
+* reuniões periódicas de leitura e acompanhamento;
+* apoio técnico na interpretação de dados, riscos e prioridades;
+* organização de informações relevantes para a tomada de decisão.
+
+## Módulos possíveis do Painel de Inteligência Empresarial
+
+O painel será personalizado conforme a realidade da clínica e poderá contemplar, conforme viabilidade técnica e prioridade definida no diagnóstico:
+
+* visão executiva;
+* indicadores financeiros;
+* receitas, despesas, margem e resultado;
+* agenda e produtividade;
+* estoque e insumos;
+* manutenção e equipamentos;
+* documentos e vencimentos;
+* contratos e obrigações;
+* tarefas e plano de ação;
+* mapa de riscos;
+* redes sociais e indicadores comerciais;
+* relatórios executivos;
+* acompanhamento de responsáveis e prazos.
+
+As integrações com sistemas externos dependerão da disponibilidade técnica, acesso, API, exportação de dados ou possibilidade de importação estruturada. Quando a integração automática não for possível no primeiro momento, poderá ser adotada alimentação manual assistida ou importação periódica de dados.
+
+---
+
+# 6. Investimento e Condições Comerciais
+
+## Plano CLINIONEX360
+
+### Inteligência Empresarial através de Assessoria Consultiva
+
+**Valor de implantação:** R$ {{valor_implantacao}}
+**Valor mensal recorrente:** R$ {{valor_mensal}}
+**Prazo inicial contratado:** {{prazo_contrato}} meses
+**Data prevista para início:** {{data_inicio}}
+**Início da recorrência:** {{data_inicio_recorrencia}}
+**Forma de pagamento:** {{forma_pagamento}}
+**Vencimento mensal:** dia {{dia_vencimento}} de cada mês
+**Índice de reajuste:** {{indice_reajuste}}
+**Validade desta proposta:** {{validade_proposta}} dias
+
+O investimento contempla a implantação, diagnóstico, estruturação inicial, desenho do painel, parametrização dos módulos prioritários, treinamento e acompanhamento consultivo conforme escopo definido nesta proposta.
+
+Demandas adicionais, novos módulos, integrações complexas, desenvolvimento específico, ampliação relevante de escopo ou execução operacional direta de atividades internas da clínica poderão ser objeto de proposta complementar.
+
+## O que não está incluído
+
+Não estão incluídos nesta proposta, salvo contratação específica:
+
+* execução operacional diária do financeiro da clínica;
+* contas a pagar, contas a receber ou conciliação bancária como BPO;
+* atuação como departamento jurídico interno;
+* execução de campanhas de marketing;
+* substituição da equipe administrativa da clínica;
+* integrações não viáveis tecnicamente ou não previstas no escopo inicial;
+* desenvolvimento ilimitado de funcionalidades;
+* suporte ilimitado fora dos canais e horários definidos;
+* tomada de decisão em nome dos sócios ou administradores.
+
+A IONEX360 atua como assessoria consultiva, organizando informações, apontando riscos, estruturando indicadores e apoiando a gestão. As decisões e execuções internas permanecem sob responsabilidade da clínica.
+
+---
+
+# 7. Resultados Esperados e Próximos Passos
+
+Com a implantação da CLINIONEX360, espera-se que a clínica tenha:
+
+* maior clareza sobre sua situação financeira, operacional e administrativa;
+* dados mais organizados e úteis para decisão;
+* riscos identificados e priorizados;
+* plano de ação com responsáveis e prazos;
+* redução de controles paralelos;
+* documentos e vencimentos mais acompanháveis;
+* indicadores definidos conforme a realidade da gestão;
+* reuniões mais objetivas;
+* sócios e diretoria com melhor visão da operação;
+* acompanhamento consultivo para transformar informação em ação.
+
+Os resultados dependem da participação ativa da clínica, do fornecimento de informações, da validação das decisões e da execução do plano de ação aprovado.
+
+## Próximos passos
+
+1. Aceite desta proposta;
+2. Geração automática do contrato;
+3. Envio da proposta e do contrato para assinatura via Autentique;
+4. Assinatura eletrônica pelas partes;
+5. Agendamento do kick-off;
+6. Início da coleta de documentos e informações;
+7. Execução do Diagnóstico 360;
+8. Construção do mapa de riscos e plano de ação;
+9. Desenho e implantação do Painel de Inteligência Empresarial;
+10. Treinamento e acompanhamento consultivo.
+
+## Aceite da Proposta
+
+Ao aceitar esta proposta, a CONTRATANTE declara estar ciente do escopo, condições comerciais, etapas de implantação e premissas aqui apresentadas, autorizando a geração do contrato de prestação de serviços correspondente.
+
+**CONTRATANTE:** {{nome_cliente}}
+**Representante:** {{representante_cliente}}
+**CPF:** {{cpf_representante}}
+**Data:** {{data_aceite}}
+
+**IONEX360**
+Inteligência Empresarial através de Assessoria Consultiva
+{{responsavel_ionex360}}

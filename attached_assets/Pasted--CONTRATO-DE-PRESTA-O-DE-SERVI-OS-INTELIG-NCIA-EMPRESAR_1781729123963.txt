@@ -1,0 +1,278 @@
+# CONTRATO DE PRESTAÇÃO DE SERVIÇOS
+
+## INTELIGÊNCIA EMPRESARIAL ATRAVÉS DE ASSESSORIA CONSULTIVA
+
+## CLINIONEX360
+
+---
+
+# CLÁUSULA 1 — DAS PARTES
+
+**CONTRATANTE:** {{razao_social_cliente}}, pessoa jurídica de direito privado, inscrita no CNPJ sob nº {{cnpj_cliente}}, com sede em {{endereco_completo_cliente}}, neste ato representada por {{representante_cliente}}, CPF nº {{cpf_representante_cliente}}, doravante denominada simplesmente **CONTRATANTE**.
+
+**CONTRATADA:** {{razao_social_ionex360}}, pessoa jurídica de direito privado, inscrita no CNPJ sob nº {{cnpj_ionex360}}, com sede em {{endereco_ionex360}}, neste ato representada por {{representante_ionex360}}, CPF nº {{cpf_representante_ionex360}}, doravante denominada simplesmente **CONTRATADA**.
+
+As partes resolvem celebrar o presente Contrato de Prestação de Serviços de Inteligência Empresarial através de Assessoria Consultiva, mediante as cláusulas e condições seguintes.
+
+---
+
+# CLÁUSULA 2 — DO OBJETO
+
+O presente contrato tem por objeto a prestação, pela CONTRATADA, de serviços de Inteligência Empresarial através de Assessoria Consultiva para Clínicas, por meio da solução **CLINIONEX360**, abrangendo diagnóstico empresarial, mapeamento de riscos, plano de ação, estruturação de indicadores, organização de informações gerenciais, implantação de painel de inteligência empresarial e acompanhamento consultivo recorrente.
+
+Parágrafo único. A atuação da CONTRATADA tem natureza consultiva, estratégica, técnica e organizacional, não implicando substituição da administração da CONTRATANTE, execução operacional diária de suas áreas internas ou tomada de decisão em nome dos sócios, administradores ou gestores da clínica.
+
+---
+
+# CLÁUSULA 3 — DO ESCOPO DOS SERVIÇOS
+
+Os serviços contemplam:
+
+I. cadastro e estruturação inicial da clínica na plataforma;
+II. reunião de alinhamento e kick-off;
+III. levantamento de documentos, sistemas, fontes de dados, processos e responsáveis;
+IV. realização de Diagnóstico 360;
+V. mapeamento de riscos financeiros, operacionais, jurídicos, documentais, comerciais, tecnológicos e administrativos;
+VI. estruturação de plano de ação com responsáveis, prazos, prioridades e status;
+VII. desenho e parametrização do Painel de Inteligência Empresarial;
+VIII. treinamento inicial dos usuários;
+IX. acompanhamento consultivo recorrente;
+X. reuniões periódicas de leitura, acompanhamento e priorização.
+
+---
+
+# CLÁUSULA 4 — DA JORNADA DE IMPLANTAÇÃO
+
+A implantação observará as seguintes etapas:
+
+I. Cadastro da clínica;
+II. Aceite da proposta;
+III. Assinatura do contrato;
+IV. Kick-off;
+V. Captação de documentos e informações;
+VI. Diagnóstico 360;
+VII. Mapeamento de riscos;
+VIII. Plano de ação;
+IX. Desenho do painel;
+X. Validação;
+XI. Treinamento;
+XII. Acompanhamento consultivo.
+
+Parágrafo único. O cronograma poderá ser ajustado conforme disponibilidade de informações, participação da equipe da CONTRATANTE, complexidade das integrações e prioridades definidas em conjunto.
+
+---
+
+# CLÁUSULA 5 — DO PAINEL DE INTELIGÊNCIA EMPRESARIAL
+
+O Painel de Inteligência Empresarial será personalizado conforme a realidade da CONTRATANTE e poderá contemplar, de acordo com viabilidade técnica e prioridades definidas no diagnóstico:
+
+I. visão executiva;
+II. indicadores financeiros;
+III. agenda e produtividade;
+IV. estoque;
+V. manutenção;
+VI. documentos e vencimentos;
+VII. contratos;
+VIII. tarefas e plano de ação;
+IX. mapa de riscos;
+X. redes sociais e indicadores comerciais;
+XI. relatórios executivos.
+
+Parágrafo primeiro. A integração com sistemas externos dependerá da disponibilidade técnica, existência de API, possibilidade de exportação de dados, autorização de acesso ou importação estruturada.
+
+Parágrafo segundo. Quando a integração automática não for tecnicamente viável no primeiro momento, poderá ser adotada alimentação manual assistida ou importação periódica de dados.
+
+---
+
+# CLÁUSULA 6 — DA ASSESSORIA CONSULTIVA
+
+A CONTRATADA prestará assessoria consultiva para apoiar a leitura de dados, identificação de riscos, organização de prioridades, acompanhamento do plano de ação e estruturação de informações úteis à tomada de decisão.
+
+Parágrafo único. A assessoria não caracteriza administração direta da clínica, gestão operacional, BPO financeiro, departamento jurídico interno, contabilidade, agência de marketing ou execução direta de tarefas internas da CONTRATANTE.
+
+---
+
+# CLÁUSULA 7 — DO PRAZO
+
+O presente contrato terá vigência de {{prazo_contrato_meses}} meses, contados da data de assinatura.
+
+Parágrafo primeiro. A fase inicial de implantação terá prazo estimado conforme definido na proposta comercial, podendo variar de acordo com a complexidade do projeto, disponibilidade de dados e colaboração da CONTRATANTE.
+
+Parágrafo segundo. A recorrência terá início em {{data_inicio_recorrencia}}.
+
+---
+
+# CLÁUSULA 8 — DO INVESTIMENTO E FORMA DE PAGAMENTO
+
+Pelos serviços contratados, a CONTRATANTE pagará à CONTRATADA:
+
+I. Valor de implantação: R$ {{valor_implantacao}};
+II. Valor mensal recorrente: R$ {{valor_mensal}};
+III. Vencimento mensal: dia {{dia_vencimento}} de cada mês;
+IV. Forma de pagamento: {{forma_pagamento}};
+V. Índice de reajuste: {{indice_reajuste}}.
+
+Parágrafo primeiro. Os valores mensais serão devidos durante toda a vigência contratual.
+
+Parágrafo segundo. O atraso no pagamento sujeitará a CONTRATANTE ao pagamento de multa de 2% sobre o valor em atraso, juros de mora de 1% ao mês, calculados pro rata die, e correção monetária pelo índice contratual indicado.
+
+Parágrafo terceiro. Os valores poderão ser revistos em caso de ampliação relevante de escopo, inclusão de novos módulos, integrações adicionais, aumento significativo de volume de dados ou contratação de serviços complementares.
+
+---
+
+# CLÁUSULA 9 — DAS OBRIGAÇÕES DA CONTRATADA
+
+São obrigações da CONTRATADA:
+
+I. conduzir a metodologia CLINIONEX360;
+II. realizar o diagnóstico e análise das informações disponibilizadas;
+III. estruturar mapa de riscos e plano de ação;
+IV. desenhar e parametrizar o painel conforme escopo contratado;
+V. orientar a CONTRATANTE quanto à utilização da plataforma;
+VI. realizar reuniões periódicas de acompanhamento;
+VII. manter sigilo sobre as informações acessadas;
+VIII. observar a legislação aplicável de proteção de dados;
+IX. prestar suporte nos canais e condições definidos;
+X. comunicar limitações técnicas ou necessidades adicionais identificadas durante a execução.
+
+---
+
+# CLÁUSULA 10 — DAS OBRIGAÇÕES DA CONTRATANTE
+
+São obrigações da CONTRATANTE:
+
+I. disponibilizar informações, documentos e dados necessários;
+II. indicar responsáveis internos para interação com a CONTRATADA;
+III. garantir acesso aos sistemas, quando necessário e autorizado;
+IV. validar informações, indicadores, riscos e plano de ação;
+V. executar internamente as ações aprovadas;
+VI. participar das reuniões agendadas;
+VII. efetuar os pagamentos nos prazos contratados;
+VIII. manter sigilo sobre metodologia, plataforma e materiais da CONTRATADA;
+IX. comunicar alterações relevantes em sua operação;
+X. cumprir as normas legais, regulatórias e administrativas aplicáveis à sua atividade.
+
+---
+
+# CLÁUSULA 11 — DAS EXCLUSÕES DE ESCOPO
+
+Não estão incluídos neste contrato, salvo contratação específica:
+
+I. execução operacional diária das áreas da CONTRATANTE;
+II. BPO financeiro;
+III. contas a pagar;
+IV. contas a receber;
+V. conciliação bancária operacional;
+VI. atuação como departamento jurídico interno;
+VII. atuação como contabilidade da CONTRATANTE;
+VIII. execução de campanhas de marketing;
+IX. substituição da equipe administrativa da clínica;
+X. desenvolvimento ilimitado de funcionalidades;
+XI. integrações não previstas ou inviáveis tecnicamente;
+XII. suporte ilimitado fora das condições contratadas.
+
+---
+
+# CLÁUSULA 12 — DOS RESULTADOS ESPERADOS
+
+A metodologia tem por finalidade proporcionar maior clareza gerencial, organização de informações, identificação de riscos, acompanhamento de indicadores, plano de ação estruturado e melhor suporte à tomada de decisão.
+
+Parágrafo único. Os resultados dependem da participação ativa da CONTRATANTE, da qualidade das informações fornecidas, da validação das decisões e da execução interna do plano de ação, não constituindo garantia de resultado financeiro, operacional ou comercial específico.
+
+---
+
+# CLÁUSULA 13 — DA CONFIDENCIALIDADE
+
+As partes obrigam-se a manter sigilo sobre todas as informações estratégicas, comerciais, financeiras, técnicas, operacionais, contratuais, cadastrais e documentais a que tiverem acesso em razão deste contrato.
+
+Parágrafo único. A obrigação de confidencialidade permanecerá vigente mesmo após o término contratual, pelo prazo de 2 anos, salvo informações que por lei devam permanecer protegidas por prazo superior.
+
+---
+
+# CLÁUSULA 14 — DA PROTEÇÃO DE DADOS — LGPD
+
+As partes comprometem-se a cumprir a Lei Geral de Proteção de Dados Pessoais — Lei nº 13.709/2018.
+
+Parágrafo primeiro. A CONTRATADA tratará dados pessoais exclusivamente para as finalidades relacionadas à execução deste contrato.
+
+Parágrafo segundo. A CONTRATANTE declara ser responsável pela legalidade, legitimidade e autorização de uso dos dados disponibilizados à CONTRATADA.
+
+Parágrafo terceiro. Em caso de incidente de segurança envolvendo dados pessoais, a parte que tiver ciência deverá comunicar a outra em prazo razoável, observadas as exigências legais aplicáveis.
+
+---
+
+# CLÁUSULA 15 — DA PROPRIEDADE INTELECTUAL
+
+A plataforma, metodologia, fluxos, layouts, dashboards, modelos, documentos, códigos, estruturas, componentes tecnológicos e materiais da CLINIONEX360 pertencem exclusivamente à CONTRATADA.
+
+Parágrafo primeiro. A CONTRATANTE recebe apenas direito de uso limitado, não exclusivo, intransferível e condicionado à vigência do contrato.
+
+Parágrafo segundo. É vedada a cópia, reprodução, cessão, revenda, adaptação, engenharia reversa ou uso da metodologia e plataforma para criação de solução concorrente ou semelhante.
+
+---
+
+# CLÁUSULA 16 — DO SUPORTE
+
+A CONTRATADA prestará suporte nos canais definidos no kick-off, durante horário comercial, para dúvidas de uso, falhas técnicas e orientações relacionadas à plataforma.
+
+Parágrafo único. Demandas fora do escopo contratado, treinamentos adicionais, alterações relevantes, novos módulos ou customizações específicas poderão ser objeto de proposta complementar.
+
+---
+
+# CLÁUSULA 17 — DA GESTÃO DE MUDANÇAS DE ESCOPO
+
+Qualquer alteração relevante de escopo deverá ser formalizada por aditivo ou proposta complementar, contendo descrição da demanda, prazo, investimento e responsabilidades das partes.
+
+---
+
+# CLÁUSULA 18 — DA RESCISÃO
+
+O contrato poderá ser rescindido:
+
+I. por acordo entre as partes;
+II. por inadimplemento não sanado;
+III. por descumprimento contratual relevante;
+IV. por manifestação unilateral, mediante aviso prévio de 60 dias;
+V. por impossibilidade técnica, jurídica ou operacional superveniente.
+
+Parágrafo único. Em caso de rescisão, os valores vencidos e proporcionais até a data de encerramento serão devidos.
+
+---
+
+# CLÁUSULA 19 — DAS DISPOSIÇÕES GERAIS
+
+A tolerância de uma parte quanto ao descumprimento de qualquer obrigação não implicará novação ou renúncia de direito.
+
+A comunicação entre as partes poderá ocorrer por e-mail, plataforma, WhatsApp corporativo ou outro canal definido no kick-off.
+
+---
+
+# CLÁUSULA 20 — DO FORO
+
+Fica eleito o foro da comarca de {{foro_contrato}}, com renúncia a qualquer outro, por mais privilegiado que seja, para dirimir controvérsias oriundas deste contrato.
+
+---
+
+# CLÁUSULA 21 — ASSINATURAS
+
+E, por estarem justas e contratadas, as partes assinam eletronicamente o presente instrumento.
+
+{{cidade_assinatura}}, {{data_assinatura}}.
+
+**CONTRATANTE:**
+{{razao_social_cliente}}
+Representante: {{representante_cliente}}
+CPF: {{cpf_representante_cliente}}
+
+**CONTRATADA:**
+{{razao_social_ionex360}}
+Representante: {{representante_ionex360}}
+CPF: {{cpf_representante_ionex360}}
+
+**TESTEMUNHAS, se aplicável:**
+
+Nome: ___________________________________
+CPF: ____________________________________
+
+Nome: ___________________________________
+CPF: ____________________________________
