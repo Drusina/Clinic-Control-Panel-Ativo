@@ -69,6 +69,7 @@ export async function renderCommercialPdf(
   const map = buildPlaceholderMap(opts, data);
   const corpoFinal = substituteCommercialPlaceholders(opts.corpo, map);
   const conditionsRows = buildConditionsRows(opts.conditions);
+  const especiaisText = opts.conditions.condicoesEspeciais?.trim() || null;
   const signatureBlocks = buildSignatureBlocks(opts, map);
 
   const doc = await PDFDocument.create();
@@ -86,7 +87,7 @@ export async function renderCommercialPdf(
   };
 
   drawHeader(ctx, opts.titulo);
-  drawBody(ctx, corpoFinal, { conditionsRows, signatureBlocks });
+  drawBody(ctx, corpoFinal, { conditionsRows, especiaisText, signatureBlocks });
   drawDocumentFooter(ctx, opts.versao, data);
 
   for (let i = 0; i < doc.getPageCount(); i++) {
@@ -172,6 +173,7 @@ function drawHeader(ctx: RenderCtx, title: string) {
 
 interface BodyExtras {
   conditionsRows: KvRow[];
+  especiaisText: string | null;
   signatureBlocks: SignatureBlock[];
 }
 
@@ -238,6 +240,8 @@ function drawBody(ctx: RenderCtx, body: string, extras: BodyExtras) {
       ctx.y -= 8;
     } else if (block.kind === "conditions") {
       drawConditionsTable(ctx, extras.conditionsRows);
+    } else if (block.kind === "especiais") {
+      drawEspeciais(ctx, extras.especiaisText);
     } else if (block.kind === "signatures") {
       drawSignatureBlocks(ctx, extras.signatureBlocks);
     } else if (block.kind === "bullet") {
@@ -357,6 +361,54 @@ function drawConditionsTable(ctx: RenderCtx, rows: KvRow[]) {
     });
   }
   ctx.y -= 8;
+}
+
+function drawEspeciais(ctx: RenderCtx, text: string | null) {
+  if (!text) return;
+  ctx.y -= 6;
+
+  // Subtítulo
+  ensureSpace(ctx, 20);
+  for (const line of wrapByMeasure("Condições Especiais", ctx.bold, 10.5, CONTENT_W)) {
+    ensureSpace(ctx, 15);
+    ctx.page.drawText(line, {
+      x: MARGIN_X,
+      y: ctx.y,
+      font: ctx.bold,
+      size: 10.5,
+      color: NAVY,
+    });
+    ctx.y -= 15;
+  }
+  ctx.y -= 2;
+
+  // Corpo (preserva quebras de linha do operador; cada linha vira parágrafo)
+  for (const para of text.split(/\r?\n/)) {
+    const trimmed = para.trim();
+    if (trimmed === "") {
+      ctx.y -= PARAGRAPH_GAP;
+      continue;
+    }
+    const segments = parseInlineBold(trimmed);
+    const wrapped = wrapMixed(segments, ctx.regular, ctx.bold, BODY_SIZE, CONTENT_W);
+    for (const lineSegs of wrapped) {
+      ensureSpace(ctx, LINE_HEIGHT);
+      let x = MARGIN_X;
+      for (const seg of lineSegs) {
+        const f = seg.bold ? ctx.bold : ctx.regular;
+        ctx.page.drawText(seg.text, {
+          x,
+          y: ctx.y,
+          font: f,
+          size: BODY_SIZE,
+          color: TEXT,
+        });
+        x += f.widthOfTextAtSize(seg.text, BODY_SIZE);
+      }
+      ctx.y -= LINE_HEIGHT;
+    }
+  }
+  ctx.y -= PARAGRAPH_GAP;
 }
 
 interface SignatureBlock {
@@ -733,6 +785,7 @@ interface MdBlock {
     | "bullet"
     | "paragraph"
     | "conditions"
+    | "especiais"
     | "signatures";
   text: string;
   items: string[];
@@ -759,6 +812,9 @@ function parseBlocks(body: string): MdBlock[] {
     if (line === "[[CONDICOES_COMERCIAIS]]") {
       flushBullets();
       blocks.push({ kind: "conditions", text: "", items: [] });
+    } else if (line === "[[CONDICOES_ESPECIAIS]]") {
+      flushBullets();
+      blocks.push({ kind: "especiais", text: "", items: [] });
     } else if (line === "[[ASSINATURAS]]") {
       flushBullets();
       blocks.push({ kind: "signatures", text: "", items: [] });

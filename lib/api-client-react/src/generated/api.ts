@@ -7848,6 +7848,185 @@ export function useListDocumentosComerciais<
 }
 
 /**
+ * @summary Generate a new versioned commercial document (proposta/contrato) PDF
+ */
+export const getGerarDocumentoComercialUrl = (
+  clinicId: string,
+  tipo: "proposta" | "contrato",
+) => {
+  return `/api/clinics/${clinicId}/documentos-comerciais/${tipo}/gerar`;
+};
+
+export const gerarDocumentoComercial = async (
+  clinicId: string,
+  tipo: "proposta" | "contrato",
+  options?: RequestInit,
+): Promise<DocumentoComercial> => {
+  return customFetch<DocumentoComercial>(
+    getGerarDocumentoComercialUrl(clinicId, tipo),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getGerarDocumentoComercialMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof gerarDocumentoComercial>>,
+    TError,
+    { clinicId: string; tipo: "proposta" | "contrato" },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof gerarDocumentoComercial>>,
+  TError,
+  { clinicId: string; tipo: "proposta" | "contrato" },
+  TContext
+> => {
+  const mutationKey = ["gerarDocumentoComercial"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof gerarDocumentoComercial>>,
+    { clinicId: string; tipo: "proposta" | "contrato" }
+  > = (props) => {
+    const { clinicId, tipo } = props ?? {};
+
+    return gerarDocumentoComercial(clinicId, tipo, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GerarDocumentoComercialMutationResult = NonNullable<
+  Awaited<ReturnType<typeof gerarDocumentoComercial>>
+>;
+
+export type GerarDocumentoComercialMutationError = ErrorType<void>;
+
+/**
+ * @summary Generate a new versioned commercial document (proposta/contrato) PDF
+ */
+export const useGerarDocumentoComercial = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof gerarDocumentoComercial>>,
+    TError,
+    { clinicId: string; tipo: "proposta" | "contrato" },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof gerarDocumentoComercial>>,
+  TError,
+  { clinicId: string; tipo: "proposta" | "contrato" },
+  TContext
+> => {
+  return useMutation(getGerarDocumentoComercialMutationOptions(options));
+};
+
+/**
+ * @summary Render a non-persisted preview PDF of a commercial document
+ */
+export const getPreviewDocumentoComercialUrl = (
+  clinicId: string,
+  tipo: "proposta" | "contrato",
+) => {
+  return `/api/clinics/${clinicId}/documentos-comerciais/${tipo}/preview`;
+};
+
+export const previewDocumentoComercial = async (
+  clinicId: string,
+  tipo: "proposta" | "contrato",
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getPreviewDocumentoComercialUrl(clinicId, tipo), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getPreviewDocumentoComercialMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof previewDocumentoComercial>>,
+    TError,
+    { clinicId: string; tipo: "proposta" | "contrato" },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof previewDocumentoComercial>>,
+  TError,
+  { clinicId: string; tipo: "proposta" | "contrato" },
+  TContext
+> => {
+  const mutationKey = ["previewDocumentoComercial"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof previewDocumentoComercial>>,
+    { clinicId: string; tipo: "proposta" | "contrato" }
+  > = (props) => {
+    const { clinicId, tipo } = props ?? {};
+
+    return previewDocumentoComercial(clinicId, tipo, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PreviewDocumentoComercialMutationResult = NonNullable<
+  Awaited<ReturnType<typeof previewDocumentoComercial>>
+>;
+
+export type PreviewDocumentoComercialMutationError = ErrorType<void>;
+
+/**
+ * @summary Render a non-persisted preview PDF of a commercial document
+ */
+export const usePreviewDocumentoComercial = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof previewDocumentoComercial>>,
+    TError,
+    { clinicId: string; tipo: "proposta" | "contrato" },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof previewDocumentoComercial>>,
+  TError,
+  { clinicId: string; tipo: "proposta" | "contrato" },
+  TContext
+> => {
+  return useMutation(getPreviewDocumentoComercialMutationOptions(options));
+};
+
+/**
  * @summary Update invoice status
  */
 export const getUpdateFaturaUrl = (id: string) => {

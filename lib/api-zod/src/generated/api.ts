@@ -2408,6 +2408,7 @@ export const ListDocumentosComerciaisResponseItem = zod.object({
   titulo: zod.string().nullish(),
   pdfPath: zod.string().nullish(),
   docHash: zod.string().nullish(),
+  geradoPorNome: zod.string().nullish(),
   snapshot: zod
     .union([
       zod.object({
@@ -2450,6 +2451,22 @@ export const ListDocumentosComerciaisResponseItem = zod.object({
 export const ListDocumentosComerciaisResponse = zod.array(
   ListDocumentosComerciaisResponseItem,
 );
+
+/**
+ * @summary Generate a new versioned commercial document (proposta/contrato) PDF
+ */
+export const GerarDocumentoComercialParams = zod.object({
+  clinicId: zod.coerce.string(),
+  tipo: zod.enum(["proposta", "contrato"]),
+});
+
+/**
+ * @summary Render a non-persisted preview PDF of a commercial document
+ */
+export const PreviewDocumentoComercialParams = zod.object({
+  clinicId: zod.coerce.string(),
+  tipo: zod.enum(["proposta", "contrato"]),
+});
 
 /**
  * @summary Update invoice status

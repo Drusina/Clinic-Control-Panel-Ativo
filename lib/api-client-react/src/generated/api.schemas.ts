@@ -1648,6 +1648,8 @@ export interface DocumentoComercial {
   pdfPath?: string | null;
   /** @nullable */
   docHash?: string | null;
+  /** @nullable */
+  geradoPorNome?: string | null;
   snapshot?: CondicoesComerciaisSnapshot | null;
   /** @nullable */
   signatarios?: DocumentoComercialSignatario[] | null;

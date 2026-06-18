@@ -2081,6 +2081,65 @@ paths:
                 items:
                   $ref: "#/components/schemas/DocumentoComercial"
 
+  /clinics/{clinicId}/documentos-comerciais/{tipo}/gerar:
+    post:
+      operationId: gerarDocumentoComercial
+      tags: [comercial]
+      summary: Generate a new versioned commercial document (proposta/contrato) PDF
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tipo
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [proposta, contrato]
+      responses:
+        "201":
+          description: Generated commercial document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoComercial"
+        "400":
+          description: Validation error
+        "404":
+          description: Clinic not found
+
+  /clinics/{clinicId}/documentos-comerciais/{tipo}/preview:
+    post:
+      operationId: previewDocumentoComercial
+      tags: [comercial]
+      summary: Render a non-persisted preview PDF of a commercial document
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tipo
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [proposta, contrato]
+      responses:
+        "200":
+          description: Inline PDF preview
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Validation error
+        "404":
+          description: Clinic not found
+
   /faturas/{id}:
     patch:
       operationId: updateFatura
@@ -3942,6 +4001,7 @@ components:
         titulo: { type: ["string", "null"] }
         pdfPath: { type: ["string", "null"] }
         docHash: { type: ["string", "null"] }
+        geradoPorNome: { type: ["string", "null"] }
         snapshot:
           anyOf:
             - $ref: "#/components/schemas/CondicoesComerciaisSnapshot"

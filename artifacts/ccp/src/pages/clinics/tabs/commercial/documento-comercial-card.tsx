@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   History,
+  Eye,
 } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -99,6 +100,8 @@ export function DocumentoComercialCard({
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   const meta = META[tipo];
   const Icon = meta.icon;
@@ -171,6 +174,81 @@ export function DocumentoComercialCard({
       window.open(signedUrl, "_blank", "noopener,noreferrer");
     } catch {
       toast({ variant: "destructive", title: "Erro ao abrir o documento" });
+    }
+  };
+
+  const openVersion = (v: DocumentoComercial) => {
+    if (!v.pdfPath) return;
+    const serving = v.pdfPath.startsWith("/objects/")
+      ? `/api/storage/objects/${v.pdfPath.replace(/^\/objects\//, "")}`
+      : v.pdfPath;
+    openDocument(serving);
+  };
+
+  const handleGerar = async () => {
+    setGenerating(true);
+    try {
+      const token = getStoredToken();
+      const res = await fetch(
+        `/api/clinics/${clinic.id}/documentos-comerciais/${tipo}/gerar`,
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
+      );
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({
+          variant: "destructive",
+          title: `Erro ao gerar ${meta.title.toLowerCase()}`,
+          description: err.error ?? "Erro desconhecido",
+        });
+        return;
+      }
+      const doc = (await res.json()) as DocumentoComercial;
+      toast({
+        title: `${meta.title} gerada`,
+        description: `Versão v${doc.versao} gerada com sucesso.`,
+      });
+      onChanged();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Erro de conexão ao gerar documento",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handlePreview = async () => {
+    setPreviewing(true);
+    try {
+      const token = getStoredToken();
+      const res = await fetch(
+        `/api/clinics/${clinic.id}/documentos-comerciais/${tipo}/preview`,
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
+      );
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({
+          variant: "destructive",
+          title: "Não foi possível gerar a prévia",
+          description: err.error ?? "Erro desconhecido",
+        });
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao gerar a prévia" });
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -315,9 +393,25 @@ export function DocumentoComercialCard({
                   <Badge variant="outline" className="capitalize">
                     {v.status}
                   </Badge>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="ml-auto text-xs text-muted-foreground">
                     {fmtDate(v.geradoEm)}
                   </span>
+                  {v.pdfPath && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => openVersion(v)}
+                      title={
+                        v.geradoPorNome
+                          ? `Gerado por ${v.geradoPorNome}`
+                          : "Abrir versão"
+                      }
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -407,26 +501,49 @@ export function DocumentoComercialCard({
         <div className="mt-auto space-y-2 border-t pt-4">
           <div className="flex flex-wrap gap-2">
             <Button
+              size="sm"
+              type="button"
+              className="bg-[#0F5F8F] text-white hover:bg-[#0B1F33]"
+              disabled={generating || previewing}
+              onClick={handleGerar}
+              data-testid={`btn-gerar-${tipo}`}
+            >
+              {generating ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              {latestDoc ? "Gerar nova versão" : meta.gerar}
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               type="button"
-              disabled
-              title="Disponível nas próximas etapas"
+              disabled={generating || previewing}
+              onClick={handlePreview}
+              data-testid={`btn-preview-${tipo}`}
             >
-              <Sparkles className="mr-2 h-4 w-4" /> {meta.gerar}
+              {previewing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Eye className="mr-2 h-4 w-4" />
+              )}
+              Pré-visualizar
             </Button>
             <Button
               variant="outline"
               size="sm"
               type="button"
               disabled
-              title="Disponível nas próximas etapas"
+              title="Disponível na próxima etapa"
             >
               <Send className="mr-2 h-4 w-4" /> {meta.enviar}
             </Button>
           </div>
           <p className="text-xs text-[#4A5568]">
-            Geração automática e assinatura eletrônica chegam nas próximas etapas.
+            Gere uma versão do PDF a partir das condições comerciais atuais ou
+            pré-visualize sem salvar. A assinatura eletrônica chega na próxima
+            etapa.
           </p>
         </div>
       </CardContent>

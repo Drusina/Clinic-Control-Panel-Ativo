@@ -213,6 +213,8 @@ As integrações com sistemas externos dependerão da disponibilidade técnica, 
 
 [[CONDICOES_COMERCIAIS]]
 
+[[CONDICOES_ESPECIAIS]]
+
 O investimento contempla a implantação, diagnóstico, estruturação inicial, desenho do painel, parametrização dos módulos prioritários, treinamento e acompanhamento consultivo conforme escopo definido nesta proposta.
 
 Demandas adicionais, novos módulos, integrações complexas, desenvolvimento específico, ampliação relevante de escopo ou execução operacional direta de atividades internas da clínica poderão ser objeto de proposta complementar.
@@ -376,6 +378,8 @@ II. Valor mensal recorrente: R$ {{valor_mensal}};
 III. Vencimento mensal: dia {{dia_vencimento}} de cada mês;
 IV. Forma de pagamento: {{forma_pagamento}};
 V. Índice de reajuste: {{indice_reajuste}}.
+
+[[CONDICOES_ESPECIAIS]]
 
 Parágrafo primeiro. Os valores mensais serão devidos durante toda a vigência contratual.
 
