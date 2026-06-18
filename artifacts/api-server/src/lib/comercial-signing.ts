@@ -390,8 +390,9 @@ async function submitProposta(
       })
       .where(eq(documentosComerciaisTable.id, doc.id));
 
-    // Upgrade the clinic's propostaUrl to the SIGNED copy (gerar had set it to
-    // the unsigned generated PDF). Trilha keeps the "proposta" marco lit.
+    // Set the clinic's propostaUrl to the SIGNED copy. gerar does NOT populate
+    // it (a generated draft is unsigned), so this signing step is what lights
+    // the Trilha "proposta" marco — a non-empty URL means signed/final.
     await db
       .update(clinicsTable)
       .set({

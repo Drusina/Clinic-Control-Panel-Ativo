@@ -146,11 +146,6 @@ async function uploadPdfToPath(
   return objectPath;
 }
 
-/** Converte o caminho canônico `/objects/X` na URL servível `/api/storage/objects/X`. */
-function objectPathToServingUrl(objectPath: string): string {
-  return `/api/storage/objects/${objectPath.replace(/^\/objects\//, "")}`;
-}
-
 function parseTipo(raw: string | string[]): "proposta" | "contrato" | null {
   const tipo = Array.isArray(raw) ? raw[0] : raw;
   return tipo === "proposta" || tipo === "contrato" ? tipo : null;
@@ -334,18 +329,11 @@ router.post(
         })
         .returning();
 
-      // Espelha a URL servível na ficha da clínica para que a Trilha de
-      // Implementação detecte o marco automaticamente (ver `lib/trilha.ts`).
-      const servingUrl = objectPathToServingUrl(objectPath);
-      const urlField =
-        tipo === "proposta"
-          ? { propostaUrl: servingUrl }
-          : { contratoUrl: servingUrl };
-      await tx
-        .update(clinicsTable)
-        .set({ ...urlField, updatedAt: new Date() })
-        .where(eq(clinicsTable.id, clinicId));
-
+      // NÃO espelha a URL na ficha da clínica aqui: um documento recém-gerado
+      // ainda é um rascunho NÃO assinado. A Trilha (`lib/trilha.ts`) trata
+      // `propostaUrl`/`contratoUrl` como "documento final/assinado", então só
+      // a assinatura in-platform (`lib/comercial-signing.ts`) ou o upload manual
+      // de um PDF final (`routes/clinics.ts`) devem preencher esses campos.
       await tx.insert(clinicActivityTable).values({
         clinicId,
         tipo: "comercial",

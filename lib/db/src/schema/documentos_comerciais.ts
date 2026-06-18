@@ -62,11 +62,14 @@ export type DocumentoComercialSignatario = {
  * partir da Etapa 3. Para contratos multi-parte, cada signatário guarda sua
  * própria evidência no array JSONB `signatarios`.
  *
- * IMPORTANTE: ao formalizar (proposta enviada → `clinics.propostaUrl`;
- * contrato assinado → `clinics.contratoUrl`) o caller DEVE popular as URLs na
- * clínica para que a Trilha de Implementação detecte os marcos automaticamente
- * (ver `lib/trilha.ts`). Esta tabela carrega o estado granular do documento; a
- * tabela `clinics` permanece a fonte para a Trilha.
+ * IMPORTANTE: `clinics.propostaUrl`/`clinics.contratoUrl` representam o
+ * documento FINAL (assinado ou PDF final enviado manualmente) — NÃO um rascunho
+ * recém-gerado. Por isso só a assinatura in-platform (`lib/comercial-signing.ts`)
+ * e o upload manual (`routes/clinics.ts`) populam essas URLs; a geração de
+ * documento (`routes/comercial.ts`) NÃO. A Trilha de Implementação
+ * (`lib/trilha.ts`) trata URL não-vazia como marco concluído, então mirrorar um
+ * rascunho concluiria o marco prematuramente. Esta tabela carrega o estado
+ * granular do documento; a tabela `clinics` permanece a fonte para a Trilha.
  */
 export const documentosComerciaisTable = pgTable(
   "documentos_comerciais",

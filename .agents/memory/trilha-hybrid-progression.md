@@ -45,6 +45,13 @@ marcos) or where a human deliberately overrides.
   progress.
 - Anything that adds a new auto stage just needs a `computeSuggestion` case; do
   NOT add bespoke conclude logic elsewhere.
+- **proposta/contrato signal = non-empty `clinics.propostaUrl`/`contratoUrl`**,
+  which MUST mean a SIGNED or manually-uploaded FINAL document. Only in-platform
+  signing (`lib/comercial-signing.ts`) and manual upload (`routes/clinics.ts`)
+  may write those URLs. Document GENERATION (`routes/comercial.ts` gerar) must
+  NOT mirror a draft's serving URL there — doing so concluded the marco on an
+  unsigned draft. Drafts live in `documentos_comerciais` (status `gerado`) and
+  stay viewable via the card's version history without touching the clinic URL.
 - The frontend (`trilha-stepper.tsx`) hides Concluir/Em-andamento/Reabrir for
   non-manual stages; it only offers Bloquear / Não se aplica / Editar (plus
   "Remover marcação" to clear an override). Manual marcos keep all actions.
