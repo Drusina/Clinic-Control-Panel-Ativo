@@ -2140,6 +2140,44 @@ paths:
         "404":
           description: Clinic not found
 
+  /clinics/{clinicId}/documentos-comerciais/{documentoId}/enviar-assinatura:
+    post:
+      operationId: enviarAssinaturaComercial
+      tags: [comercial]
+      summary: Send a commercial document (proposta/contrato) for internal e-signature
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: documentoId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnviarAssinaturaComercialBody"
+      responses:
+        "200":
+          description: Document sent for signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentoComercial"
+        "400":
+          description: Validation error
+        "404":
+          description: Clinic or document not found
+        "409":
+          description: Document already signed or not in a sendable state
+        "502":
+          description: E-mail delivery failed
+
   /faturas/{id}:
     patch:
       operationId: updateFatura
@@ -4024,6 +4062,34 @@ components:
         - status
         - createdAt
         - updatedAt
+
+    ComercialSignatarioInput:
+      type: object
+      properties:
+        nome: { type: string, minLength: 2 }
+        email: { type: string, format: email }
+        cargo: { type: ["string", "null"] }
+        papel:
+          type: ["string", "null"]
+          enum: [contratante, contratada, testemunha, null]
+        ordem: { type: ["integer", "null"] }
+      required:
+        - nome
+        - email
+
+    EnviarAssinaturaComercialBody:
+      type: object
+      description: >-
+        Proposta usa `signatario` (signatário único). Contrato usa `signatarios`
+        (múltiplas partes — cada uma recebe seu próprio link/token e o documento
+        só é marcado como assinado quando todas assinarem).
+      properties:
+        signatario:
+          $ref: "#/components/schemas/ComercialSignatarioInput"
+        signatarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComercialSignatarioInput"
 
     GerarFaturasContratoInput:
       type: object

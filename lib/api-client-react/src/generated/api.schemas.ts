@@ -1665,6 +1665,39 @@ export interface DocumentoComercial {
   updatedAt: string;
 }
 
+/**
+ * @nullable
+ */
+export type ComercialSignatarioInputPapel =
+  | (typeof ComercialSignatarioInputPapel)[keyof typeof ComercialSignatarioInputPapel]
+  | null;
+
+export const ComercialSignatarioInputPapel = {
+  contratante: "contratante",
+  contratada: "contratada",
+  testemunha: "testemunha",
+} as const;
+
+export interface ComercialSignatarioInput {
+  /** @minLength 2 */
+  nome: string;
+  email: string;
+  /** @nullable */
+  cargo?: string | null;
+  /** @nullable */
+  papel?: ComercialSignatarioInputPapel;
+  /** @nullable */
+  ordem?: number | null;
+}
+
+/**
+ * Proposta usa `signatario` (signatário único). Contrato usa `signatarios` (múltiplas partes — cada uma recebe seu próprio link/token e o documento só é marcado como assinado quando todas assinarem).
+ */
+export interface EnviarAssinaturaComercialBody {
+  signatario?: ComercialSignatarioInput;
+  signatarios?: ComercialSignatarioInput[];
+}
+
 export interface GerarFaturasContratoInput {
   /** Confirmação explícita do super-admin para liberar a geração. */
   confirmar: boolean;

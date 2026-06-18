@@ -646,6 +646,87 @@ export function buildOperatorSignatureNotificationEmail(params: {
   return baseTemplate(`[IONEX360] Termo assinado — ${params.clinicName}`, body);
 }
 
+/**
+ * Operator notification for COMMERCIAL document signatures (proposta/contrato).
+ * For multi-signer contracts this fires on EVERY signature; `fullySigned`
+ * distinguishes the final completion from a partial progress update.
+ */
+export function buildComercialSignatureNotificationEmail(params: {
+  documentoTipo: "proposta" | "contrato";
+  termoNome: string;
+  clinicName: string;
+  signatarioNome: string;
+  signatarioEmail: string;
+  signatarioCpf: string;
+  signedAt: string;
+  signerIp: string;
+  verificationCode: string;
+  documentLink: string;
+  fullySigned: boolean;
+  signedCount: number;
+  requiredCount: number;
+}): string {
+  const tipoLabel = params.documentoTipo === "proposta" ? "Proposta" : "Contrato";
+  const heading =
+    params.documentoTipo === "proposta"
+      ? "Proposta assinada pelo cliente"
+      : params.fullySigned
+        ? "Contrato totalmente assinado"
+        : "Contrato — nova assinatura registrada";
+  const intro =
+    params.documentoTipo === "contrato" && !params.fullySigned
+      ? `Um signatário assinou o contrato da clínica <strong style="color:#e2e8f0;">${params.clinicName}</strong>.
+         Faltam assinaturas para concluir (<strong style="color:#e2e8f0;">${params.signedCount} de ${params.requiredCount}</strong>).`
+      : `A ${tipoLabel.toLowerCase()} da clínica <strong style="color:#e2e8f0;">${params.clinicName}</strong>
+         foi assinada eletronicamente. Detalhes abaixo.`;
+  const progressLine =
+    params.documentoTipo === "contrato"
+      ? `<tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Progresso</p>
+        <p style="margin:0;color:#e2e8f0;">${params.signedCount} de ${params.requiredCount} signatários ${params.fullySigned ? "✓ concluído" : "assinaram"}</p>
+      </td></tr>`
+      : "";
+
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">${heading}</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">${intro}</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px;margin-bottom:24px;">
+      <tr>
+        <td>
+          <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Documento</p>
+          <p style="margin:0;color:#3b82f6;font-weight:600;font-size:16px;">${params.termoNome}</p>
+        </td>
+      </tr>
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Signatário</p>
+        <p style="margin:0;color:#e2e8f0;">${params.signatarioNome} — CPF ${params.signatarioCpf}</p>
+        <p style="margin:0;color:#94a3b8;font-size:13px;">${params.signatarioEmail}</p>
+      </td></tr>
+      ${progressLine}
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Data e hora</p>
+        <p style="margin:0;color:#e2e8f0;">${params.signedAt}</p>
+      </td></tr>
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Endereço IP</p>
+        <p style="margin:0;color:#94a3b8;font-family:monospace;">${params.signerIp || "—"}</p>
+      </td></tr>
+      <tr><td style="padding-top:16px;">
+        <p style="margin:0 0 8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Código de verificação</p>
+        <p style="margin:0;"><code style="background:#1e2333;color:#fbbf24;font-size:13px;font-weight:600;padding:4px 10px;border-radius:4px;letter-spacing:1px;">${params.verificationCode}</code></p>
+      </td></tr>
+    </table>
+
+    ${primaryButton(params.documentLink, "Abrir painel da clínica →")}
+
+    <p style="color:#475569;font-size:12px;margin-top:16px;">
+      O PDF assinado está disponível na aba <strong style="color:#94a3b8;">Central Comercial</strong> da clínica.
+    </p>
+  `;
+  return baseTemplate(`[CLINIONEX360] ${tipoLabel} assinado — ${params.clinicName}`, body);
+}
+
 export function buildAcessoCriadoEmail(params: {
   nome: string;
   email: string;

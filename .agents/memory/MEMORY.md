@@ -7,3 +7,4 @@
 - [Document preview disposition](document-preview-disposition.md) — private objects serve attachment by default; inline preview is opt-in, gated server-side on a PDF/raster allowlist (excl HTML/SVG) to avoid stored XSS.
 - [Trilha auto-progression](trilha-hybrid-progression.md) — reconcileTrilha auto-concludes detectable stages on GET+boot (actor "Sistema (automático)"); only manual marcos + human overrides stay human-driven; etapa/progresso derived.
 - [Constitutive docs surfaces](constitutive-docs-surfaces.md) — "has constitutive docs?" must union 3 disjoint stores: docs_constitutivos.storage_path, docs_constitutivos_files, societary_extractions.
+- [Route fall-through 403](route-fallthrough-403.md) — a NEW clinic-scoped route 403ing as "super_admin role required" = unmatched route falling to global requireSuperAdmin layer; usually stale dev server, restart api-server.

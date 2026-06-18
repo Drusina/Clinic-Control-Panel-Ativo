@@ -2469,6 +2469,111 @@ export const PreviewDocumentoComercialParams = zod.object({
 });
 
 /**
+ * @summary Send a commercial document (proposta/contrato) for internal e-signature
+ */
+export const EnviarAssinaturaComercialParams = zod.object({
+  clinicId: zod.coerce.string(),
+  documentoId: zod.coerce.string(),
+});
+
+export const enviarAssinaturaComercialBodySignatarioNomeMin = 2;
+
+export const enviarAssinaturaComercialBodySignatariosItemNomeMin = 2;
+
+export const EnviarAssinaturaComercialBody = zod
+  .object({
+    signatario: zod
+      .object({
+        nome: zod.string().min(enviarAssinaturaComercialBodySignatarioNomeMin),
+        email: zod.string().email(),
+        cargo: zod.string().nullish(),
+        papel: zod
+          .union([
+            zod.literal("contratante"),
+            zod.literal("contratada"),
+            zod.literal("testemunha"),
+            zod.literal(null),
+          ])
+          .nullish(),
+        ordem: zod.number().nullish(),
+      })
+      .optional(),
+    signatarios: zod
+      .array(
+        zod.object({
+          nome: zod
+            .string()
+            .min(enviarAssinaturaComercialBodySignatariosItemNomeMin),
+          email: zod.string().email(),
+          cargo: zod.string().nullish(),
+          papel: zod
+            .union([
+              zod.literal("contratante"),
+              zod.literal("contratada"),
+              zod.literal("testemunha"),
+              zod.literal(null),
+            ])
+            .nullish(),
+          ordem: zod.number().nullish(),
+        }),
+      )
+      .optional(),
+  })
+  .describe(
+    "Proposta usa `signatario` (signatário único). Contrato usa `signatarios` (múltiplas partes — cada uma recebe seu próprio link\/token e o documento só é marcado como assinado quando todas assinarem).",
+  );
+
+export const EnviarAssinaturaComercialResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  tipo: zod.enum(["proposta", "contrato"]),
+  versao: zod.number(),
+  status: zod.string(),
+  titulo: zod.string().nullish(),
+  pdfPath: zod.string().nullish(),
+  docHash: zod.string().nullish(),
+  geradoPorNome: zod.string().nullish(),
+  snapshot: zod
+    .union([
+      zod.object({
+        valorImplantacao: zod.number().nullish(),
+        valorRecorrente: zod.number().nullish(),
+        formaPagamento: zod.string().nullish(),
+        diaVencimento: zod.number().nullish(),
+        reajusteIndice: zod.string().nullish(),
+        inicioRecorrencia: zod.string().nullish(),
+        prazoContratoMeses: zod.number().nullish(),
+        validadePropostaDias: zod.number().nullish(),
+        dataPrevistaInicio: zod.string().nullish(),
+        responsavelComercial: zod.string().nullish(),
+        observacoesComerciais: zod.string().nullish(),
+        condicoesEspeciais: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  signatarios: zod
+    .array(
+      zod.object({
+        nome: zod.string(),
+        email: zod.string(),
+        cargo: zod.string().nullish(),
+        papel: zod.string().nullish(),
+        ordem: zod.number().nullish(),
+        status: zod.string().nullish(),
+        signedAt: zod.string().nullish(),
+      }),
+    )
+    .nullish(),
+  geradoEm: zod.string().nullish(),
+  enviadoEm: zod.string().nullish(),
+  aceitoEm: zod.string().nullish(),
+  validadeAte: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
  * @summary Update invoice status
  */
 export const UpdateFaturaParams = zod.object({

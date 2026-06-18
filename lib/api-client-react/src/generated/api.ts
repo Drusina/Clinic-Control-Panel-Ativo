@@ -49,6 +49,7 @@ import type {
   DiagnosticResposta,
   DiagnosticsOverviewItem,
   DocumentoComercial,
+  EnviarAssinaturaComercialBody,
   Fatura,
   GenerateRisksResponse,
   GerarFaturasContratoInput,
@@ -8024,6 +8025,126 @@ export const usePreviewDocumentoComercial = <
   TContext
 > => {
   return useMutation(getPreviewDocumentoComercialMutationOptions(options));
+};
+
+/**
+ * @summary Send a commercial document (proposta/contrato) for internal e-signature
+ */
+export const getEnviarAssinaturaComercialUrl = (
+  clinicId: string,
+  documentoId: string,
+) => {
+  return `/api/clinics/${clinicId}/documentos-comerciais/${documentoId}/enviar-assinatura`;
+};
+
+export const enviarAssinaturaComercial = async (
+  clinicId: string,
+  documentoId: string,
+  enviarAssinaturaComercialBody: EnviarAssinaturaComercialBody,
+  options?: RequestInit,
+): Promise<DocumentoComercial> => {
+  return customFetch<DocumentoComercial>(
+    getEnviarAssinaturaComercialUrl(clinicId, documentoId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(enviarAssinaturaComercialBody),
+    },
+  );
+};
+
+export const getEnviarAssinaturaComercialMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enviarAssinaturaComercial>>,
+    TError,
+    {
+      clinicId: string;
+      documentoId: string;
+      data: BodyType<EnviarAssinaturaComercialBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof enviarAssinaturaComercial>>,
+  TError,
+  {
+    clinicId: string;
+    documentoId: string;
+    data: BodyType<EnviarAssinaturaComercialBody>;
+  },
+  TContext
+> => {
+  const mutationKey = ["enviarAssinaturaComercial"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof enviarAssinaturaComercial>>,
+    {
+      clinicId: string;
+      documentoId: string;
+      data: BodyType<EnviarAssinaturaComercialBody>;
+    }
+  > = (props) => {
+    const { clinicId, documentoId, data } = props ?? {};
+
+    return enviarAssinaturaComercial(
+      clinicId,
+      documentoId,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EnviarAssinaturaComercialMutationResult = NonNullable<
+  Awaited<ReturnType<typeof enviarAssinaturaComercial>>
+>;
+export type EnviarAssinaturaComercialMutationBody =
+  BodyType<EnviarAssinaturaComercialBody>;
+export type EnviarAssinaturaComercialMutationError = ErrorType<void>;
+
+/**
+ * @summary Send a commercial document (proposta/contrato) for internal e-signature
+ */
+export const useEnviarAssinaturaComercial = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof enviarAssinaturaComercial>>,
+    TError,
+    {
+      clinicId: string;
+      documentoId: string;
+      data: BodyType<EnviarAssinaturaComercialBody>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof enviarAssinaturaComercial>>,
+  TError,
+  {
+    clinicId: string;
+    documentoId: string;
+    data: BodyType<EnviarAssinaturaComercialBody>;
+  },
+  TContext
+> => {
+  return useMutation(getEnviarAssinaturaComercialMutationOptions(options));
 };
 
 /**

@@ -22,6 +22,8 @@ import {
   CheckCircle2,
   History,
   Eye,
+  Plus,
+  X,
 } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -35,9 +37,49 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { clinicToSnapshot, conditionsDiffer, formatCurrency } from "./shared";
 
 type Tipo = "proposta" | "contrato";
+
+type Papel = "contratante" | "contratada" | "testemunha";
+
+interface SignatarioForm {
+  nome: string;
+  email: string;
+  cargo: string;
+  papel: Papel;
+}
+
+const PAPEL_LABEL: Record<Papel, string> = {
+  contratante: "Contratante (cliente)",
+  contratada: "Contratada (CLINIONEX360)",
+  testemunha: "Testemunha",
+};
+
+function emptySignatario(papel: Papel = "contratante"): SignatarioForm {
+  return { nome: "", email: "", cargo: "", papel };
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
 
 const META: Record<
   Tipo,
@@ -102,10 +144,47 @@ export function DocumentoComercialCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [propostaSigner, setPropostaSigner] = useState<SignatarioForm>(
+    emptySignatario("contratante"),
+  );
+  const [contratoSigners, setContratoSigners] = useState<SignatarioForm[]>([
+    emptySignatario("contratante"),
+  ]);
 
   const meta = META[tipo];
   const Icon = meta.icon;
   const url = tipo === "proposta" ? clinic.propostaUrl : clinic.contratoUrl;
+
+  // "Enviar para assinatura" is available once a PDF version exists and the
+  // document has not already been (fully) signed.
+  const canSend =
+    !!latestDoc?.pdfPath &&
+    latestDoc.status !== "assinado" &&
+    latestDoc.status !== "assinando";
+
+  const openSendModal = () => {
+    if (tipo === "proposta") {
+      setPropostaSigner({
+        nome: clinic.responsavel ?? "",
+        email: "",
+        cargo: "",
+        papel: "contratante",
+      });
+    } else {
+      setContratoSigners([
+        {
+          nome: clinic.responsavel ?? "",
+          email: "",
+          cargo: "",
+          papel: "contratante",
+        },
+        emptySignatario("contratada"),
+      ]);
+    }
+    setSendOpen(true);
+  };
 
   const showDrift =
     !!latestDoc?.snapshot &&
@@ -249,6 +328,117 @@ export function DocumentoComercialCard({
       toast({ variant: "destructive", title: "Erro ao gerar a prévia" });
     } finally {
       setPreviewing(false);
+    }
+  };
+
+  const updateContratoSigner = (
+    idx: number,
+    patch: Partial<SignatarioForm>,
+  ) => {
+    setContratoSigners((prev) =>
+      prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)),
+    );
+  };
+
+  const handleEnviar = async () => {
+    if (!latestDoc) return;
+
+    let body: Record<string, unknown>;
+    if (tipo === "proposta") {
+      const s = propostaSigner;
+      if (s.nome.trim().length < 2 || !isValidEmail(s.email)) {
+        toast({
+          variant: "destructive",
+          title: "Preencha o nome e um e-mail válido do signatário.",
+        });
+        return;
+      }
+      body = {
+        signatario: {
+          nome: s.nome.trim(),
+          email: s.email.trim(),
+          cargo: s.cargo.trim() || null,
+          papel: s.papel,
+        },
+      };
+    } else {
+      const cleaned = contratoSigners
+        .map((s) => ({ ...s, nome: s.nome.trim(), email: s.email.trim() }))
+        .filter((s) => s.nome !== "" || s.email !== "");
+      if (cleaned.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "Adicione ao menos um signatário do contrato.",
+        });
+        return;
+      }
+      for (const s of cleaned) {
+        if (s.nome.length < 2 || !isValidEmail(s.email)) {
+          toast({
+            variant: "destructive",
+            title: "Cada signatário precisa de nome e e-mail válido.",
+          });
+          return;
+        }
+      }
+      const emails = cleaned.map((s) => s.email.toLowerCase());
+      if (new Set(emails).size !== emails.length) {
+        toast({
+          variant: "destructive",
+          title: "Há e-mails duplicados entre os signatários.",
+        });
+        return;
+      }
+      body = {
+        signatarios: cleaned.map((s, i) => ({
+          nome: s.nome,
+          email: s.email,
+          cargo: s.cargo.trim() || null,
+          papel: s.papel,
+          ordem: i,
+        })),
+      };
+    }
+
+    setSending(true);
+    try {
+      const token = getStoredToken();
+      const res = await fetch(
+        `/api/clinics/${clinic.id}/documentos-comerciais/${latestDoc.id}/enviar-assinatura`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({
+          variant: "destructive",
+          title: "Não foi possível enviar para assinatura",
+          description: err.error ?? "Erro desconhecido",
+        });
+        return;
+      }
+      toast({
+        title: `${meta.title} enviada para assinatura`,
+        description:
+          tipo === "proposta"
+            ? "O signatário receberá o link por e-mail."
+            : "Cada signatário receberá seu próprio link por e-mail.",
+      });
+      setSendOpen(false);
+      onChanged();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Erro de conexão ao enviar para assinatura",
+      });
+    } finally {
+      setSending(false);
     }
   };
 
@@ -534,19 +724,212 @@ export function DocumentoComercialCard({
               variant="outline"
               size="sm"
               type="button"
-              disabled
-              title="Disponível na próxima etapa"
+              disabled={!canSend || sending}
+              onClick={openSendModal}
+              title={
+                canSend
+                  ? undefined
+                  : latestDoc?.status === "assinado" ||
+                      latestDoc?.status === "assinando"
+                    ? "Documento já enviado/assinado"
+                    : "Gere o documento antes de enviar"
+              }
+              data-testid={`btn-enviar-${tipo}`}
             >
               <Send className="mr-2 h-4 w-4" /> {meta.enviar}
             </Button>
           </div>
           <p className="text-xs text-[#4A5568]">
             Gere uma versão do PDF a partir das condições comerciais atuais ou
-            pré-visualize sem salvar. A assinatura eletrônica chega na próxima
-            etapa.
+            pré-visualize sem salvar. Depois, envie para{" "}
+            <strong>assinatura eletrônica</strong> — o signatário recebe um link
+            por e-mail e o PDF assinado volta com o comprovante (Lei
+            14.063/2020).
           </p>
         </div>
       </CardContent>
+
+      <Dialog open={sendOpen} onOpenChange={(o) => !sending && setSendOpen(o)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{meta.enviar}</DialogTitle>
+            <DialogDescription>
+              {tipo === "proposta"
+                ? "Informe o signatário que receberá o link de assinatura eletrônica por e-mail."
+                : "Informe todos os signatários. Cada um recebe seu próprio link e o contrato só é concluído quando todos assinarem."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {tipo === "proposta" ? (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="proposta-nome">Nome do signatário</Label>
+                <Input
+                  id="proposta-nome"
+                  value={propostaSigner.nome}
+                  onChange={(e) =>
+                    setPropostaSigner((p) => ({ ...p, nome: e.target.value }))
+                  }
+                  placeholder="Nome completo"
+                  data-testid="input-proposta-signer-nome"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="proposta-email">E-mail</Label>
+                <Input
+                  id="proposta-email"
+                  type="email"
+                  value={propostaSigner.email}
+                  onChange={(e) =>
+                    setPropostaSigner((p) => ({ ...p, email: e.target.value }))
+                  }
+                  placeholder="email@exemplo.com"
+                  data-testid="input-proposta-signer-email"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="proposta-cargo">Cargo (opcional)</Label>
+                <Input
+                  id="proposta-cargo"
+                  value={propostaSigner.cargo}
+                  onChange={(e) =>
+                    setPropostaSigner((p) => ({ ...p, cargo: e.target.value }))
+                  }
+                  placeholder="Ex.: Diretor"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {contratoSigners.map((s, idx) => (
+                <div
+                  key={idx}
+                  className="space-y-3 rounded-md border border-[#0F5F8F]/15 bg-[#F4F7FA] p-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-[#0F5F8F]">
+                      Signatário {idx + 1}
+                    </span>
+                    {contratoSigners.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                        onClick={() =>
+                          setContratoSigners((prev) =>
+                            prev.filter((_, i) => i !== idx),
+                          )
+                        }
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`contrato-nome-${idx}`}>Nome</Label>
+                      <Input
+                        id={`contrato-nome-${idx}`}
+                        value={s.nome}
+                        onChange={(e) =>
+                          updateContratoSigner(idx, { nome: e.target.value })
+                        }
+                        placeholder="Nome completo"
+                        data-testid={`input-contrato-signer-nome-${idx}`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`contrato-email-${idx}`}>E-mail</Label>
+                      <Input
+                        id={`contrato-email-${idx}`}
+                        type="email"
+                        value={s.email}
+                        onChange={(e) =>
+                          updateContratoSigner(idx, { email: e.target.value })
+                        }
+                        placeholder="email@exemplo.com"
+                        data-testid={`input-contrato-signer-email-${idx}`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`contrato-cargo-${idx}`}>
+                        Cargo (opcional)
+                      </Label>
+                      <Input
+                        id={`contrato-cargo-${idx}`}
+                        value={s.cargo}
+                        onChange={(e) =>
+                          updateContratoSigner(idx, { cargo: e.target.value })
+                        }
+                        placeholder="Ex.: Sócio"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Papel</Label>
+                      <Select
+                        value={s.papel}
+                        onValueChange={(v) =>
+                          updateContratoSigner(idx, { papel: v as Papel })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(
+                            Object.keys(PAPEL_LABEL) as Papel[]
+                          ).map((p) => (
+                            <SelectItem key={p} value={p}>
+                              {PAPEL_LABEL[p]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() =>
+                  setContratoSigners((prev) => [...prev, emptySignatario()])
+                }
+                data-testid="btn-add-signatario"
+              >
+                <Plus className="mr-2 h-4 w-4" /> Adicionar signatário
+              </Button>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              type="button"
+              disabled={sending}
+              onClick={() => setSendOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#0F5F8F] text-white hover:bg-[#0B1F33]"
+              disabled={sending}
+              onClick={handleEnviar}
+              data-testid={`btn-confirm-enviar-${tipo}`}
+            >
+              {sending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              Enviar para assinatura
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

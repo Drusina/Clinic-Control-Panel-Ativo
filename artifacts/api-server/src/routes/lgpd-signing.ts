@@ -1,7 +1,7 @@
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter } from "express";
 import { eq, and, gt, sql } from "drizzle-orm";
 import { z } from "zod/v4";
-import { randomBytes, createHash } from "crypto";
+import { createHash } from "crypto";
 import {
   db,
   lgpdTermosTable,
@@ -27,44 +27,24 @@ import {
   buildOperatorSignatureNotificationEmail,
   resolveAppUrl,
 } from "../lib/email.js";
+import {
+  generateToken,
+  generateVerificationCode,
+  isValidCpf,
+  formatCpf,
+  clientIp,
+} from "../lib/signing-utils.js";
+import {
+  getComercialSignInfo,
+  getComercialSignPdf,
+  submitComercialSignature,
+} from "../lib/comercial-signing.js";
 
 const protectedRouter: IRouter = Router();
 const publicRouter: IRouter = Router();
 const objectStorage = new ObjectStorageService();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
-
-function generateToken(): string {
-  // 32 URL-safe characters → ~190 bits of entropy
-  return randomBytes(24).toString("base64url");
-}
-
-function generateVerificationCode(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const buf = randomBytes(8);
-  let s = "";
-  for (let i = 0; i < 8; i++) s += alphabet[buf[i] % alphabet.length];
-  return `${s.slice(0, 4)}-${s.slice(4)}`;
-}
-
-function isValidCpf(raw: string): boolean {
-  const cpf = raw.replace(/\D/g, "");
-  if (cpf.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(cpf)) return false;
-  const calc = (factor: number) => {
-    let sum = 0;
-    for (let i = 0; i < factor - 1; i++) sum += parseInt(cpf[i], 10) * (factor - i);
-    const r = (sum * 10) % 11;
-    return r === 10 ? 0 : r;
-  };
-  return calc(10) === parseInt(cpf[9], 10) && calc(11) === parseInt(cpf[10], 10);
-}
-
-function formatCpf(raw: string): string {
-  const cpf = raw.replace(/\D/g, "");
-  if (cpf.length !== 11) return raw;
-  return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
-}
 
 async function loadContratada(): Promise<ContratadaInfo> {
   return {
@@ -144,13 +124,6 @@ async function downloadPdfBytes(objectPath: string): Promise<Buffer> {
   const file = await objectStorage.getObjectEntityFile(objectPath);
   const [buf] = await file.download();
   return buf;
-}
-
-function clientIp(req: Request): string {
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.length > 0) return xff.split(",")[0].trim();
-  if (Array.isArray(xff) && xff.length > 0) return xff[0].split(",")[0].trim();
-  return req.ip ?? req.socket.remoteAddress ?? "";
 }
 
 // ─── PROTECTED: send / re-send signing request ────────────────────────────
@@ -448,6 +421,14 @@ publicRouter.get("/assinar/info/:token", async (req, res): Promise<void> => {
   const token = req.params.token as string;
   const [termo] = await db.select().from(lgpdTermosTable).where(eq(lgpdTermosTable.signingToken, token));
   if (!termo) {
+    // Not an LGPD termo — fall back to commercial document signing (same
+    // public flow / same AssinarPage). Returns null only when the token
+    // matches no commercial document either.
+    const commercial = await getComercialSignInfo(token);
+    if (commercial) {
+      res.status(commercial.status).json(commercial.body);
+      return;
+    }
     res.status(404).json({ error: "invalid_token", message: "Link inválido ou expirado." });
     return;
   }
@@ -486,6 +467,22 @@ publicRouter.get("/assinar/pdf/:token", async (req, res): Promise<void> => {
   const token = req.params.token as string;
   const [termo] = await db.select().from(lgpdTermosTable).where(eq(lgpdTermosTable.signingToken, token));
   if (!termo) {
+    // Fall back to commercial document signing (proposta/contrato).
+    const commercial = await getComercialSignPdf(token);
+    if (commercial) {
+      if (commercial.buffer) {
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${commercial.filename ?? "documento.pdf"}"`,
+        );
+        res.setHeader("Cache-Control", "private, max-age=0, no-store");
+        res.send(commercial.buffer);
+        return;
+      }
+      res.status(commercial.status).json({ error: commercial.error ?? "Erro" });
+      return;
+    }
     res.status(404).json({ error: "Token inválido" });
     return;
   }
@@ -536,6 +533,28 @@ publicRouter.post("/assinar/submit/:token", async (req, res): Promise<void> => {
   const cleanCpf = parsed.data.signerCpf.replace(/\D/g, "");
   if (!isValidCpf(cleanCpf)) {
     res.status(400).json({ error: "CPF inválido" });
+    return;
+  }
+
+  // Commercial fallback: if the token is not an LGPD termo, delegate the whole
+  // signature flow (proposta single-signer / contrato multi-signer) to
+  // comercial-signing. Returns null only when the token matches nothing.
+  const [lgpdExists] = await db
+    .select({ id: lgpdTermosTable.id })
+    .from(lgpdTermosTable)
+    .where(eq(lgpdTermosTable.signingToken, token))
+    .limit(1);
+  if (!lgpdExists) {
+    const commercial = await submitComercialSignature(
+      token,
+      { signerName: parsed.data.signerName, cleanCpf },
+      req,
+    );
+    if (commercial) {
+      res.status(commercial.status).json(commercial.body);
+      return;
+    }
+    res.status(404).json({ error: "Link inválido" });
     return;
   }
 

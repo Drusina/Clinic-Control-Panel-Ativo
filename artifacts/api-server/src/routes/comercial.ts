@@ -6,11 +6,13 @@ import {
   clinicActivityTable,
   documentosComerciaisTable,
   type CondicoesComerciaisSnapshot,
+  type DocumentoComercialSignatario,
 } from "@workspace/db";
 import {
   SaveCondicoesComerciaisBody,
   SaveCondicoesComerciaisResponse,
   ListDocumentosComerciaisQueryParams,
+  EnviarAssinaturaComercialBody,
 } from "@workspace/api-zod";
 import { mapClinic } from "./clinics.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
@@ -18,6 +20,12 @@ import { getConfig } from "../lib/config.js";
 import { renderCommercialPdf } from "../lib/commercial-pdf.js";
 import { COMMERCIAL_TEMPLATES } from "../lib/commercial-templates.js";
 import type { ContratadaInfo, ContratanteInfo } from "../lib/lgpd-pdf.js";
+import { generateToken } from "../lib/signing-utils.js";
+import {
+  buildSigningRequestEmail,
+  sendEmailDetailed,
+  resolveAppUrl,
+} from "../lib/email.js";
 
 const objectStorage = new ObjectStorageService();
 
@@ -411,6 +419,236 @@ router.post(
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.send(Buffer.from(bytes));
+  },
+);
+
+const SIGNING_TOKEN_TTL_DAYS = 30;
+
+/** Plano de envio de e-mail montado em memória ANTES de qualquer persistência. */
+interface PlannedEmail {
+  to: string;
+  nome: string;
+  token: string;
+  signatureLink: string;
+}
+
+/**
+ * Envia um documento comercial (proposta/contrato) para assinatura eletrônica
+ * INTERNA (Lei 14.063/2020), reaproveitando o fluxo público `/assinar/:token`.
+ *
+ *   - Proposta → `signatario` único (colunas single-signer do documento).
+ *   - Contrato → `signatarios` (cada parte recebe seu próprio token; o documento
+ *                só vira "assinado" quando TODAS assinarem — ver comercial-signing).
+ *
+ * Política de e-mail (espelha `dispatchPlatformInvite`): os tokens são gerados em
+ * memória e os e-mails enviados ANTES de persistir; se QUALQUER envio falhar,
+ * nada é gravado e devolvemos 502 — evita deixar o documento num estado "enviado"
+ * sem que o signatário tenha recebido o link.
+ */
+router.post(
+  "/clinics/:clinicId/documentos-comerciais/:documentoId/enviar-assinatura",
+  async (req, res): Promise<void> => {
+    const clinicId = Array.isArray(req.params.clinicId)
+      ? req.params.clinicId[0]
+      : req.params.clinicId;
+    const documentoId = Array.isArray(req.params.documentoId)
+      ? req.params.documentoId[0]
+      : req.params.documentoId;
+
+    const parsed = EnviarAssinaturaComercialBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+
+    const [doc] = await db
+      .select()
+      .from(documentosComerciaisTable)
+      .where(
+        and(
+          eq(documentosComerciaisTable.id, documentoId),
+          eq(documentosComerciaisTable.clinicId, clinicId),
+        ),
+      );
+    if (!doc) {
+      res.status(404).json({ error: "Documento não encontrado" });
+      return;
+    }
+    if (!doc.pdfPath || !doc.docHash) {
+      res
+        .status(409)
+        .json({ error: "Gere o PDF do documento antes de enviar para assinatura." });
+      return;
+    }
+    if (doc.status === "assinado" || doc.status === "assinando") {
+      res.status(409).json({
+        error: "Este documento já foi assinado e não pode ser reenviado.",
+      });
+      return;
+    }
+    // Não destrói assinaturas já coletadas num contrato parcialmente assinado.
+    if ((doc.signatarios ?? []).some((s) => s.status === "assinado")) {
+      res.status(409).json({
+        error:
+          "Algumas partes já assinaram este contrato. Gere uma nova versão para reenviar.",
+      });
+      return;
+    }
+
+    const [clinic] = await db
+      .select()
+      .from(clinicsTable)
+      .where(eq(clinicsTable.id, clinicId));
+    if (!clinic) {
+      res.status(404).json({ error: "Clinic not found" });
+      return;
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(
+      now.getTime() + SIGNING_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const appUrl = await resolveAppUrl(req);
+    const termoNome = doc.titulo ?? (doc.tipo === "proposta" ? "Proposta" : "Contrato");
+    const clinicName = clinic.fantasia ?? clinic.nome;
+    const expiresLabel = expiresAt.toLocaleDateString("pt-BR");
+
+    // ─── Build the send plan (proposta single / contrato multi) ───────────
+    const plan: PlannedEmail[] = [];
+    let contratoSignatarios: DocumentoComercialSignatario[] | null = null;
+
+    if (doc.tipo === "proposta") {
+      const s = parsed.data.signatario;
+      if (!s) {
+        res
+          .status(400)
+          .json({ error: "Informe o signatário (signatario) da proposta." });
+        return;
+      }
+      const token = generateToken();
+      plan.push({
+        to: s.email,
+        nome: s.nome,
+        token,
+        signatureLink: `${appUrl}/assinar/${token}`,
+      });
+    } else {
+      const list = parsed.data.signatarios ?? [];
+      if (list.length === 0) {
+        res.status(400).json({
+          error: "Informe ao menos um signatário (signatarios) do contrato.",
+        });
+        return;
+      }
+      const seen = new Set<string>();
+      for (const s of list) {
+        const key = s.email.trim().toLowerCase();
+        if (seen.has(key)) {
+          res.status(400).json({
+            error: `E-mail duplicado entre os signatários: ${s.email}`,
+          });
+          return;
+        }
+        seen.add(key);
+      }
+      contratoSignatarios = list.map((s, i) => {
+        const token = generateToken();
+        plan.push({
+          to: s.email,
+          nome: s.nome,
+          token,
+          signatureLink: `${appUrl}/assinar/${token}`,
+        });
+        return {
+          nome: s.nome,
+          email: s.email,
+          cargo: s.cargo ?? null,
+          papel: s.papel ?? null,
+          ordem: s.ordem ?? i,
+          status: "enviado",
+          signingToken: token,
+          signingTokenExpiresAt: expiresAt.toISOString(),
+          signerCpf: null,
+          signerIp: null,
+          signerUserAgent: null,
+          verificationCode: null,
+          signedStoragePath: null,
+          signedAt: null,
+        };
+      });
+    }
+
+    // ─── Send ALL emails first; persist only if every send succeeded ──────
+    for (const p of plan) {
+      const html = buildSigningRequestEmail({
+        signatarioNome: p.nome,
+        termoNome,
+        signatureLink: p.signatureLink,
+        clinicName,
+        expiresAt: expiresLabel,
+      });
+      const result = await sendEmailDetailed({
+        to: p.to,
+        subject: `[CLINIONEX360] Assine: ${termoNome}`,
+        html,
+      });
+      if (!result.ok) {
+        req.log.error(
+          { docId: doc.id, clinicId, to: p.to, emailError: result.error },
+          "comercial enviar-assinatura email failed",
+        );
+        res.status(502).json({
+          error: `Falha ao enviar e-mail para ${p.to}. Nenhum link foi gerado — tente novamente.`,
+        });
+        return;
+      }
+    }
+
+    // ─── Persist the send state ───────────────────────────────────────────
+    const updates: Partial<typeof documentosComerciaisTable.$inferInsert> = {
+      status: "enviado",
+      enviadoEm: now,
+      updatedAt: now,
+    };
+    if (doc.tipo === "proposta") {
+      const s = parsed.data.signatario!;
+      const token = plan[0].token;
+      updates.signingToken = token;
+      updates.signingTokenExpiresAt = expiresAt;
+      updates.signatarioNome = s.nome;
+      updates.signatarioEmail = s.email;
+      updates.signatarioCargo = s.cargo ?? null;
+      // Limpa qualquer evidência de tentativa anterior ao reenviar.
+      updates.signerCpf = null;
+      updates.signerIp = null;
+      updates.signerUserAgent = null;
+      updates.verificationCode = null;
+      updates.signedStoragePath = null;
+      updates.aceitoEm = null;
+    } else {
+      updates.signatarios = contratoSignatarios;
+      updates.signedStoragePath = null;
+      updates.aceitoEm = null;
+    }
+
+    const [updated] = await db
+      .update(documentosComerciaisTable)
+      .set(updates)
+      .where(eq(documentosComerciaisTable.id, doc.id))
+      .returning();
+
+    await db.insert(clinicActivityTable).values({
+      clinicId,
+      tipo: "comercial",
+      titulo: `${doc.tipo === "proposta" ? "Proposta" : "Contrato"} enviado para assinatura`,
+      descricao:
+        doc.tipo === "proposta"
+          ? `Proposta v${doc.versao} enviada para assinatura eletrônica de ${plan[0].nome}.`
+          : `Contrato v${doc.versao} enviado para assinatura eletrônica de ${plan.length} signatário(s).`,
+      autorNome: resolveActor(req),
+    });
+
+    res.json(mapDocumentoComercial(updated));
   },
 );
 
