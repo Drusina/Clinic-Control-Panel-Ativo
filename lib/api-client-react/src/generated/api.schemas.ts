@@ -842,6 +842,8 @@ export interface ActionDetail {
 
 export interface CreateChecklistItemBody {
   texto: string;
+  /** When true, notifies the action's responsável (email + web push) about the new checklist item, respecting their notification preferences. */
+  notificar?: boolean;
 }
 
 export interface UpdateChecklistItemBody {
@@ -859,6 +861,8 @@ export interface CreateActionNotaBody {
   texto: string;
   /** @nullable */
   autor?: string | null;
+  /** When true, notifies the action's responsável (email + web push) about the new note, respecting their notification preferences. */
+  notificar?: boolean;
 }
 
 export type CreateActionBodyColuna =

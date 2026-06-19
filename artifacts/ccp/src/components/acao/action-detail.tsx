@@ -85,7 +85,9 @@ export default function ActionDetail({
 }) {
   const queryClient = useQueryClient();
   const [novoItem, setNovoItem] = useState("");
+  const [notificarItem, setNotificarItem] = useState(false);
   const [novaNota, setNovaNota] = useState("");
+  const [notificarResponsavel, setNotificarResponsavel] = useState(false);
   const [evidenciaToLink, setEvidenciaToLink] = useState("");
 
   const { data, isLoading } = useGetActionDetail(actionId, {
@@ -141,7 +143,7 @@ export default function ActionDetail({
     const texto = novoItem.trim();
     if (!texto) return;
     addChecklistItem.mutate(
-      { id: actionId, data: { texto } },
+      { id: actionId, data: { texto, notificar: notificarItem } },
       {
         onSuccess: () => {
           setNovoItem("");
@@ -183,7 +185,7 @@ export default function ActionDetail({
     const texto = novaNota.trim();
     if (!texto) return;
     addNota.mutate(
-      { id: actionId, data: { texto } },
+      { id: actionId, data: { texto, notificar: notificarResponsavel } },
       {
         onSuccess: () => {
           setNovaNota("");
@@ -316,26 +318,35 @@ export default function ActionDetail({
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 pt-1">
-          <Input
-            placeholder="Adicionar item…"
-            value={novoItem}
-            onChange={(e) => setNovoItem(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleAddItem();
-              }
-            }}
-          />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleAddItem}
-            disabled={!novoItem.trim() || addChecklistItem.isPending}
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Adicionar item…"
+              value={novoItem}
+              onChange={(e) => setNovoItem(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddItem();
+                }
+              }}
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleAddItem}
+              disabled={!novoItem.trim() || addChecklistItem.isPending}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+            <Checkbox
+              checked={notificarItem}
+              onCheckedChange={(v) => setNotificarItem(v === true)}
+            />
+            Notificar responsável{action.responsavelNome ? ` (${action.responsavelNome})` : ""} por e-mail e push
+          </label>
         </div>
       </div>
 
@@ -435,25 +446,34 @@ export default function ActionDetail({
             ))}
           </div>
         )}
-        <div className="flex items-center gap-2 pt-1">
-          <Input
-            placeholder="Adicionar observação…"
-            value={novaNota}
-            onChange={(e) => setNovaNota(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleAddNota();
-              }
-            }}
-          />
-          <Button
-            size="icon"
-            onClick={handleAddNota}
-            disabled={!novaNota.trim() || addNota.isPending}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Adicionar observação…"
+              value={novaNota}
+              onChange={(e) => setNovaNota(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddNota();
+                }
+              }}
+            />
+            <Button
+              size="icon"
+              onClick={handleAddNota}
+              disabled={!novaNota.trim() || addNota.isPending}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+            <Checkbox
+              checked={notificarResponsavel}
+              onCheckedChange={(v) => setNotificarResponsavel(v === true)}
+            />
+            Notificar responsável{action.responsavelNome ? ` (${action.responsavelNome})` : ""} por e-mail e push
+          </label>
         </div>
       </div>
     </div>

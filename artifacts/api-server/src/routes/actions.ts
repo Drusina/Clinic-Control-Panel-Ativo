@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import {
   db,
   actionsTable,
@@ -9,6 +9,7 @@ import {
   acaoChecklistItensTable,
   acaoEvidenciasTable,
   acaoNotasTable,
+  teamTable,
 } from "@workspace/db";
 import { assertClinicAccess } from "../middleware/auth";
 import {
@@ -22,6 +23,10 @@ import {
   AddActionNotaBody,
 } from "@workspace/api-zod";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
+import { sendEmail, buildActionUpdateEmail, resolveAppUrl } from "../lib/email.js";
+import { getRecipientPrefs } from "../lib/preferences.js";
+import { sendPushToEmail } from "../lib/push.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
@@ -334,6 +339,17 @@ router.post("/actions/:id/checklist", async (req, res): Promise<void> => {
     .values({ acaoId: id, texto: parsed.data.texto, ordem: nextOrdem })
     .returning();
 
+  // Optionally notify the action's responsável about the new checklist item
+  // (best-effort: never fails the insert). See notifyResponsavelOfActionUpdate.
+  if (parsed.data.notificar && action.responsavelNome?.trim()) {
+    void notifyResponsavelOfActionUpdate("checklist", action, item.texto).catch((err) => {
+      logger.error(
+        { err, acaoId: id, clinicId: action.clinicId },
+        "Failed to notify responsável about new checklist item",
+      );
+    });
+  }
+
   res.status(201).json(mapChecklistItem(item));
 });
 
@@ -506,8 +522,98 @@ router.post("/actions/:id/notas", async (req, res): Promise<void> => {
     .insert(acaoNotasTable)
     .values({ acaoId: id, texto: parsed.data.texto, autor: parsed.data.autor ?? null })
     .returning();
+
+  // Optionally notify the action's responsável (best-effort: a notification
+  // failure must never fail the note insert). The responsável is identified by
+  // name on the action, so we resolve their email by matching the clinic's
+  // `equipe_interna` record case-insensitively by name. We respect the
+  // recipient's email preference; web push is always attempted when available.
+  if (parsed.data.notificar && action.responsavelNome?.trim()) {
+    void notifyResponsavelOfActionUpdate("nota", action, nota.texto).catch((err) => {
+      logger.error(
+        { err, acaoId: id, clinicId: action.clinicId },
+        "Failed to notify responsável about new coordinator note",
+      );
+    });
+  }
+
   res.status(201).json(mapNota(nota));
 });
+
+/**
+ * Notify an action's responsável that a new note or checklist item was added.
+ * Best-effort: every channel swallows its own failure so the caller (the insert
+ * handler) never fails because of a notification. The responsável is stored only
+ * as a free-text name on the action, so we resolve their email by matching the
+ * clinic's `equipe_interna` record case-insensitively by name (clinic-scoped, so
+ * a duplicate name in another clinic can never receive this notification). Email
+ * respects the recipient's `emailEnabled` preference; web push is always
+ * attempted when a subscription exists.
+ */
+export async function notifyResponsavelOfActionUpdate(
+  kind: "nota" | "checklist",
+  action: typeof actionsTable.$inferSelect,
+  texto: string,
+): Promise<void> {
+  const responsavelNome = action.responsavelNome?.trim();
+  if (!responsavelNome) return;
+
+  const [member] = await db
+    .select({ email: teamTable.email, nome: teamTable.nome })
+    .from(teamTable)
+    .where(
+      and(
+        eq(teamTable.clinicId, action.clinicId),
+        sql`lower(${teamTable.nome}) = lower(${responsavelNome})`,
+      ),
+    )
+    .limit(1);
+
+  const recipient = member?.email?.trim();
+  if (!recipient) return;
+
+  const [clinic] = await db
+    .select({ nome: clinicsTable.nome })
+    .from(clinicsTable)
+    .where(eq(clinicsTable.id, action.clinicId))
+    .limit(1);
+  const clinicName = clinic?.nome ?? "Clínica";
+
+  const acaoPath = `/portal/clinica/${action.clinicId}/plano-de-acao`;
+  const isNota = kind === "nota";
+  const pushTitle = `${isNota ? "Nova nota" : "Novo item"}: ${action.titulo}`;
+  const subject = isNota
+    ? `[IONEX360] Nova nota na ação: ${action.titulo}`
+    : `[IONEX360] Novo item de checklist na ação: ${action.titulo}`;
+
+  // Web push — clinic-scoped resolution so a duplicate email across clinics can
+  // never receive another clinic's notification. Best-effort.
+  await sendPushToEmail(recipient, action.clinicId, {
+    title: pushTitle,
+    body: texto.length > 120 ? `${texto.slice(0, 117)}…` : texto,
+    url: acaoPath,
+    tag: `acao-${kind}-${action.id}`,
+  }).catch(() => ({ sent: 0, failed: 0 }));
+
+  const prefs = await getRecipientPrefs(recipient, action.clinicId);
+  if (prefs.emailEnabled) {
+    const appUrl = await resolveAppUrl();
+    const html = buildActionUpdateEmail({
+      kind,
+      clinicName,
+      acaoTitulo: action.titulo,
+      responsavelNome: member?.nome ?? responsavelNome,
+      texto,
+      appUrl,
+      acaoPath,
+    });
+    await sendEmail({
+      to: recipient,
+      subject,
+      html,
+    }).catch(() => false);
+  }
+}
 
 router.delete("/actions/:id/notas/:notaId", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

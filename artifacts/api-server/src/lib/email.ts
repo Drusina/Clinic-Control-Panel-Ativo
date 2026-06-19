@@ -486,6 +486,49 @@ export function buildReminderEmail(params: {
   return baseTemplate("Lembrete de compromisso — IONEX360", body);
 }
 
+export function buildActionUpdateEmail(params: {
+  kind: "nota" | "checklist";
+  clinicName: string;
+  acaoTitulo: string;
+  responsavelNome?: string | null;
+  texto: string;
+  autor?: string | null;
+  appUrl: string;
+  acaoPath?: string;
+}): string {
+  const detailRow = (label: string, value: string) => `
+      <tr>
+        <td style="padding:8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;width:120px;vertical-align:top;">${label}</td>
+        <td style="padding:8px 0;color:#e2e8f0;font-size:14px;">${value}</td>
+      </tr>`;
+
+  const isNota = params.kind === "nota";
+  const heading = isNota ? "Nova nota do coordenador" : "Novo item de checklist";
+  const itemLabel = isNota ? "Nota" : "Item";
+  const subjectNoun = isNota ? "uma nova nota" : "um novo item de checklist";
+  const autorRow = params.autor ? detailRow("Autor", params.autor) : "";
+  const acaoLink = `${params.appUrl}${params.acaoPath ?? "/portal"}`;
+  const greeting = params.responsavelNome
+    ? `Olá <strong style="color:#e2e8f0;">${params.responsavelNome}</strong>, ${subjectNoun} foi registrado(a) na sua ação.`
+    : `${subjectNoun.charAt(0).toUpperCase()}${subjectNoun.slice(1)} foi registrado(a) na ação sob sua responsabilidade.`;
+
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">${heading}</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      ${greeting} Clínica <strong style="color:#e2e8f0;">${params.clinicName}</strong>.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
+      ${detailRow("Ação", params.acaoTitulo)}
+      ${detailRow(itemLabel, params.texto)}
+      ${autorRow}
+    </table>
+
+    ${primaryButton(acaoLink, "Abrir plano de ação →")}
+  `;
+  return baseTemplate(`${heading} — IONEX360`, body);
+}
+
 export function buildSigningConfirmationEmail(params: {
   signatarioNome: string;
   termoNome: string;

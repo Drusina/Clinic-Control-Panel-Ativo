@@ -1370,6 +1370,12 @@ export const AddChecklistItemParams = zod.object({
 
 export const AddChecklistItemBody = zod.object({
   texto: zod.string(),
+  notificar: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, notifies the action's responsável (email + web push) about the new checklist item, respecting their notification preferences.",
+    ),
 });
 
 /**
@@ -1467,6 +1473,12 @@ export const AddActionNotaParams = zod.object({
 export const AddActionNotaBody = zod.object({
   texto: zod.string(),
   autor: zod.string().nullish(),
+  notificar: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, notifies the action's responsável (email + web push) about the new note, respecting their notification preferences.",
+    ),
 });
 
 /**
