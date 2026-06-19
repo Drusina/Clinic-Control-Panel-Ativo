@@ -18,6 +18,10 @@ import type {
 
 import type {
   Action,
+  ActionChecklistItem,
+  ActionDetail,
+  ActionEvidenciaLink,
+  ActionNota,
   Activity,
   ApplySocietaryBody,
   ApplySocietaryResponse,
@@ -32,7 +36,9 @@ import type {
   CompromissoUpdate,
   CondicoesComerciaisInput,
   CreateActionBody,
+  CreateActionNotaBody,
   CreateActivityBody,
+  CreateChecklistItemBody,
   CreateClinicBody,
   CreateFaturaBody,
   CreateParceiroExternoBody,
@@ -69,6 +75,7 @@ import type {
   InviteUserBody,
   InviteUserResponse,
   Kickoff,
+  LinkEvidenciaBody,
   ListActionsParams,
   ListClinicsParams,
   ListCompromissosParams,
@@ -89,6 +96,7 @@ import type {
   Trilha,
   TrilhaEtapaUpdate,
   UpdateActionBody,
+  UpdateChecklistItemBody,
   UpdateClinicBody,
   UpdateClinicStatusBody,
   UpdateFaturaBody,
@@ -4236,6 +4244,875 @@ export const useDeleteAction = <
   TContext
 > => {
   return useMutation(getDeleteActionMutationOptions(options));
+};
+
+/**
+ * @summary Get full action detail (action, linked risk, checklist, evidence links, notes)
+ */
+export const getGetActionDetailUrl = (id: string) => {
+  return `/api/actions/${id}/detail`;
+};
+
+export const getActionDetail = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ActionDetail> => {
+  return customFetch<ActionDetail>(getGetActionDetailUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetActionDetailQueryKey = (id: string) => {
+  return [`/api/actions/${id}/detail`] as const;
+};
+
+export const getGetActionDetailQueryOptions = <
+  TData = Awaited<ReturnType<typeof getActionDetail>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getActionDetail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetActionDetailQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getActionDetail>>> = ({
+    signal,
+  }) => getActionDetail(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getActionDetail>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetActionDetailQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getActionDetail>>
+>;
+export type GetActionDetailQueryError = ErrorType<void>;
+
+/**
+ * @summary Get full action detail (action, linked risk, checklist, evidence links, notes)
+ */
+
+export function useGetActionDetail<
+  TData = Awaited<ReturnType<typeof getActionDetail>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getActionDetail>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetActionDetailQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a checklist item to an action
+ */
+export const getAddChecklistItemUrl = (id: string) => {
+  return `/api/actions/${id}/checklist`;
+};
+
+export const addChecklistItem = async (
+  id: string,
+  createChecklistItemBody: CreateChecklistItemBody,
+  options?: RequestInit,
+): Promise<ActionChecklistItem> => {
+  return customFetch<ActionChecklistItem>(getAddChecklistItemUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createChecklistItemBody),
+  });
+};
+
+export const getAddChecklistItemMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addChecklistItem>>,
+    TError,
+    { id: string; data: BodyType<CreateChecklistItemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addChecklistItem>>,
+  TError,
+  { id: string; data: BodyType<CreateChecklistItemBody> },
+  TContext
+> => {
+  const mutationKey = ["addChecklistItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addChecklistItem>>,
+    { id: string; data: BodyType<CreateChecklistItemBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addChecklistItem(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddChecklistItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addChecklistItem>>
+>;
+export type AddChecklistItemMutationBody = BodyType<CreateChecklistItemBody>;
+export type AddChecklistItemMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a checklist item to an action
+ */
+export const useAddChecklistItem = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addChecklistItem>>,
+    TError,
+    { id: string; data: BodyType<CreateChecklistItemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addChecklistItem>>,
+  TError,
+  { id: string; data: BodyType<CreateChecklistItemBody> },
+  TContext
+> => {
+  return useMutation(getAddChecklistItemMutationOptions(options));
+};
+
+/**
+ * @summary Toggle or edit a checklist item
+ */
+export const getUpdateChecklistItemUrl = (id: string, itemId: string) => {
+  return `/api/actions/${id}/checklist/${itemId}`;
+};
+
+export const updateChecklistItem = async (
+  id: string,
+  itemId: string,
+  updateChecklistItemBody: UpdateChecklistItemBody,
+  options?: RequestInit,
+): Promise<ActionChecklistItem> => {
+  return customFetch<ActionChecklistItem>(
+    getUpdateChecklistItemUrl(id, itemId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateChecklistItemBody),
+    },
+  );
+};
+
+export const getUpdateChecklistItemMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateChecklistItem>>,
+    TError,
+    { id: string; itemId: string; data: BodyType<UpdateChecklistItemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateChecklistItem>>,
+  TError,
+  { id: string; itemId: string; data: BodyType<UpdateChecklistItemBody> },
+  TContext
+> => {
+  const mutationKey = ["updateChecklistItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateChecklistItem>>,
+    { id: string; itemId: string; data: BodyType<UpdateChecklistItemBody> }
+  > = (props) => {
+    const { id, itemId, data } = props ?? {};
+
+    return updateChecklistItem(id, itemId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateChecklistItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateChecklistItem>>
+>;
+export type UpdateChecklistItemMutationBody = BodyType<UpdateChecklistItemBody>;
+export type UpdateChecklistItemMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Toggle or edit a checklist item
+ */
+export const useUpdateChecklistItem = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateChecklistItem>>,
+    TError,
+    { id: string; itemId: string; data: BodyType<UpdateChecklistItemBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateChecklistItem>>,
+  TError,
+  { id: string; itemId: string; data: BodyType<UpdateChecklistItemBody> },
+  TContext
+> => {
+  return useMutation(getUpdateChecklistItemMutationOptions(options));
+};
+
+/**
+ * @summary Delete a checklist item
+ */
+export const getDeleteChecklistItemUrl = (id: string, itemId: string) => {
+  return `/api/actions/${id}/checklist/${itemId}`;
+};
+
+export const deleteChecklistItem = async (
+  id: string,
+  itemId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteChecklistItemUrl(id, itemId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteChecklistItemMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteChecklistItem>>,
+    TError,
+    { id: string; itemId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteChecklistItem>>,
+  TError,
+  { id: string; itemId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteChecklistItem"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteChecklistItem>>,
+    { id: string; itemId: string }
+  > = (props) => {
+    const { id, itemId } = props ?? {};
+
+    return deleteChecklistItem(id, itemId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteChecklistItemMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteChecklistItem>>
+>;
+
+export type DeleteChecklistItemMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a checklist item
+ */
+export const useDeleteChecklistItem = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteChecklistItem>>,
+    TError,
+    { id: string; itemId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteChecklistItem>>,
+  TError,
+  { id: string; itemId: string },
+  TContext
+> => {
+  return useMutation(getDeleteChecklistItemMutationOptions(options));
+};
+
+/**
+ * @summary List evidence records linked to an action
+ */
+export const getListActionEvidenciasUrl = (id: string) => {
+  return `/api/actions/${id}/evidencias`;
+};
+
+export const listActionEvidencias = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ActionEvidenciaLink[]> => {
+  return customFetch<ActionEvidenciaLink[]>(getListActionEvidenciasUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListActionEvidenciasQueryKey = (id: string) => {
+  return [`/api/actions/${id}/evidencias`] as const;
+};
+
+export const getListActionEvidenciasQueryOptions = <
+  TData = Awaited<ReturnType<typeof listActionEvidencias>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listActionEvidencias>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListActionEvidenciasQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listActionEvidencias>>
+  > = ({ signal }) => listActionEvidencias(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listActionEvidencias>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListActionEvidenciasQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listActionEvidencias>>
+>;
+export type ListActionEvidenciasQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List evidence records linked to an action
+ */
+
+export function useListActionEvidencias<
+  TData = Awaited<ReturnType<typeof listActionEvidencias>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listActionEvidencias>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListActionEvidenciasQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Link an evidence record to an action
+ */
+export const getLinkActionEvidenciaUrl = (id: string) => {
+  return `/api/actions/${id}/evidencias`;
+};
+
+export const linkActionEvidencia = async (
+  id: string,
+  linkEvidenciaBody: LinkEvidenciaBody,
+  options?: RequestInit,
+): Promise<ActionEvidenciaLink> => {
+  return customFetch<ActionEvidenciaLink>(getLinkActionEvidenciaUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(linkEvidenciaBody),
+  });
+};
+
+export const getLinkActionEvidenciaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof linkActionEvidencia>>,
+    TError,
+    { id: string; data: BodyType<LinkEvidenciaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof linkActionEvidencia>>,
+  TError,
+  { id: string; data: BodyType<LinkEvidenciaBody> },
+  TContext
+> => {
+  const mutationKey = ["linkActionEvidencia"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof linkActionEvidencia>>,
+    { id: string; data: BodyType<LinkEvidenciaBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return linkActionEvidencia(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LinkActionEvidenciaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof linkActionEvidencia>>
+>;
+export type LinkActionEvidenciaMutationBody = BodyType<LinkEvidenciaBody>;
+export type LinkActionEvidenciaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Link an evidence record to an action
+ */
+export const useLinkActionEvidencia = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof linkActionEvidencia>>,
+    TError,
+    { id: string; data: BodyType<LinkEvidenciaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof linkActionEvidencia>>,
+  TError,
+  { id: string; data: BodyType<LinkEvidenciaBody> },
+  TContext
+> => {
+  return useMutation(getLinkActionEvidenciaMutationOptions(options));
+};
+
+/**
+ * @summary Unlink an evidence record from an action
+ */
+export const getUnlinkActionEvidenciaUrl = (id: string, linkId: string) => {
+  return `/api/actions/${id}/evidencias/${linkId}`;
+};
+
+export const unlinkActionEvidencia = async (
+  id: string,
+  linkId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getUnlinkActionEvidenciaUrl(id, linkId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getUnlinkActionEvidenciaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unlinkActionEvidencia>>,
+    TError,
+    { id: string; linkId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unlinkActionEvidencia>>,
+  TError,
+  { id: string; linkId: string },
+  TContext
+> => {
+  const mutationKey = ["unlinkActionEvidencia"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unlinkActionEvidencia>>,
+    { id: string; linkId: string }
+  > = (props) => {
+    const { id, linkId } = props ?? {};
+
+    return unlinkActionEvidencia(id, linkId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnlinkActionEvidenciaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unlinkActionEvidencia>>
+>;
+
+export type UnlinkActionEvidenciaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Unlink an evidence record from an action
+ */
+export const useUnlinkActionEvidencia = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unlinkActionEvidencia>>,
+    TError,
+    { id: string; linkId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unlinkActionEvidencia>>,
+  TError,
+  { id: string; linkId: string },
+  TContext
+> => {
+  return useMutation(getUnlinkActionEvidenciaMutationOptions(options));
+};
+
+/**
+ * @summary List coordinator notes for an action
+ */
+export const getListActionNotasUrl = (id: string) => {
+  return `/api/actions/${id}/notas`;
+};
+
+export const listActionNotas = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ActionNota[]> => {
+  return customFetch<ActionNota[]>(getListActionNotasUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListActionNotasQueryKey = (id: string) => {
+  return [`/api/actions/${id}/notas`] as const;
+};
+
+export const getListActionNotasQueryOptions = <
+  TData = Awaited<ReturnType<typeof listActionNotas>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listActionNotas>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListActionNotasQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listActionNotas>>> = ({
+    signal,
+  }) => listActionNotas(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listActionNotas>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListActionNotasQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listActionNotas>>
+>;
+export type ListActionNotasQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List coordinator notes for an action
+ */
+
+export function useListActionNotas<
+  TData = Awaited<ReturnType<typeof listActionNotas>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listActionNotas>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListActionNotasQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a coordinator note to an action
+ */
+export const getAddActionNotaUrl = (id: string) => {
+  return `/api/actions/${id}/notas`;
+};
+
+export const addActionNota = async (
+  id: string,
+  createActionNotaBody: CreateActionNotaBody,
+  options?: RequestInit,
+): Promise<ActionNota> => {
+  return customFetch<ActionNota>(getAddActionNotaUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createActionNotaBody),
+  });
+};
+
+export const getAddActionNotaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addActionNota>>,
+    TError,
+    { id: string; data: BodyType<CreateActionNotaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addActionNota>>,
+  TError,
+  { id: string; data: BodyType<CreateActionNotaBody> },
+  TContext
+> => {
+  const mutationKey = ["addActionNota"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addActionNota>>,
+    { id: string; data: BodyType<CreateActionNotaBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addActionNota(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddActionNotaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addActionNota>>
+>;
+export type AddActionNotaMutationBody = BodyType<CreateActionNotaBody>;
+export type AddActionNotaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a coordinator note to an action
+ */
+export const useAddActionNota = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addActionNota>>,
+    TError,
+    { id: string; data: BodyType<CreateActionNotaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addActionNota>>,
+  TError,
+  { id: string; data: BodyType<CreateActionNotaBody> },
+  TContext
+> => {
+  return useMutation(getAddActionNotaMutationOptions(options));
+};
+
+/**
+ * @summary Delete a coordinator note
+ */
+export const getDeleteActionNotaUrl = (id: string, notaId: string) => {
+  return `/api/actions/${id}/notas/${notaId}`;
+};
+
+export const deleteActionNota = async (
+  id: string,
+  notaId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteActionNotaUrl(id, notaId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteActionNotaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteActionNota>>,
+    TError,
+    { id: string; notaId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteActionNota>>,
+  TError,
+  { id: string; notaId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteActionNota"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteActionNota>>,
+    { id: string; notaId: string }
+  > = (props) => {
+    const { id, notaId } = props ?? {};
+
+    return deleteActionNota(id, notaId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteActionNotaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteActionNota>>
+>;
+
+export type DeleteActionNotaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a coordinator note
+ */
+export const useDeleteActionNota = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteActionNota>>,
+    TError,
+    { id: string; notaId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteActionNota>>,
+  TError,
+  { id: string; notaId: string },
+  TContext
+> => {
+  return useMutation(getDeleteActionNotaMutationOptions(options));
 };
 
 /**

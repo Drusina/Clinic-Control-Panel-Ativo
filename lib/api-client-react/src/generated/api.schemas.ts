@@ -772,6 +772,8 @@ export interface Action {
   /** @nullable */
   responsavelNome?: string | null;
   /** @nullable */
+  dataInicio?: string | null;
+  /** @nullable */
   prazo?: string | null;
   /** @nullable */
   prioridade?: ActionPrioridade;
@@ -787,6 +789,76 @@ export interface Action {
   concluidoEm?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ActionLinkedRisk {
+  id: string;
+  nome: string;
+  probabilidade: number;
+  impacto: number;
+  severidade: number;
+  /** @nullable */
+  nivel?: string | null;
+}
+
+export interface ActionChecklistItem {
+  id: string;
+  acaoId: string;
+  texto: string;
+  feito: boolean;
+  ordem: number;
+  createdAt: string;
+}
+
+export interface ActionEvidenciaLink {
+  id: string;
+  evidenciaId: string;
+  nome: string;
+  /** @nullable */
+  pilarSlug?: string | null;
+  /** @nullable */
+  tipo?: string | null;
+  /** @nullable */
+  storagePath?: string | null;
+  createdAt: string;
+}
+
+export interface ActionNota {
+  id: string;
+  acaoId: string;
+  /** @nullable */
+  autor?: string | null;
+  texto: string;
+  createdAt: string;
+}
+
+export interface ActionDetail {
+  action: Action;
+  riscoVinculado?: ActionLinkedRisk | null;
+  checklist: ActionChecklistItem[];
+  evidencias: ActionEvidenciaLink[];
+  notas: ActionNota[];
+}
+
+export interface CreateChecklistItemBody {
+  texto: string;
+}
+
+export interface UpdateChecklistItemBody {
+  /** @nullable */
+  texto?: string | null;
+  /** @nullable */
+  feito?: boolean | null;
+}
+
+export interface LinkEvidenciaBody {
+  evidenciaId: string;
+}
+
+export interface CreateActionNotaBody {
+  texto: string;
+  /** @nullable */
+  autor?: string | null;
 }
 
 export type CreateActionBodyColuna =
@@ -807,6 +879,8 @@ export interface CreateActionBody {
   /** @nullable */
   responsavelNome?: string | null;
   /** @nullable */
+  dataInicio?: string | null;
+  /** @nullable */
   prazo?: string | null;
   /** @nullable */
   prioridade?: string | null;
@@ -824,6 +898,8 @@ export interface UpdateActionBody {
   descricao?: string | null;
   /** @nullable */
   responsavelNome?: string | null;
+  /** @nullable */
+  dataInicio?: string | null;
   /** @nullable */
   prazo?: string | null;
   /** @nullable */

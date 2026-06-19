@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2, Calendar, CalendarClock, User, MoreVertical } from "lucide-react";
 import AgendaModule from "@/components/agenda/agenda-module";
+import ActionDetail from "@/components/acao/action-detail";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -49,6 +50,7 @@ const formSchema = z.object({
   titulo: z.string().min(2, "Título obrigatório"),
   descricao: z.string().optional(),
   responsavelNome: z.string().optional(),
+  dataInicio: z.string().optional(),
   prazo: z.string().optional(),
   prioridade: z.enum(["alta", "media", "baixa"]),
   coluna: z.enum(["backlog", "todo", "doing", "review", "done"]),
@@ -61,6 +63,7 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
   const [editingAction, setEditingAction] = useState<Action | null>(null);
 
   const [agendaAction, setAgendaAction] = useState<Action | null>(null);
+  const [detailAction, setDetailAction] = useState<Action | null>(null);
 
   const { data: actions, isLoading } = useListActions(clinicId, undefined, {
     query: { enabled: !!clinicId, queryKey: getListActionsQueryKey(clinicId) },
@@ -112,6 +115,7 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
         titulo: action.titulo,
         descricao: action.descricao || "",
         responsavelNome: action.responsavelNome || "",
+        dataInicio: action.dataInicio ? action.dataInicio.split("T")[0] : "",
         prazo: action.prazo ? action.prazo.split("T")[0] : "",
         prioridade: (action.prioridade as any) || "media",
         coluna: action.coluna,
@@ -122,6 +126,7 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
         titulo: "",
         descricao: "",
         responsavelNome: "",
+        dataInicio: "",
         prazo: "",
         prioridade: "media",
         coluna: "backlog",
@@ -245,7 +250,13 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                  <h5 className="font-medium text-sm leading-tight mb-2">{action.titulo}</h5>
+                  <button
+                    type="button"
+                    onClick={() => setDetailAction(action)}
+                    className="block text-left w-full font-medium text-sm leading-tight mb-2 hover:text-primary transition-colors"
+                  >
+                    {action.titulo}
+                  </button>
                   <div className="flex flex-col gap-1.5 mt-3 text-xs text-muted-foreground">
                     {action.prazo && (
                       <div className="flex items-center gap-1.5">
@@ -331,6 +342,19 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                 />
                 <FormField
                   control={form.control}
+                  name="dataInicio"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data de Início</FormLabel>
+                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
                   name="prazo"
                   render={({ field }) => (
                     <FormItem>
@@ -340,8 +364,6 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                     </FormItem>
                   )}
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="prioridade"
@@ -398,6 +420,25 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
           </DialogHeader>
           {agendaAction && (
             <AgendaModule clinicId={clinicId} filterAcaoId={agendaAction.id} embedded />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!detailAction} onOpenChange={(open) => !open && setDetailAction(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{detailAction?.titulo}</DialogTitle>
+          </DialogHeader>
+          {detailAction && (
+            <ActionDetail
+              actionId={detailAction.id}
+              clinicId={clinicId}
+              onEdit={() => {
+                const a = detailAction;
+                setDetailAction(null);
+                openDialog(a);
+              }}
+            />
           )}
         </DialogContent>
       </Dialog>

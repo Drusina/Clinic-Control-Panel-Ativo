@@ -1,12 +1,25 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, actionsTable, clinicsTable } from "@workspace/db";
+import { eq, and, asc } from "drizzle-orm";
+import {
+  db,
+  actionsTable,
+  clinicsTable,
+  risksTable,
+  evidenciasTable,
+  acaoChecklistItensTable,
+  acaoEvidenciasTable,
+  acaoNotasTable,
+} from "@workspace/db";
 import { assertClinicAccess } from "../middleware/auth";
 import {
   CreateActionBody,
   UpdateActionBody,
   ListActionsQueryParams,
   UpdateActionResponse,
+  AddChecklistItemBody,
+  UpdateChecklistItemBody,
+  LinkActionEvidenciaBody,
+  AddActionNotaBody,
 } from "@workspace/api-zod";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 
@@ -19,6 +32,7 @@ function mapAction(a: typeof actionsTable.$inferSelect) {
     titulo: a.titulo,
     descricao: a.descricao,
     responsavelNome: a.responsavelNome,
+    dataInicio: a.dataInicio,
     prazo: a.prazo,
     prioridade: a.prioridade,
     pilarSlug: a.pilarSlug,
@@ -30,6 +44,51 @@ function mapAction(a: typeof actionsTable.$inferSelect) {
     createdAt: a.createdAt.toISOString(),
     updatedAt: a.updatedAt.toISOString(),
   };
+}
+
+function mapChecklistItem(c: typeof acaoChecklistItensTable.$inferSelect) {
+  return {
+    id: c.id,
+    acaoId: c.acaoId,
+    texto: c.texto,
+    feito: c.feito,
+    ordem: c.ordem,
+    createdAt: c.createdAt.toISOString(),
+  };
+}
+
+function mapNota(n: typeof acaoNotasTable.$inferSelect) {
+  return {
+    id: n.id,
+    acaoId: n.acaoId,
+    autor: n.autor,
+    texto: n.texto,
+    createdAt: n.createdAt.toISOString(),
+  };
+}
+
+function mapEvidenciaLink(
+  link: typeof acaoEvidenciasTable.$inferSelect,
+  ev: typeof evidenciasTable.$inferSelect,
+) {
+  return {
+    id: link.id,
+    evidenciaId: ev.id,
+    nome: ev.nome,
+    pilarSlug: ev.pilarSlug,
+    tipo: ev.tipo,
+    storagePath: ev.storagePath,
+    createdAt: link.createdAt.toISOString(),
+  };
+}
+
+async function loadAction(id: string) {
+  const [action] = await db
+    .select()
+    .from(actionsTable)
+    .where(eq(actionsTable.id, id))
+    .limit(1);
+  return action ?? null;
 }
 
 router.get("/clinics/:clinicId/actions", async (req, res): Promise<void> => {
@@ -67,6 +126,7 @@ router.post("/clinics/:clinicId/actions", async (req, res): Promise<void> => {
       titulo: parsed.data.titulo,
       descricao: parsed.data.descricao ?? null,
       responsavelNome: parsed.data.responsavelNome ?? null,
+      dataInicio: parsed.data.dataInicio ?? null,
       prazo: parsed.data.prazo ?? null,
       prioridade: parsed.data.prioridade ?? null,
       pilarSlug: parsed.data.pilarSlug ?? null,
@@ -102,6 +162,7 @@ router.patch("/actions/:id", async (req, res): Promise<void> => {
   if (d.titulo != null) updates.titulo = d.titulo;
   if (d.descricao !== undefined) updates.descricao = d.descricao;
   if (d.responsavelNome !== undefined) updates.responsavelNome = d.responsavelNome;
+  if (d.dataInicio !== undefined) updates.dataInicio = d.dataInicio;
   if (d.prazo !== undefined) updates.prazo = d.prazo;
   if (d.prioridade !== undefined) updates.prioridade = d.prioridade;
   if (d.pilarSlug !== undefined) updates.pilarSlug = d.pilarSlug;
@@ -185,6 +246,282 @@ router.delete("/actions/:id", async (req, res): Promise<void> => {
   if (await assertClinicAccess(req, res, existingAction.clinicId)) return;
 
   await db.delete(actionsTable).where(eq(actionsTable.id, id));
+  res.sendStatus(204);
+});
+
+// ─── ACTION DETAIL ──────────────────────────────────────────────────────────
+
+router.get("/actions/:id/detail", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  let riscoVinculado = null;
+  if (action.riscoOrigemId) {
+    const [risk] = await db
+      .select()
+      .from(risksTable)
+      .where(eq(risksTable.id, action.riscoOrigemId))
+      .limit(1);
+    if (risk) {
+      riscoVinculado = {
+        id: risk.id,
+        nome: risk.nome,
+        probabilidade: risk.probabilidade,
+        impacto: risk.impacto,
+        severidade: risk.severidade,
+        nivel: risk.nivel,
+      };
+    }
+  }
+
+  const checklist = await db
+    .select()
+    .from(acaoChecklistItensTable)
+    .where(eq(acaoChecklistItensTable.acaoId, id))
+    .orderBy(asc(acaoChecklistItensTable.ordem), asc(acaoChecklistItensTable.createdAt));
+
+  const evidenciaRows = await db
+    .select({ link: acaoEvidenciasTable, ev: evidenciasTable })
+    .from(acaoEvidenciasTable)
+    .innerJoin(evidenciasTable, eq(acaoEvidenciasTable.evidenciaId, evidenciasTable.id))
+    .where(eq(acaoEvidenciasTable.acaoId, id))
+    .orderBy(asc(acaoEvidenciasTable.createdAt));
+
+  const notas = await db
+    .select()
+    .from(acaoNotasTable)
+    .where(eq(acaoNotasTable.acaoId, id))
+    .orderBy(asc(acaoNotasTable.createdAt));
+
+  res.json({
+    action: mapAction(action),
+    riscoVinculado,
+    checklist: checklist.map(mapChecklistItem),
+    evidencias: evidenciaRows.map((r) => mapEvidenciaLink(r.link, r.ev)),
+    notas: notas.map(mapNota),
+  });
+});
+
+// ─── CHECKLIST ──────────────────────────────────────────────────────────────
+
+router.post("/actions/:id/checklist", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = AddChecklistItemBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  const existing = await db
+    .select({ ordem: acaoChecklistItensTable.ordem })
+    .from(acaoChecklistItensTable)
+    .where(eq(acaoChecklistItensTable.acaoId, id));
+  const nextOrdem = existing.reduce((max, c) => Math.max(max, c.ordem), -1) + 1;
+
+  const [item] = await db
+    .insert(acaoChecklistItensTable)
+    .values({ acaoId: id, texto: parsed.data.texto, ordem: nextOrdem })
+    .returning();
+
+  res.status(201).json(mapChecklistItem(item));
+});
+
+router.patch("/actions/:id/checklist/:itemId", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const itemId = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
+  const parsed = UpdateChecklistItemBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  const updates: Partial<typeof acaoChecklistItensTable.$inferInsert> = {};
+  if (parsed.data.texto != null) updates.texto = parsed.data.texto;
+  if (parsed.data.feito != null) updates.feito = parsed.data.feito;
+
+  const [item] = await db
+    .update(acaoChecklistItensTable)
+    .set(updates)
+    .where(and(eq(acaoChecklistItensTable.id, itemId), eq(acaoChecklistItensTable.acaoId, id)))
+    .returning();
+
+  if (!item) {
+    res.status(404).json({ error: "Checklist item not found" });
+    return;
+  }
+  res.json(mapChecklistItem(item));
+});
+
+router.delete("/actions/:id/checklist/:itemId", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const itemId = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  await db
+    .delete(acaoChecklistItensTable)
+    .where(and(eq(acaoChecklistItensTable.id, itemId), eq(acaoChecklistItensTable.acaoId, id)));
+  res.sendStatus(204);
+});
+
+// ─── EVIDENCE LINKS ─────────────────────────────────────────────────────────
+
+router.get("/actions/:id/evidencias", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  const rows = await db
+    .select({ link: acaoEvidenciasTable, ev: evidenciasTable })
+    .from(acaoEvidenciasTable)
+    .innerJoin(evidenciasTable, eq(acaoEvidenciasTable.evidenciaId, evidenciasTable.id))
+    .where(eq(acaoEvidenciasTable.acaoId, id))
+    .orderBy(asc(acaoEvidenciasTable.createdAt));
+
+  res.json(rows.map((r) => mapEvidenciaLink(r.link, r.ev)));
+});
+
+router.post("/actions/:id/evidencias", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = LinkActionEvidenciaBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  const [ev] = await db
+    .select()
+    .from(evidenciasTable)
+    .where(eq(evidenciasTable.id, parsed.data.evidenciaId))
+    .limit(1);
+  if (!ev || ev.clinicId !== action.clinicId) {
+    res.status(400).json({ error: "Evidência inválida para esta clínica" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(acaoEvidenciasTable)
+    .where(
+      and(
+        eq(acaoEvidenciasTable.acaoId, id),
+        eq(acaoEvidenciasTable.evidenciaId, parsed.data.evidenciaId),
+      ),
+    )
+    .limit(1);
+
+  const link =
+    existing ??
+    (
+      await db
+        .insert(acaoEvidenciasTable)
+        .values({ acaoId: id, evidenciaId: parsed.data.evidenciaId })
+        .returning()
+    )[0];
+
+  res.status(existing ? 200 : 201).json(mapEvidenciaLink(link, ev));
+});
+
+router.delete("/actions/:id/evidencias/:linkId", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const linkId = Array.isArray(req.params.linkId) ? req.params.linkId[0] : req.params.linkId;
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  await db
+    .delete(acaoEvidenciasTable)
+    .where(and(eq(acaoEvidenciasTable.id, linkId), eq(acaoEvidenciasTable.acaoId, id)));
+  res.sendStatus(204);
+});
+
+// ─── COORDINATOR NOTES ──────────────────────────────────────────────────────
+
+router.get("/actions/:id/notas", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  const notas = await db
+    .select()
+    .from(acaoNotasTable)
+    .where(eq(acaoNotasTable.acaoId, id))
+    .orderBy(asc(acaoNotasTable.createdAt));
+  res.json(notas.map(mapNota));
+});
+
+router.post("/actions/:id/notas", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = AddActionNotaBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  const [nota] = await db
+    .insert(acaoNotasTable)
+    .values({ acaoId: id, texto: parsed.data.texto, autor: parsed.data.autor ?? null })
+    .returning();
+  res.status(201).json(mapNota(nota));
+});
+
+router.delete("/actions/:id/notas/:notaId", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const notaId = Array.isArray(req.params.notaId) ? req.params.notaId[0] : req.params.notaId;
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  await db
+    .delete(acaoNotasTable)
+    .where(and(eq(acaoNotasTable.id, notaId), eq(acaoNotasTable.acaoId, id)));
   res.sendStatus(204);
 });
 

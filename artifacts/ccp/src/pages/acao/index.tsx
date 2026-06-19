@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
 import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+import ActionDetail from "@/components/acao/action-detail";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -82,6 +83,7 @@ type Action = {
   titulo: string;
   descricao: string | null;
   responsavelNome: string | null;
+  dataInicio: string | null;
   prazo: string | null;
   prioridade: string | null;
   pilarSlug: string | null;
@@ -139,7 +141,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string; barColor: 
   baixa: { label: "Baixa", color: "text-green-600", barColor: "bg-green-500" },
 };
 
-function KanbanCard({ action, onEdit }: { action: Action; onEdit: (a: Action) => void }) {
+function KanbanCard({ action, onOpenDetail }: { action: Action; onOpenDetail: (a: Action) => void }) {
   const {
     attributes,
     listeners,
@@ -164,7 +166,7 @@ function KanbanCard({ action, onEdit }: { action: Action; onEdit: (a: Action) =>
       ref={setNodeRef}
       style={style}
       className="bg-card border rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
-      onClick={() => onEdit(action)}
+      onClick={() => onOpenDetail(action)}
     >
       <div className={cn("h-1 rounded-t-lg", prio.barColor)} />
       <div className="p-3">
@@ -221,11 +223,11 @@ function KanbanCard({ action, onEdit }: { action: Action; onEdit: (a: Action) =>
 function DroppableColumn({
   column,
   actions,
-  onEdit,
+  onOpenDetail,
 }: {
   column: { id: string; title: string };
   actions: Action[];
-  onEdit: (a: Action) => void;
+  onOpenDetail: (a: Action) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -254,7 +256,7 @@ function DroppableColumn({
           )}
         >
           {actions.map(action => (
-            <KanbanCard key={action.id} action={action} onEdit={onEdit} />
+            <KanbanCard key={action.id} action={action} onOpenDetail={onOpenDetail} />
           ))}
           {actions.length === 0 && (
             <div className={cn(
@@ -285,10 +287,13 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
   const [filterPilar, setFilterPilar] = useState("all");
   const [filterPrioridade, setFilterPrioridade] = useState("all");
 
+  const [detailAction, setDetailAction] = useState<Action | null>(null);
+
   const [form, setForm] = useState({
     titulo: "",
     descricao: "",
     responsavelNome: "",
+    dataInicio: "",
     prazo: "",
     prioridade: "media" as string,
     pilarSlug: "" as string,
@@ -343,7 +348,7 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
 
   const openCreate = () => {
     setEditingAction(null);
-    setForm({ titulo: "", descricao: "", responsavelNome: "", prazo: "", prioridade: "media", pilarSlug: "", evidencias: "", coluna: "backlog" });
+    setForm({ titulo: "", descricao: "", responsavelNome: "", dataInicio: "", prazo: "", prioridade: "media", pilarSlug: "", evidencias: "", coluna: "backlog" });
     setDialogOpen(true);
   };
 
@@ -353,6 +358,7 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
       titulo: action.titulo,
       descricao: action.descricao ?? "",
       responsavelNome: action.responsavelNome ?? "",
+      dataInicio: action.dataInicio ?? "",
       prazo: action.prazo ?? "",
       prioridade: action.prioridade ?? "media",
       pilarSlug: action.pilarSlug ?? "",
@@ -366,6 +372,7 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
     titulo: f.titulo,
     descricao: f.descricao || undefined,
     responsavelNome: f.responsavelNome || undefined,
+    dataInicio: f.dataInicio || undefined,
     prazo: f.prazo || undefined,
     prioridade: f.prioridade || undefined,
     pilarSlug: f.pilarSlug || undefined,
@@ -509,7 +516,7 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
                 key={col.id}
                 column={col}
                 actions={filteredAcoes.filter(a => a.coluna === col.id).sort((a, b) => a.ordem - b.ordem)}
-                onEdit={openEdit}
+                onOpenDetail={setDetailAction}
               />
             ))}
           </div>
@@ -563,6 +570,16 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
                 />
               </div>
               <div>
+                <label className="text-sm font-medium mb-1 block">Data de Início</label>
+                <Input
+                  type="date"
+                  value={form.dataInicio}
+                  onChange={e => setForm(f => ({ ...f, dataInicio: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
                 <label className="text-sm font-medium mb-1 block">Prazo</label>
                 <Input
                   type="date"
@@ -570,6 +587,7 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
                   onChange={e => setForm(f => ({ ...f, prazo: e.target.value }))}
                 />
               </div>
+              <div />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -634,6 +652,25 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
               </Button>
             </div>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!detailAction} onOpenChange={(open) => !open && setDetailAction(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{detailAction?.titulo}</DialogTitle>
+          </DialogHeader>
+          {detailAction && (
+            <ActionDetail
+              actionId={detailAction.id}
+              clinicId={clinicId}
+              onEdit={() => {
+                const a = detailAction;
+                setDetailAction(null);
+                openEdit(a);
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -1190,6 +1190,7 @@ export const ListActionsResponseItem = zod.object({
   titulo: zod.string(),
   descricao: zod.string().nullish(),
   responsavelNome: zod.string().nullish(),
+  dataInicio: zod.string().nullish(),
   prazo: zod.string().nullish(),
   prioridade: zod
     .union([
@@ -1221,6 +1222,7 @@ export const CreateActionBody = zod.object({
   titulo: zod.string(),
   descricao: zod.string().nullish(),
   responsavelNome: zod.string().nullish(),
+  dataInicio: zod.string().nullish(),
   prazo: zod.string().nullish(),
   prioridade: zod.string().nullish(),
   coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
@@ -1239,6 +1241,7 @@ export const UpdateActionBody = zod.object({
   titulo: zod.string().nullish(),
   descricao: zod.string().nullish(),
   responsavelNome: zod.string().nullish(),
+  dataInicio: zod.string().nullish(),
   prazo: zod.string().nullish(),
   prioridade: zod.string().nullish(),
   coluna: zod.string().nullish(),
@@ -1253,6 +1256,7 @@ export const UpdateActionResponse = zod.object({
   titulo: zod.string(),
   descricao: zod.string().nullish(),
   responsavelNome: zod.string().nullish(),
+  dataInicio: zod.string().nullish(),
   prazo: zod.string().nullish(),
   prioridade: zod
     .union([
@@ -1277,6 +1281,200 @@ export const UpdateActionResponse = zod.object({
  */
 export const DeleteActionParams = zod.object({
   id: zod.coerce.string(),
+});
+
+/**
+ * @summary Get full action detail (action, linked risk, checklist, evidence links, notes)
+ */
+export const GetActionDetailParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetActionDetailResponse = zod.object({
+  action: zod.object({
+    id: zod.string(),
+    clinicId: zod.string(),
+    titulo: zod.string(),
+    descricao: zod.string().nullish(),
+    responsavelNome: zod.string().nullish(),
+    dataInicio: zod.string().nullish(),
+    prazo: zod.string().nullish(),
+    prioridade: zod
+      .union([
+        zod.literal("alta"),
+        zod.literal("media"),
+        zod.literal("baixa"),
+        zod.literal(null),
+      ])
+      .nullish(),
+    pilarSlug: zod.string().nullish(),
+    evidencias: zod.string().nullish(),
+    coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]),
+    ordem: zod.number(),
+    riscoOrigemId: zod.string().nullish(),
+    concluidoEm: zod.string().nullish(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+  }),
+  riscoVinculado: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        nome: zod.string(),
+        probabilidade: zod.number(),
+        impacto: zod.number(),
+        severidade: zod.number(),
+        nivel: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  checklist: zod.array(
+    zod.object({
+      id: zod.string(),
+      acaoId: zod.string(),
+      texto: zod.string(),
+      feito: zod.boolean(),
+      ordem: zod.number(),
+      createdAt: zod.string(),
+    }),
+  ),
+  evidencias: zod.array(
+    zod.object({
+      id: zod.string(),
+      evidenciaId: zod.string(),
+      nome: zod.string(),
+      pilarSlug: zod.string().nullish(),
+      tipo: zod.string().nullish(),
+      storagePath: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+  notas: zod.array(
+    zod.object({
+      id: zod.string(),
+      acaoId: zod.string(),
+      autor: zod.string().nullish(),
+      texto: zod.string(),
+      createdAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Add a checklist item to an action
+ */
+export const AddChecklistItemParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const AddChecklistItemBody = zod.object({
+  texto: zod.string(),
+});
+
+/**
+ * @summary Toggle or edit a checklist item
+ */
+export const UpdateChecklistItemParams = zod.object({
+  id: zod.coerce.string(),
+  itemId: zod.coerce.string(),
+});
+
+export const UpdateChecklistItemBody = zod.object({
+  texto: zod.string().nullish(),
+  feito: zod.boolean().nullish(),
+});
+
+export const UpdateChecklistItemResponse = zod.object({
+  id: zod.string(),
+  acaoId: zod.string(),
+  texto: zod.string(),
+  feito: zod.boolean(),
+  ordem: zod.number(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a checklist item
+ */
+export const DeleteChecklistItemParams = zod.object({
+  id: zod.coerce.string(),
+  itemId: zod.coerce.string(),
+});
+
+/**
+ * @summary List evidence records linked to an action
+ */
+export const ListActionEvidenciasParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListActionEvidenciasResponseItem = zod.object({
+  id: zod.string(),
+  evidenciaId: zod.string(),
+  nome: zod.string(),
+  pilarSlug: zod.string().nullish(),
+  tipo: zod.string().nullish(),
+  storagePath: zod.string().nullish(),
+  createdAt: zod.string(),
+});
+export const ListActionEvidenciasResponse = zod.array(
+  ListActionEvidenciasResponseItem,
+);
+
+/**
+ * @summary Link an evidence record to an action
+ */
+export const LinkActionEvidenciaParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const LinkActionEvidenciaBody = zod.object({
+  evidenciaId: zod.string(),
+});
+
+/**
+ * @summary Unlink an evidence record from an action
+ */
+export const UnlinkActionEvidenciaParams = zod.object({
+  id: zod.coerce.string(),
+  linkId: zod.coerce.string(),
+});
+
+/**
+ * @summary List coordinator notes for an action
+ */
+export const ListActionNotasParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListActionNotasResponseItem = zod.object({
+  id: zod.string(),
+  acaoId: zod.string(),
+  autor: zod.string().nullish(),
+  texto: zod.string(),
+  createdAt: zod.string(),
+});
+export const ListActionNotasResponse = zod.array(ListActionNotasResponseItem);
+
+/**
+ * @summary Add a coordinator note to an action
+ */
+export const AddActionNotaParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const AddActionNotaBody = zod.object({
+  texto: zod.string(),
+  autor: zod.string().nullish(),
+});
+
+/**
+ * @summary Delete a coordinator note
+ */
+export const DeleteActionNotaParams = zod.object({
+  id: zod.coerce.string(),
+  notaId: zod.coerce.string(),
 });
 
 /**

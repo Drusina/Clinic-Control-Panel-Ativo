@@ -1013,6 +1013,228 @@ paths:
         "204":
           description: Deleted
 
+  /actions/{id}/detail:
+    get:
+      operationId: getActionDetail
+      tags: [actions]
+      summary: Get full action detail (action, linked risk, checklist, evidence links, notes)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Action detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionDetail"
+        "404":
+          description: Not found
+
+  /actions/{id}/checklist:
+    post:
+      operationId: addChecklistItem
+      tags: [actions]
+      summary: Add a checklist item to an action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChecklistItemBody"
+      responses:
+        "201":
+          description: Created checklist item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionChecklistItem"
+
+  /actions/{id}/checklist/{itemId}:
+    patch:
+      operationId: updateChecklistItem
+      tags: [actions]
+      summary: Toggle or edit a checklist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChecklistItemBody"
+      responses:
+        "200":
+          description: Updated checklist item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionChecklistItem"
+    delete:
+      operationId: deleteChecklistItem
+      tags: [actions]
+      summary: Delete a checklist item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /actions/{id}/evidencias:
+    get:
+      operationId: listActionEvidencias
+      tags: [actions]
+      summary: List evidence records linked to an action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Linked evidence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActionEvidenciaLink"
+    post:
+      operationId: linkActionEvidencia
+      tags: [actions]
+      summary: Link an evidence record to an action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkEvidenciaBody"
+      responses:
+        "201":
+          description: Linked evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionEvidenciaLink"
+
+  /actions/{id}/evidencias/{linkId}:
+    delete:
+      operationId: unlinkActionEvidencia
+      tags: [actions]
+      summary: Unlink an evidence record from an action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: linkId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Unlinked
+
+  /actions/{id}/notas:
+    get:
+      operationId: listActionNotas
+      tags: [actions]
+      summary: List coordinator notes for an action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActionNota"
+    post:
+      operationId: addActionNota
+      tags: [actions]
+      summary: Add a coordinator note to an action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateActionNotaBody"
+      responses:
+        "201":
+          description: Created note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionNota"
+
+  /actions/{id}/notas/{notaId}:
+    delete:
+      operationId: deleteActionNota
+      tags: [actions]
+      summary: Delete a coordinator note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: notaId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
   # ─── RISKS ──────────────────────────────────────────────────────────────────
   /clinics/{clinicId}/risks:
     get:
@@ -3172,6 +3394,8 @@ components:
           type: ["string", "null"]
         responsavelNome:
           type: ["string", "null"]
+        dataInicio:
+          type: ["string", "null"]
         prazo:
           type: ["string", "null"]
         prioridade:
@@ -3203,6 +3427,154 @@ components:
         - createdAt
         - updatedAt
 
+    ActionLinkedRisk:
+      type: object
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+        probabilidade:
+          type: integer
+        impacto:
+          type: integer
+        severidade:
+          type: integer
+        nivel:
+          type: ["string", "null"]
+      required:
+        - id
+        - nome
+        - probabilidade
+        - impacto
+        - severidade
+
+    ActionChecklistItem:
+      type: object
+      properties:
+        id:
+          type: string
+        acaoId:
+          type: string
+        texto:
+          type: string
+        feito:
+          type: boolean
+        ordem:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - acaoId
+        - texto
+        - feito
+        - ordem
+        - createdAt
+
+    ActionEvidenciaLink:
+      type: object
+      properties:
+        id:
+          type: string
+        evidenciaId:
+          type: string
+        nome:
+          type: string
+        pilarSlug:
+          type: ["string", "null"]
+        tipo:
+          type: ["string", "null"]
+        storagePath:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - evidenciaId
+        - nome
+        - createdAt
+
+    ActionNota:
+      type: object
+      properties:
+        id:
+          type: string
+        acaoId:
+          type: string
+        autor:
+          type: ["string", "null"]
+        texto:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - acaoId
+        - texto
+        - createdAt
+
+    ActionDetail:
+      type: object
+      properties:
+        action:
+          $ref: "#/components/schemas/Action"
+        riscoVinculado:
+          oneOf:
+            - $ref: "#/components/schemas/ActionLinkedRisk"
+            - type: "null"
+        checklist:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionChecklistItem"
+        evidencias:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionEvidenciaLink"
+        notas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionNota"
+      required:
+        - action
+        - checklist
+        - evidencias
+        - notas
+
+    CreateChecklistItemBody:
+      type: object
+      properties:
+        texto:
+          type: string
+      required:
+        - texto
+
+    UpdateChecklistItemBody:
+      type: object
+      properties:
+        texto:
+          type: ["string", "null"]
+        feito:
+          type: ["boolean", "null"]
+
+    LinkEvidenciaBody:
+      type: object
+      properties:
+        evidenciaId:
+          type: string
+      required:
+        - evidenciaId
+
+    CreateActionNotaBody:
+      type: object
+      properties:
+        texto:
+          type: string
+        autor:
+          type: ["string", "null"]
+      required:
+        - texto
+
     CreateActionBody:
       type: object
       properties:
@@ -3211,6 +3583,8 @@ components:
         descricao:
           type: ["string", "null"]
         responsavelNome:
+          type: ["string", "null"]
+        dataInicio:
           type: ["string", "null"]
         prazo:
           type: ["string", "null"]
@@ -3234,6 +3608,8 @@ components:
         descricao:
           type: ["string", "null"]
         responsavelNome:
+          type: ["string", "null"]
+        dataInicio:
           type: ["string", "null"]
         prazo:
           type: ["string", "null"]

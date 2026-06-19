@@ -12,6 +12,7 @@ export const actionsTable = pgTable("acoes", {
   titulo: text("titulo").notNull(),
   descricao: text("descricao"),
   responsavelNome: text("responsavel_nome"),
+  dataInicio: date("data_inicio"),
   prazo: date("prazo"),
   prioridade: text("prioridade"),
   pilarSlug: text("pilar_slug"),
