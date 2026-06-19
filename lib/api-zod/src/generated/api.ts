@@ -1296,7 +1296,14 @@ export const ListRisksResponseItem = zod.object({
   severidade: zod.number(),
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
-  status: zod.enum(["identificado", "em_mitigacao", "mitigado", "aceito"]),
+  status: zod.enum([
+    "identificado",
+    "em_mitigacao",
+    "mitigado",
+    "aceito",
+    "nao_aceito",
+  ]),
+  statusJustificativa: zod.string().nullish(),
   pilarSlug: zod.string().nullish(),
   origem: zod.enum(["manual", "diagnostico"]),
   nivel: zod
@@ -1352,7 +1359,17 @@ export const UpdateRiskBody = zod.object({
   impacto: zod.number().nullish(),
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
-  status: zod.string().nullish(),
+  status: zod
+    .union([
+      zod.literal("identificado"),
+      zod.literal("em_mitigacao"),
+      zod.literal("mitigado"),
+      zod.literal("aceito"),
+      zod.literal("nao_aceito"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  statusJustificativa: zod.string().nullish(),
   pilarSlug: zod.string().nullish(),
 });
 
@@ -1366,7 +1383,14 @@ export const UpdateRiskResponse = zod.object({
   severidade: zod.number(),
   responsavel: zod.string().nullish(),
   acoesMitigadoras: zod.string().nullish(),
-  status: zod.enum(["identificado", "em_mitigacao", "mitigado", "aceito"]),
+  status: zod.enum([
+    "identificado",
+    "em_mitigacao",
+    "mitigado",
+    "aceito",
+    "nao_aceito",
+  ]),
+  statusJustificativa: zod.string().nullish(),
   pilarSlug: zod.string().nullish(),
   origem: zod.enum(["manual", "diagnostico"]),
   nivel: zod
@@ -1634,7 +1658,14 @@ export const CommitRisksFromDiagnosticResponse = zod.object({
       severidade: zod.number(),
       responsavel: zod.string().nullish(),
       acoesMitigadoras: zod.string().nullish(),
-      status: zod.enum(["identificado", "em_mitigacao", "mitigado", "aceito"]),
+      status: zod.enum([
+        "identificado",
+        "em_mitigacao",
+        "mitigado",
+        "aceito",
+        "nao_aceito",
+      ]),
+      statusJustificativa: zod.string().nullish(),
       pilarSlug: zod.string().nullish(),
       origem: zod.enum(["manual", "diagnostico"]),
       nivel: zod

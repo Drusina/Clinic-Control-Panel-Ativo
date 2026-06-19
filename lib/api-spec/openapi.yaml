@@ -3272,7 +3272,9 @@ components:
           type: ["string", "null"]
         status:
           type: string
-          enum: [identificado, em_mitigacao, mitigado, aceito]
+          enum: [identificado, em_mitigacao, mitigado, aceito, nao_aceito]
+        statusJustificativa:
+          type: ["string", "null"]
         pilarSlug:
           type: ["string", "null"]
         origem:
@@ -3455,6 +3457,9 @@ components:
         acoesMitigadoras:
           type: ["string", "null"]
         status:
+          type: ["string", "null"]
+          enum: [identificado, em_mitigacao, mitigado, aceito, nao_aceito, null]
+        statusJustificativa:
           type: ["string", "null"]
         pilarSlug:
           type: ["string", "null"]

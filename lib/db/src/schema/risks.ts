@@ -24,6 +24,7 @@ export const risksTable = pgTable("riscos", {
   responsavel: text("responsavel"),
   acoesMitigadoras: text("acoes_mitigadoras"),
   status: text("status").notNull().default("identificado"),
+  statusJustificativa: text("status_justificativa"),
   origem: text("origem").notNull().default("manual"),
   nivel: text("nivel"),
   diagnosticoId: uuid("diagnostico_id").references(() => diagnosticsTable.id, {

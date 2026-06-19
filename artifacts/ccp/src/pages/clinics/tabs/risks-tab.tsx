@@ -41,15 +41,21 @@ import {
 } from "@/components/ui/table";
 import type { Risk } from "@workspace/api-client-react";
 
-const formSchema = z.object({
-  nome: z.string().min(2, "Nome obrigatório"),
-  descricao: z.string().optional(),
-  probabilidade: z.coerce.number().min(1).max(5),
-  impacto: z.coerce.number().min(1).max(5),
-  responsavel: z.string().optional(),
-  acoesMitigadoras: z.string().optional(),
-  status: z.enum(["identificado", "em_mitigacao", "mitigado", "aceito"]).optional(),
-});
+const formSchema = z
+  .object({
+    nome: z.string().min(2, "Nome obrigatório"),
+    descricao: z.string().optional(),
+    probabilidade: z.coerce.number().min(1).max(5),
+    impacto: z.coerce.number().min(1).max(5),
+    responsavel: z.string().optional(),
+    acoesMitigadoras: z.string().optional(),
+    status: z.enum(["identificado", "em_mitigacao", "mitigado", "aceito", "nao_aceito"]).optional(),
+    statusJustificativa: z.string().optional(),
+  })
+  .refine((d) => d.status !== "nao_aceito" || !!d.statusJustificativa?.trim(), {
+    message: "Justificativa obrigatória para 'Não aceito'",
+    path: ["statusJustificativa"],
+  });
 
 export default function RisksTab({ clinicId }: { clinicId: string }) {
   const { toast } = useToast();
@@ -75,8 +81,11 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
       responsavel: "",
       acoesMitigadoras: "",
       status: "identificado",
+      statusJustificativa: "",
     },
   });
+
+  const statusValue = form.watch("status");
 
   const openDialog = (risk?: Risk) => {
     if (risk) {
@@ -89,6 +98,7 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
         responsavel: risk.responsavel || "",
         acoesMitigadoras: risk.acoesMitigadoras || "",
         status: (risk.status as any) || "identificado",
+        statusJustificativa: risk.statusJustificativa || "",
       });
     } else {
       setEditingRisk(null);
@@ -100,15 +110,21 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
         responsavel: "",
         acoesMitigadoras: "",
         status: "identificado",
+        statusJustificativa: "",
       });
     }
     setIsDialogOpen(true);
   };
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
+    const payload = {
+      ...values,
+      statusJustificativa:
+        values.status === "nao_aceito" ? values.statusJustificativa?.trim() || null : null,
+    };
     if (editingRisk) {
       updateRisk.mutate(
-        { id: editingRisk.id, data: values },
+        { id: editingRisk.id, data: payload },
         {
           onSuccess: () => {
             toast({ title: "Risco atualizado" });
@@ -120,7 +136,7 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
       );
     } else {
       createRisk.mutate(
-        { clinicId, data: values as any },
+        { clinicId, data: payload as any },
         {
           onSuccess: () => {
             toast({ title: "Risco registrado" });
@@ -332,6 +348,7 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
                             <SelectItem value="em_mitigacao">Em Mitigação</SelectItem>
                             <SelectItem value="mitigado">Mitigado</SelectItem>
                             <SelectItem value="aceito">Aceito</SelectItem>
+                            <SelectItem value="nao_aceito">Não aceito</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -340,6 +357,26 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
                   />
                 )}
               </div>
+              {editingRisk && statusValue === "nao_aceito" && (
+                <FormField
+                  control={form.control}
+                  name="statusJustificativa"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Justificativa (Não aceito) *</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          className="resize-none"
+                          rows={3}
+                          placeholder="Explique por que este risco não foi aceito..."
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <DialogFooter className="pt-4">
                 <Button type="submit" disabled={createRisk.isPending || updateRisk.isPending}>
                   Salvar

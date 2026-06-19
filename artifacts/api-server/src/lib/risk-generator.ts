@@ -46,8 +46,20 @@ export function severidadeToNivel(sev: number): "baixo" | "medio" | "alto" {
   return "alto";
 }
 
+const ESCALA_LABELS: Record<string, string> = {
+  "1": "Crítico",
+  "2": "Ruim",
+  "3": "Médio",
+  "4": "Bom",
+  "5": "Ótimo",
+};
+
 function humanizeResposta(valor: string, tipo: string): string {
   if (tipo === "sim_nao") return valor === "sim" ? "Sim" : "Não";
+  if (tipo === "escala_1_5") {
+    const label = ESCALA_LABELS[valor.trim()];
+    return label ? `${valor.trim()} — ${label}` : valor;
+  }
   return valor;
 }
 

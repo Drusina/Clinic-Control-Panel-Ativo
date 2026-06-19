@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, desc, sql } from "drizzle-orm";
 import { db, risksTable, clinicsTable, diagnosticsTable, actionsTable } from "@workspace/db";
-import { assertClinicAccess } from "../middleware/auth";
+import { assertClinicAccess, type AuthenticatedRequest } from "../middleware/auth";
 import {
   CreateRiskBody,
   UpdateRiskBody,
@@ -31,6 +31,7 @@ function mapRisk(r: typeof risksTable.$inferSelect) {
     responsavel: r.responsavel,
     acoesMitigadoras: r.acoesMitigadoras,
     status: r.status,
+    statusJustificativa: r.statusJustificativa ?? null,
     origem: r.origem,
     nivel: r.nivel,
     diagnosticoId: r.diagnosticoId,
@@ -110,6 +111,25 @@ router.patch("/risks/:id", async (req, res): Promise<void> => {
   if (d.responsavel !== undefined) updates.responsavel = d.responsavel;
   if (d.acoesMitigadoras !== undefined) updates.acoesMitigadoras = d.acoesMitigadoras;
   if (d.status != null) updates.status = d.status;
+  if (d.statusJustificativa !== undefined) updates.statusJustificativa = d.statusJustificativa;
+
+  // Invariant (source of truth): a risk marked "Não aceito" must carry a
+  // non-empty justification; any other status clears it. Enforced here so
+  // direct API callers can't bypass the client-side dialog/validation.
+  const finalStatus = d.status ?? existing.status;
+  if (finalStatus === "nao_aceito") {
+    const justificativa =
+      d.statusJustificativa !== undefined ? d.statusJustificativa : existing.statusJustificativa;
+    if (!justificativa || !justificativa.trim()) {
+      res.status(400).json({
+        error: "A justificativa é obrigatória para marcar um risco como 'Não aceito'.",
+      });
+      return;
+    }
+    updates.statusJustificativa = justificativa.trim();
+  } else {
+    updates.statusJustificativa = null;
+  }
 
   const [risk] = await db.update(risksTable).set(updates).where(eq(risksTable.id, id)).returning();
 
@@ -194,6 +214,10 @@ async function loadConcludedDiagnostic(
 router.post(
   "/clinics/:clinicId/diagnostics/:diagnosticId/generate-risks/preview",
   async (req, res): Promise<void> => {
+    if ((req as unknown as AuthenticatedRequest).user?.role !== "super_admin") {
+      res.status(403).json({ error: "Apenas super_admin pode gerar riscos a partir do diagnóstico." });
+      return;
+    }
     const ctx = await loadConcludedDiagnostic(req, res);
     if (!ctx) return;
 
@@ -249,6 +273,10 @@ router.post(
 router.post(
   "/clinics/:clinicId/diagnostics/:diagnosticId/generate-risks/commit",
   async (req, res): Promise<void> => {
+    if ((req as unknown as AuthenticatedRequest).user?.role !== "super_admin") {
+      res.status(403).json({ error: "Apenas super_admin pode gerar riscos a partir do diagnóstico." });
+      return;
+    }
     const ctx = await loadConcludedDiagnostic(req, res);
     if (!ctx) return;
     const { clinicId, diagnosticId } = ctx;

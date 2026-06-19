@@ -69,6 +69,7 @@ type Risk = {
   responsavel: string | null;
   acoesMitigadoras: string | null;
   status: string;
+  statusJustificativa: string | null;
   origem: string;
   nivel: string | null;
   diagnosticoId: string | null;
@@ -311,8 +312,11 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: currentUser } = useCurrentRole();
+  const isSuperAdmin = currentUser?.role === "super_admin";
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [justifyDialog, setJustifyDialog] = useState<{ riskId: string; text: string } | null>(null);
   const [genDialogOpen, setGenDialogOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewDiagnosticId, setReviewDiagnosticId] = useState<string | null>(null);
@@ -482,10 +486,12 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
           </div>
         )}
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setGenDialogOpen(true)} disabled={previewMut.isPending}>
-            {previewMut.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-            Gerar do diagnóstico
-          </Button>
+          {isSuperAdmin && (
+            <Button variant="outline" onClick={() => setGenDialogOpen(true)} disabled={previewMut.isPending}>
+              {previewMut.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+              Gerar do diagnóstico
+            </Button>
+          )}
           <Button onClick={() => setDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" /> Novo Risco
           </Button>
@@ -529,7 +535,7 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : (
         <div className="flex flex-col lg:flex-row gap-6">
-          <div className="flex-1">
+          <div className="w-full lg:w-[420px] lg:flex-shrink-0">
             <div className="border rounded-xl overflow-hidden p-4 bg-card">
               <div className="flex items-end gap-2 mb-3">
                 <div className="text-xs text-muted-foreground font-medium" style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", height: 200 }}>
@@ -601,16 +607,17 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
             </div>
           </div>
 
-          <div className="w-full lg:w-80 space-y-2">
+          <div className="w-full flex-1 space-y-2">
             <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Riscos por Severidade</h3>
-            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+            <div className="space-y-2.5 max-h-[640px] overflow-y-auto pr-1">
               {sortedRiscos.map((risk, i) => {
                 const sev = getSeverityLabel(risk.severidade);
                 const isHighlighted = highlightedRisk === risk.id;
                 const isExpanded = expandedRisk === risk.id;
                 const fromDiag = risk.origem === "diagnostico";
                 const hasFonte = !!(risk.perguntasFonte && risk.perguntasFonte.length > 0);
-                const hasDetail = hasFonte || !!risk.acoesMitigadoras || !!risk.descricao;
+                const hasJustificativa = risk.status === "nao_aceito" && !!risk.statusJustificativa;
+                const hasDetail = hasFonte || hasJustificativa || !!risk.acoesMitigadoras || !!risk.descricao;
                 return (
                   <div
                     key={risk.id}
@@ -657,9 +664,15 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
                         </div>
                         <Select
                           value={risk.status}
-                          onValueChange={(val) => updateMut.mutate({ id: risk.id, data: { status: val } })}
+                          onValueChange={(val) => {
+                            if (val === "nao_aceito") {
+                              setJustifyDialog({ riskId: risk.id, text: risk.statusJustificativa ?? "" });
+                            } else {
+                              updateMut.mutate({ id: risk.id, data: { status: val, statusJustificativa: null } });
+                            }
+                          }}
                         >
-                          <SelectTrigger className="h-6 w-[90px] text-[10px]" onClick={e => e.stopPropagation()}>
+                          <SelectTrigger className="h-7 w-[116px] text-[11px]" onClick={e => e.stopPropagation()}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -667,6 +680,7 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
                             <SelectItem value="em_mitigacao">Em Mitigação</SelectItem>
                             <SelectItem value="mitigado">Mitigado</SelectItem>
                             <SelectItem value="aceito">Aceito</SelectItem>
+                            <SelectItem value="nao_aceito">Não aceito</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -682,6 +696,12 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
                         </button>
                         {isExpanded && (
                           <div className="mt-2 space-y-3 text-xs">
+                            {hasJustificativa && (
+                              <div className="rounded-md border border-red-200 bg-red-50 p-2.5">
+                                <div className="font-semibold text-red-800 mb-1">Justificativa — Não aceito</div>
+                                <p className="text-red-700 whitespace-pre-line leading-relaxed">{risk.statusJustificativa}</p>
+                              </div>
+                            )}
                             {risk.descricao && (
                               <p className="text-muted-foreground leading-relaxed">{risk.descricao}</p>
                             )}
@@ -694,11 +714,14 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
                             {hasFonte && (
                               <div>
                                 <div className="font-semibold text-foreground mb-1">Respostas do diagnóstico que originaram este risco</div>
-                                <ul className="space-y-1.5">
+                                <ul className="space-y-2">
                                   {risk.perguntasFonte!.map((pf, idx) => (
-                                    <li key={idx} className="border-l-2 border-indigo-200 pl-2">
-                                      <div className="text-foreground">{pf.pergunta}</div>
-                                      <div className="text-muted-foreground">Resposta: {pf.resposta}</div>
+                                    <li key={idx} className="border-l-2 border-indigo-300 pl-3 py-0.5">
+                                      <div className="text-foreground font-medium leading-snug">{pf.pergunta}</div>
+                                      <div className="mt-0.5">
+                                        <span className="font-semibold text-foreground/70">Resposta: </span>
+                                        <span className="text-muted-foreground">{pf.resposta}</span>
+                                      </div>
                                     </li>
                                   ))}
                                 </ul>
@@ -720,6 +743,46 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
           </div>
         </div>
       )}
+
+      <Dialog open={!!justifyDialog} onOpenChange={(o) => { if (!o) setJustifyDialog(null); }}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>Justificar "Não aceito"</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <label className="text-sm font-medium block">
+              Justificativa <span className="text-red-600">*</span>
+            </label>
+            <Textarea
+              placeholder="Explique por que este risco não foi aceito..."
+              rows={4}
+              value={justifyDialog?.text ?? ""}
+              onChange={(e) => setJustifyDialog((d) => (d ? { ...d, text: e.target.value } : d))}
+              className="resize-none"
+            />
+            <p className="text-xs text-muted-foreground">
+              A justificativa é obrigatória ao marcar um risco como "Não aceito".
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setJustifyDialog(null)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                const text = justifyDialog?.text.trim();
+                if (!justifyDialog || !text) return;
+                updateMut.mutate(
+                  { id: justifyDialog.riskId, data: { status: "nao_aceito", statusJustificativa: text } },
+                  { onSuccess: () => setJustifyDialog(null) },
+                );
+              }}
+              disabled={!justifyDialog?.text.trim() || updateMut.isPending}
+            >
+              {updateMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Salvar justificativa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
@@ -933,11 +996,14 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
                       <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                         Respostas do diagnóstico que originaram este risco ({r.perguntasFonte.length})
                       </summary>
-                      <ul className="mt-2 space-y-1.5">
+                      <ul className="mt-2 space-y-2">
                         {r.perguntasFonte.map((pf, idx) => (
-                          <li key={idx} className="border-l-2 border-indigo-200 pl-2">
-                            <div className="text-foreground">{pf.pergunta}</div>
-                            <div className="text-muted-foreground">Resposta: {pf.resposta}</div>
+                          <li key={idx} className="border-l-2 border-indigo-300 pl-3 py-0.5">
+                            <div className="text-foreground font-medium leading-snug">{pf.pergunta}</div>
+                            <div className="mt-0.5">
+                              <span className="font-semibold text-foreground/70">Resposta: </span>
+                              <span className="text-muted-foreground">{pf.resposta}</span>
+                            </div>
                           </li>
                         ))}
                       </ul>

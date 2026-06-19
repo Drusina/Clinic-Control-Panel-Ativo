@@ -845,6 +845,7 @@ export const RiskStatus = {
   em_mitigacao: "em_mitigacao",
   mitigado: "mitigado",
   aceito: "aceito",
+  nao_aceito: "nao_aceito",
 } as const;
 
 export type RiskOrigem = (typeof RiskOrigem)[keyof typeof RiskOrigem];
@@ -886,6 +887,8 @@ export interface Risk {
   /** @nullable */
   acoesMitigadoras?: string | null;
   status: RiskStatus;
+  /** @nullable */
+  statusJustificativa?: string | null;
   /** @nullable */
   pilarSlug?: string | null;
   origem: RiskOrigem;
@@ -964,6 +967,21 @@ export interface CreateRiskBody {
   pilarSlug?: string | null;
 }
 
+/**
+ * @nullable
+ */
+export type UpdateRiskBodyStatus =
+  | (typeof UpdateRiskBodyStatus)[keyof typeof UpdateRiskBodyStatus]
+  | null;
+
+export const UpdateRiskBodyStatus = {
+  identificado: "identificado",
+  em_mitigacao: "em_mitigacao",
+  mitigado: "mitigado",
+  aceito: "aceito",
+  nao_aceito: "nao_aceito",
+} as const;
+
 export interface UpdateRiskBody {
   /** @nullable */
   nome?: string | null;
@@ -978,7 +996,9 @@ export interface UpdateRiskBody {
   /** @nullable */
   acoesMitigadoras?: string | null;
   /** @nullable */
-  status?: string | null;
+  status?: UpdateRiskBodyStatus;
+  /** @nullable */
+  statusJustificativa?: string | null;
   /** @nullable */
   pilarSlug?: string | null;
 }
