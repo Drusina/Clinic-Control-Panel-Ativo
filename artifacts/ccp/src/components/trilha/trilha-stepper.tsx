@@ -42,7 +42,11 @@ import {
   Ban,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   CircleSlash,
+  Eye,
+  EyeOff,
   Loader2,
   MoreVertical,
   Pencil,
@@ -123,6 +127,45 @@ interface EditState {
   observacao: string;
 }
 
+const TRILHA_PREFS_KEY = "ccp_trilha_prefs";
+
+interface TrilhaPrefs {
+  collapsed: boolean;
+  showAConcluir: boolean;
+  showConcluidas: boolean;
+}
+
+const DEFAULT_TRILHA_PREFS: TrilhaPrefs = {
+  collapsed: false,
+  showAConcluir: true,
+  showConcluidas: false,
+};
+
+function loadTrilhaPrefs(): TrilhaPrefs {
+  if (typeof window === "undefined") return DEFAULT_TRILHA_PREFS;
+  try {
+    const raw = window.localStorage.getItem(TRILHA_PREFS_KEY);
+    if (!raw) return DEFAULT_TRILHA_PREFS;
+    const parsed = JSON.parse(raw) as Partial<TrilhaPrefs>;
+    return {
+      collapsed:
+        typeof parsed.collapsed === "boolean"
+          ? parsed.collapsed
+          : DEFAULT_TRILHA_PREFS.collapsed,
+      showAConcluir:
+        typeof parsed.showAConcluir === "boolean"
+          ? parsed.showAConcluir
+          : DEFAULT_TRILHA_PREFS.showAConcluir,
+      showConcluidas:
+        typeof parsed.showConcluidas === "boolean"
+          ? parsed.showConcluidas
+          : DEFAULT_TRILHA_PREFS.showConcluidas,
+    };
+  } catch {
+    return DEFAULT_TRILHA_PREFS;
+  }
+}
+
 export function TrilhaStepper({
   clinicId,
   moduleNav,
@@ -135,6 +178,19 @@ export function TrilhaStepper({
   });
   const update = useUpdateTrilhaEtapa();
   const [edit, setEdit] = useState<EditState | null>(null);
+  const [prefs, setPrefs] = useState<TrilhaPrefs>(() => loadTrilhaPrefs());
+
+  function updatePrefs(patch: Partial<TrilhaPrefs>) {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        window.localStorage.setItem(TRILHA_PREFS_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore persistence errors (e.g. storage disabled) */
+      }
+      return next;
+    });
+  }
 
   const pendingKey = update.isPending ? update.variables?.etapaKey : undefined;
 
@@ -180,6 +236,13 @@ export function TrilhaStepper({
     );
   }
 
+  const etapas = trilha?.etapas ?? [];
+  const aConcluirCount = etapas.filter((e) => !isResolved(e.status)).length;
+  const concluidasCount = etapas.length - aConcluirCount;
+  const visibleEtapas = etapas.filter((e) =>
+    isResolved(e.status) ? prefs.showConcluidas : prefs.showAConcluir,
+  );
+
   return (
     <Card className={className} data-testid="trilha-stepper">
       <CardHeader className="pb-4">
@@ -188,36 +251,113 @@ export function TrilhaStepper({
             <MapIcon className="h-4 w-4 text-primary" />
             Trilha de Implementação
           </CardTitle>
-          {trilha && (
-            <span className="text-sm text-muted-foreground" data-testid="trilha-resumo">
-              Etapa{" "}
-              <span className="font-semibold text-foreground">
-                {Math.min(trilha.resumo.etapa, trilha.resumo.total)}
-              </span>{" "}
-              de {trilha.resumo.total} ·{" "}
-              <span className="font-semibold text-primary">
-                {trilha.resumo.progresso}%
+          <div className="flex items-center gap-3">
+            {trilha && (
+              <span
+                className="text-sm text-muted-foreground"
+                data-testid="trilha-resumo"
+              >
+                Etapa{" "}
+                <span className="font-semibold text-foreground">
+                  {Math.min(trilha.resumo.etapa, trilha.resumo.total)}
+                </span>{" "}
+                de {trilha.resumo.total} ·{" "}
+                <span className="font-semibold text-primary">
+                  {trilha.resumo.progresso}%
+                </span>
               </span>
-            </span>
-          )}
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 text-muted-foreground"
+              onClick={() => updatePrefs({ collapsed: !prefs.collapsed })}
+              aria-expanded={!prefs.collapsed}
+              aria-label={
+                prefs.collapsed
+                  ? "Mostrar etapas da trilha"
+                  : "Ocultar etapas da trilha"
+              }
+              title={prefs.collapsed ? "Mostrar etapas" : "Ocultar etapas"}
+              data-testid="trilha-toggle-colapsar"
+            >
+              {prefs.collapsed ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronUp className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
         {trilha && (
           <Progress value={trilha.resumo.progresso} className="mt-2 h-2" />
         )}
+        {trilha && !prefs.collapsed && (
+          <div
+            className="mt-3 flex flex-wrap items-center gap-2"
+            data-testid="trilha-filtros"
+          >
+            <Button
+              type="button"
+              variant={prefs.showAConcluir ? "secondary" : "outline"}
+              size="sm"
+              className="h-7 gap-1.5 rounded-full px-3 text-xs"
+              onClick={() =>
+                updatePrefs({ showAConcluir: !prefs.showAConcluir })
+              }
+              aria-pressed={prefs.showAConcluir}
+              data-testid="trilha-filtro-a-concluir"
+            >
+              {prefs.showAConcluir ? (
+                <Eye className="h-3.5 w-3.5" />
+              ) : (
+                <EyeOff className="h-3.5 w-3.5" />
+              )}
+              A concluir
+              <span className="font-semibold">({aConcluirCount})</span>
+            </Button>
+            <Button
+              type="button"
+              variant={prefs.showConcluidas ? "secondary" : "outline"}
+              size="sm"
+              className="h-7 gap-1.5 rounded-full px-3 text-xs"
+              onClick={() =>
+                updatePrefs({ showConcluidas: !prefs.showConcluidas })
+              }
+              aria-pressed={prefs.showConcluidas}
+              data-testid="trilha-filtro-concluidas"
+            >
+              {prefs.showConcluidas ? (
+                <Eye className="h-3.5 w-3.5" />
+              ) : (
+                <EyeOff className="h-3.5 w-3.5" />
+              )}
+              Concluídas
+              <span className="font-semibold">({concluidasCount})</span>
+            </Button>
+          </div>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className={cn(prefs.collapsed && "hidden")}>
         {isLoading || !trilha ? (
           <div className="flex items-center justify-center py-10 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
+        ) : visibleEtapas.length === 0 ? (
+          <div
+            className="py-8 text-center text-sm text-muted-foreground"
+            data-testid="trilha-vazio"
+          >
+            Nenhuma etapa para exibir. Ative um filtro acima para ver as etapas.
+          </div>
         ) : (
           <ol className="relative flex flex-col">
-            {trilha.etapas.map((etapa, idx) => {
+            {visibleEtapas.map((etapa, idx) => {
               const meta = STATUS_META[etapa.status];
               const resolved = isResolved(etapa.status);
               const target = moduleNav(etapa.modulo ?? null, etapa);
               const isPending = pendingKey === etapa.key;
-              const last = idx === trilha.etapas.length - 1;
+              const last = idx === visibleEtapas.length - 1;
               const responsavel = etapa.responsavel?.trim();
               const dataPrevista = formatDate(etapa.dataPrevista);
               const dataConcluida = formatDate(etapa.dataConcluida);
