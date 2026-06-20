@@ -224,16 +224,32 @@ export default function DiagnosticsTab({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-start gap-2 rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-                    <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium">
-                        Todas as {inProgress.progresso.totalQuestions} perguntas dos 8 pilares foram respondidas.
-                      </p>
-                      <p className="mt-1 text-green-700">
-                        O diagnóstico está pronto para concluir.
-                      </p>
+                  <div className="rounded-md bg-green-50 border border-green-200 p-4 text-sm text-green-800">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium">
+                          Todas as {inProgress.progresso.totalQuestions} perguntas dos 8 pilares foram respondidas.
+                        </p>
+                        <p className="mt-1 text-green-700">
+                          As respostas estão completas, mas o diagnóstico ainda <strong>não foi concluído</strong>.
+                          Clique em <strong>"Concluir Diagnóstico"</strong> para calcular os scores dos pilares e
+                          liberar a geração do mapa de riscos.
+                        </p>
+                      </div>
                     </div>
+                    <Button
+                      className="mt-3 w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => handleComplete(inProgress.id)}
+                      disabled={completeDiagnostic.isPending}
+                    >
+                      {completeDiagnostic.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                      )}
+                      Concluir Diagnóstico
+                    </Button>
                   </div>
                 )}
               </div>

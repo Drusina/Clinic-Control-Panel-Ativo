@@ -131,11 +131,23 @@ async function resolveLatestDiagnostic(clinicId: string): Promise<string> {
 
   const listRes = await fetch(`${BASE}/api/clinics/${clinicId}/diagnostics`, { headers });
   if (!listRes.ok) throw new Error("Não foi possível carregar os diagnósticos.");
-  const list: { id: string; status: string; concluidoEm: string | null; iniciadoEm: string }[] = await listRes.json();
+  const list: {
+    id: string;
+    status: string;
+    concluidoEm: string | null;
+    iniciadoEm: string;
+    progresso?: { completo?: boolean } | null;
+  }[] = await listRes.json();
 
   const concluidos = Array.isArray(list) ? list.filter(d => d.status === "concluido") : [];
   if (concluidos.length === 0) {
-    throw new Error("NO_DIAGNOSTIC");
+    // Distingue "não existe diagnóstico concluído por falta de respostas" de
+    // "existe um 100% respondido, mas ainda não concluído" para dar uma
+    // mensagem mais útil ao usuário.
+    const respondidoNaoConcluido = Array.isArray(list)
+      ? list.some((d) => d.status === "em_andamento" && d.progresso?.completo)
+      : false;
+    throw new Error(respondidoNaoConcluido ? "NEEDS_CONCLUSION" : "NO_DIAGNOSTIC");
   }
   const chosen = [...concluidos].sort((a, b) => {
     const aDate = new Date(a.concluidoEm ?? a.iniciadoEm).getTime();

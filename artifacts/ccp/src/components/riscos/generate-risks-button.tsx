@@ -220,6 +220,13 @@ export function GenerateRisksButton({
           description:
             "Conclua um diagnóstico desta clínica antes de gerar riscos automaticamente.",
         });
+      } else if (err.message === "NEEDS_CONCLUSION") {
+        toast({
+          variant: "destructive",
+          title: "Diagnóstico ainda não concluído",
+          description:
+            "Há um diagnóstico 100% respondido, mas ele ainda não foi concluído. Conclua-o na aba Diagnósticos para gerar riscos.",
+        });
       } else {
         toast({ variant: "destructive", title: "Erro ao gerar riscos", description: err.message });
       }

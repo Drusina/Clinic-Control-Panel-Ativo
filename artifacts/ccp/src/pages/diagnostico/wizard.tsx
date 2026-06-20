@@ -714,7 +714,7 @@ export default function DiagnosticoWizard() {
       <div className="space-y-2">
         <Progress value={progress} className="h-3" />
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>{progress}% concluído</span>
+          <span>{progress}% respondido</span>
           <span>{total - answered} restantes</span>
         </div>
       </div>
