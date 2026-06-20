@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, ClipboardList, BarChart3, GitCompare, CheckSquare, Square } from "lucide-react";
+import { Loader2, Plus, ClipboardList, BarChart3, GitCompare, CheckSquare, Square, Search, ChevronRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
 import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 
@@ -44,6 +45,7 @@ export default function DiagnosticoSelectPage() {
   const [location, navigate] = useLocation();
   const qc = useQueryClient();
   const [selectedClinic, setSelectedClinic] = useState<string>("");
+  const [clinicSearch, setClinicSearch] = useState("");
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelected, setCompareSelected] = useState<string[]>([]);
 
@@ -101,6 +103,14 @@ export default function DiagnosticoSelectPage() {
 
   const activeClinic = clinics?.data.find((c) => c.id === selectedClinic);
 
+  const filteredClinics = (clinics?.data ?? []).filter((c) => {
+    const term = clinicSearch.toLowerCase();
+    return (
+      c.nome.toLowerCase().includes(term) ||
+      (c.fantasia ?? "").toLowerCase().includes(term)
+    );
+  });
+
   const canCompare = (diagnostics?.length ?? 0) >= 2;
 
   function toggleCompareMode() {
@@ -146,31 +156,55 @@ export default function DiagnosticoSelectPage() {
             <CardTitle className="text-base">Selecionar Clínica</CardTitle>
             <CardDescription>Escolha a clínica para iniciar ou continuar um diagnóstico</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {loadingClinics ? (
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Carregando clínicas...
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                {clinics?.data.map((clinic) => (
-                  <button
-                    key={clinic.id}
-                    onClick={() => handleClinicSelect(clinic.id)}
-                    className={`text-left px-3 py-2 rounded-md border transition-colors text-sm ${
-                      selectedClinic === clinic.id
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "hover:bg-accent border-border"
-                    }`}
-                  >
-                    <div className="font-medium">{clinic.fantasia || clinic.nome}</div>
-                    <div className={`text-xs ${selectedClinic === clinic.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                      {clinic.nome}
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={clinicSearch}
+                    onChange={(e) => setClinicSearch(e.target.value)}
+                    placeholder="Buscar clínica..."
+                    className="pl-9"
+                  />
+                </div>
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {filteredClinics.map((clinic) => {
+                    const selected = selectedClinic === clinic.id;
+                    return (
+                      <button
+                        key={clinic.id}
+                        onClick={() => handleClinicSelect(clinic.id)}
+                        className={`w-full text-left p-3 rounded-lg border transition-colors flex items-center justify-between ${
+                          selected
+                            ? "bg-primary/5 border-primary"
+                            : "hover:bg-muted/50 border-border"
+                        }`}
+                      >
+                        <div>
+                          <div className="font-medium text-sm">{clinic.fantasia || clinic.nome}</div>
+                          <div className="text-xs text-muted-foreground">{clinic.nome}</div>
+                        </div>
+                        {selected ? (
+                          <CheckSquare className="h-4 w-4 text-primary shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                  {filteredClinics.length === 0 && (
+                    <p className="text-center text-muted-foreground py-6 text-sm">
+                      Nenhuma clínica encontrada.
+                    </p>
+                  )}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

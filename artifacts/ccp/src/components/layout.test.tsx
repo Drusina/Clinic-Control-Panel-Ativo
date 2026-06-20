@@ -38,10 +38,6 @@ vi.mock("@/hooks/use-auth", () => ({
   setActiveClinicId: vi.fn(),
 }));
 
-vi.mock("@/components/notification-preferences-modal", () => ({
-  NotificationPreferencesModal: () => null,
-}));
-
 import { AppLayout } from "./layout";
 
 const CLINICS = [

@@ -4,17 +4,18 @@ import {
   Bell,
   Settings,
   LogOut,
-  ChevronDown,
   Building2,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { NotificationPreferencesModal } from "@/components/notification-preferences-modal";
 import { ClinicLogo } from "@/components/clinic-logo";
+import { GlobalClinicSwitcher } from "@/components/global-clinic-switcher";
+import { rerouteForClinic } from "@/lib/clinic-routing";
 import {
   useMyClinics,
   useLogout,
   getActiveClinicId,
+  setActiveClinicId,
 } from "@/hooks/use-auth";
 
 function resolveActiveClinicId(
@@ -47,7 +48,6 @@ function resolveActiveClinicId(
  */
 export function PortalLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
-  const [prefsOpen, setPrefsOpen] = useState(false);
 
   const { data: myClinicsData } = useMyClinics();
   const logout = useLogout();
@@ -86,25 +86,31 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
 
           {myClinics.length > 0 &&
             (hasMultipleClinics ? (
-              <Button
-                variant="ghost"
-                className="h-9 min-w-0 gap-2 px-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                onClick={() => navigate("/me/clinicas")}
-                data-testid="portal-trocar-clinica"
-                title="Trocar clínica"
-              >
-                <ClinicLogo
-                  clinicId={activeClinic?.id ?? ""}
-                  logoUrl={activeClinic?.logoUrl}
-                  name={clinicLabel}
-                  className="h-5 w-5 shrink-0 rounded"
-                  fallback={<Building2 className="h-4 w-4 shrink-0 text-primary" />}
-                />
-                <span className="truncate text-sm font-medium">
-                  {clinicLabel}
-                </span>
-                <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
-              </Button>
+              <GlobalClinicSwitcher
+                clinics={myClinics}
+                activeClinicId={activeClinicId}
+                variant="header"
+                triggerTestId="portal-trocar-clinica"
+                leading={
+                  <ClinicLogo
+                    clinicId={activeClinic?.id ?? ""}
+                    logoUrl={activeClinic?.logoUrl}
+                    name={clinicLabel}
+                    className="h-5 w-5 shrink-0 rounded"
+                    fallback={
+                      <Building2 className="h-4 w-4 shrink-0 text-primary" />
+                    }
+                  />
+                }
+                manageLabel="Ver todas as clínicas"
+                onManage={() => navigate("/me/clinicas")}
+                onPick={(id) => {
+                  setActiveClinicId(id);
+                  navigate(
+                    rerouteForClinic(location, id) ?? `/portal/clinica/${id}`,
+                  );
+                }}
+              />
             ) : (
               <div
                 className="flex min-w-0 items-center gap-2 px-2"
@@ -138,17 +144,18 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
               <span className="sr-only">Notificações</span>
             </Button>
           </Link>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            onClick={() => setPrefsOpen(true)}
-            title="Preferências"
-            data-testid="portal-preferencias"
-          >
-            <Settings className="h-4 w-4" />
-            <span className="sr-only">Preferências</span>
-          </Button>
+          <Link href="/configuracoes">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              title="Configurações"
+              data-testid="portal-preferencias"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="sr-only">Configurações</span>
+            </Button>
+          </Link>
 
           <div className="mx-1 h-6 w-px bg-sidebar-border" />
 
@@ -170,8 +177,6 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
       <main className="flex-1">
         <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</div>
       </main>
-
-      <NotificationPreferencesModal open={prefsOpen} onOpenChange={setPrefsOpen} />
     </div>
   );
 }

@@ -18,22 +18,13 @@ import {
   Wand2,
   Plug,
   LogOut,
-  Check,
-  ChevronsUpDown,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { NotificationPreferencesModal } from "@/components/notification-preferences-modal";
+import { GlobalClinicSwitcher } from "@/components/global-clinic-switcher";
+import { rerouteForClinic } from "@/lib/clinic-routing";
 import {
   useCurrentRole,
   useMyClinics,
@@ -80,7 +71,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [complementarOpen, setComplementarOpen] = useState(
     location.startsWith("/processos") || location.startsWith("/evidencias") || location.startsWith("/documentos") || location.startsWith("/relatorios")
   );
-  const [prefsOpen, setPrefsOpen] = useState(false);
 
   const { data: user } = useCurrentRole();
   const { data: myClinicsData } = useMyClinics();
@@ -138,50 +128,29 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // these here only ever leaked the modules onto the /me/clinicas chooser.
   const showOperationalSections = isSuperAdmin;
 
+  // Global, persistent clinic switcher. Visible to super_admin (jump between
+  // any clinic, staying in the same module) and to a 2+ gestor. Picking a
+  // clinic is always explicit, so the clinic-first isolation invariant holds.
   const ClinicSwitcher = () => {
-    if (!isTeamMember) return null;
-    if (myClinics.length < 2) return null;
+    const show = isSuperAdmin ? myClinics.length >= 1 : myClinics.length >= 2;
+    if (!show) return null;
     return (
       <div className="px-4 pb-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              className="w-full justify-between text-left font-normal"
-              data-testid="clinic-switcher-trigger"
-            >
-              <span className="flex items-center gap-2 min-w-0">
-                <Building2 className="h-4 w-4 shrink-0 text-primary" />
-                <span className="truncate">
-                  {activeClinic?.fantasia || activeClinic?.nome || "Selecionar clínica"}
-                </span>
-              </span>
-              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuLabel>Trocar de clínica</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {myClinics.map((c) => (
-              <DropdownMenuItem
-                key={c.id}
-                onSelect={() => {
-                  setActiveClinicId(c.id);
-                  navigate(`/admin/clinicas/${c.id}`);
-                }}
-                data-testid={`clinic-switcher-item-${c.id}`}
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    activeClinicId === c.id ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                <span className="truncate">{c.fantasia || c.nome}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <GlobalClinicSwitcher
+          clinics={myClinics}
+          activeClinicId={activeClinicId}
+          variant="sidebar"
+          triggerTestId="clinic-switcher-trigger"
+          onPick={(id) => {
+            setActiveClinicId(id);
+            navigate(
+              rerouteForClinic(location, id) ??
+                (isSuperAdmin
+                  ? `/admin/clinicas/${id}`
+                  : `/portal/clinica/${id}`),
+            );
+          }}
+        />
       </div>
     );
   };
@@ -301,14 +270,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </>
         )}
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 text-sidebar-foreground/70"
-          onClick={() => setPrefsOpen(true)}
-        >
-          <Settings className="h-4 w-4" />
-          Configurações
-        </Button>
+        <Link href="/configuracoes">
+          <Button
+            variant={location.startsWith("/configuracoes") ? "secondary" : "ghost"}
+            aria-current={location.startsWith("/configuracoes") ? "page" : undefined}
+            className={`w-full justify-start gap-3 ${location.startsWith("/configuracoes") ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"}`}
+          >
+            <Settings className="h-4 w-4" />
+            Configurações
+          </Button>
+        </Link>
         {(isSuperAdmin || isTeamMember) && (
           <Button
             variant="ghost"
@@ -368,8 +339,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
-
-      <NotificationPreferencesModal open={prefsOpen} onOpenChange={setPrefsOpen} />
     </div>
   );
 }

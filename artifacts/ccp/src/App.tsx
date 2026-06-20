@@ -44,6 +44,7 @@ import ResponderSaiuPage from "@/pages/responder/saiu";
 import ClinicDocumentsPage from "@/pages/clinic-documents/index";
 import AssinarPage from "@/pages/assinar/index";
 import MeClinicasPage from "@/pages/me/clinicas";
+import ConfiguracoesPage from "@/pages/configuracoes";
 import PainelClinica from "@/pages/portal/painel-clinica";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Loader2 } from "lucide-react";
@@ -196,6 +197,17 @@ export function Router() {
         {() => (
           <AppLayout>
             <MeClinicasPage />
+          </AppLayout>
+        )}
+      </Route>
+
+      {/* Shared settings (notification prefs + account) — both roles. Not
+          wrapped in TeamMemberToPortal so a gestor reaches it from the portal
+          gear, and not SuperAdminGuard so it isn't admin-only. */}
+      <Route path="/configuracoes">
+        {() => (
+          <AppLayout>
+            <ConfiguracoesPage />
           </AppLayout>
         )}
       </Route>

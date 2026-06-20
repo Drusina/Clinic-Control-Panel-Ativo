@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { 
   useListTeam, 
   getListTeamQueryKey, 
@@ -7,9 +7,9 @@ import {
   useDeleteTeamMember 
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, MoreHorizontal, User, Mail, Phone, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Send, Search } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, User, Mail, Phone, AlertCircle, CheckCircle2, Send, Search } from "lucide-react";
 import { Table, TableBody, TableCell, TableHeader, TableRow, TableHead } from "@/components/ui/table";
-import { ViewToggle, useViewMode } from "@/components/view-toggle";
+import { useViewMode } from "@/components/view-toggle";
 import { SortableTh } from "@/components/sortable-th";
 import { useTableSortFilter } from "@/hooks/use-table-sort-filter";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,6 +40,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { TeamMember } from "@workspace/api-client-react";
+import {
+  useCadastroPlanilha,
+  CadastroToolbar,
+  ImportPlanilhaDialog,
+} from "@/components/cadastro-list";
+import { EmptyState } from "@/components/empty-state";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -71,13 +77,6 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
-
-interface ImportSummary {
-  created: number;
-  updated: number;
-  skipped: number;
-  errors: { row: number; field?: string; message: string }[];
-}
 
 type BulkInviteStatus =
   | "sent"
@@ -113,14 +112,6 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkInviteOpen, setIsBulkInviteOpen] = useState(false);
   const [bulkInviting, setBulkInviting] = useState(false);
@@ -241,65 +232,6 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
     }
   };
 
-  const exportTeam = async () => {
-    setExporting(true);
-    try {
-      const token = getStoredToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${BASE}/api/clinics/${clinicId}/team/export`, { headers });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error ?? res.statusText);
-      }
-      const blob = await res.blob();
-      const cd = res.headers.get("Content-Disposition") || "";
-      const match = cd.match(/filename="?([^";]+)"?/i);
-      const filename = match?.[1] || "Quadro_Funcional.xlsx";
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast({ title: "Planilha exportada", description: `${(team ?? []).length} membro(s) incluídos.` });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Falha ao exportar planilha";
-      toast({ variant: "destructive", title: "Erro ao exportar", description: message });
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const downloadTemplate = async () => {
-    setDownloading(true);
-    try {
-      const token = getStoredToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${BASE}/api/clinics/${clinicId}/team/template`, { headers });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error ?? res.statusText);
-      }
-      const blob = await res.blob();
-      const cd = res.headers.get("Content-Disposition") || "";
-      const match = cd.match(/filename="?([^";]+)"?/i);
-      const filename = match?.[1] || "Quadro_Funcional.xlsx";
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Falha ao baixar modelo";
-      toast({ variant: "destructive", title: "Erro ao baixar modelo", description: message });
-    } finally {
-      setDownloading(false);
-    }
-  };
-
   const inviteCandidates = (team ?? []).filter(
     (m) => !!m.email && EMAIL_RE.test(m.email) && !(m.temAcessoPlataforma && m.lastAccessAt),
   );
@@ -307,6 +239,15 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
 
   const teamCount = team?.length ?? 0;
   const { mode: viewMode, setMode: setViewMode } = useViewMode("ccp_view_equipe", teamCount);
+
+  const planilha = useCadastroPlanilha({
+    clinicId,
+    resourcePath: "team",
+    defaultFilename: "Quadro_Funcional.xlsx",
+    invalidateKey: getListTeamQueryKey(clinicId),
+    exportToastDescription: (n) => `${n} membro(s) incluídos.`,
+    itemCount: teamCount,
+  });
 
   type TeamSortKey = "nome" | "funcao" | "email" | "whatsapp" | "temAcessoPlataforma" | "vinculo";
   const tableData = useTableSortFilter<NonNullable<typeof team>[number], TeamSortKey>(team ?? [], {
@@ -400,49 +341,6 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
     }
   };
 
-  const openImport = () => {
-    setImportSummary(null);
-    setImportError(null);
-    setSelectedFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    setIsImportOpen(true);
-  };
-
-  const submitImport = async () => {
-    if (!selectedFile) return;
-    setImporting(true);
-    setImportError(null);
-    setImportSummary(null);
-    try {
-      const token = getStoredToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      const res = await fetch(`${BASE}/api/clinics/${clinicId}/team/import`, {
-        method: "POST",
-        headers,
-        body: formData,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error ?? `HTTP ${res.status}`);
-      }
-      setImportSummary(data as ImportSummary);
-      queryClient.invalidateQueries({ queryKey: getListTeamQueryKey(clinicId) });
-      const summary = data as ImportSummary;
-      toast({
-        title: "Importação concluída",
-        description: `${summary.created} criados, ${summary.updated} atualizados, ${summary.skipped} ignorados`,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Falha ao importar";
-      setImportError(message);
-    } finally {
-      setImporting(false);
-    }
-  };
-
   if (isLoading) {
     return <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" /></div>;
   }
@@ -454,28 +352,19 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
           <h3 className="text-lg font-medium">Equipe da Clínica</h3>
           <p className="text-sm text-muted-foreground">Gerencie os colaboradores e seus acessos.</p>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
-          <ViewToggle mode={viewMode} onChange={setViewMode} className="mr-1" />
-          <Button variant="outline" onClick={downloadTemplate} disabled={downloading}>
-            {downloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-            Baixar modelo
-          </Button>
-          <Button
-            variant="outline"
-            onClick={exportTeam}
-            disabled={exporting || !team || team.length === 0}
-            title={!team || team.length === 0 ? "Nenhum membro para exportar" : undefined}
-          >
-            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileSpreadsheet className="mr-2 h-4 w-4" />}
-            Exportar planilha
-          </Button>
-          <Button variant="outline" onClick={openImport}>
-            <Upload className="mr-2 h-4 w-4" /> Importar planilha
-          </Button>
-          <Button onClick={() => openDialog()}>
-            <Plus className="mr-2 h-4 w-4" /> Adicionar Membro
-          </Button>
-        </div>
+        <CadastroToolbar
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onBaixarModelo={() => planilha.downloadXlsx("template")}
+          downloading={planilha.downloading}
+          onExportar={() => planilha.downloadXlsx("export")}
+          exporting={planilha.exporting}
+          exportDisabled={!team || team.length === 0}
+          exportDisabledTitle="Nenhum membro para exportar"
+          onImportar={planilha.openImport}
+          addLabel="Adicionar Membro"
+          onAdicionar={() => openDialog()}
+        />
       </div>
 
       {inviteCandidateIds.length > 0 && (
@@ -692,9 +581,17 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
             );
           })
         ) : (
-          <div className="col-span-full py-12 text-center border rounded-lg border-dashed text-muted-foreground">
-            Nenhum membro cadastrado.
-          </div>
+          <EmptyState
+            className="col-span-full"
+            icon={User}
+            title="Nenhum membro cadastrado"
+            description="Adicione colaboradores manualmente ou importe a planilha modelo para começar."
+            action={
+              <Button onClick={() => openDialog()}>
+                <Plus className="mr-2 h-4 w-4" /> Adicionar Membro
+              </Button>
+            }
+          />
         )}
       </div>
       )}
@@ -871,95 +768,19 @@ export default function TeamTab({ clinicId }: { clinicId: string }) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isImportOpen} onOpenChange={(open) => { if (!importing) setIsImportOpen(open); }}>
-        <DialogContent className="sm:max-w-[560px]">
-          <DialogHeader>
-            <DialogTitle>Importar planilha — Quadro Funcional</DialogTitle>
-            <DialogDescription>
-              Envie a planilha modelo preenchida. Membros existentes serão atualizados (busca por CPF, depois e-mail).
-              Limite: 2MB. Sem disparo automático de convite.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 rounded-md border p-3">
-              <FileSpreadsheet className="h-5 w-5 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0">
-                {selectedFile ? (
-                  <>
-                    <p className="text-sm font-medium truncate">{selectedFile.name}</p>
-                    <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Nenhum arquivo selecionado</p>
-                )}
-              </div>
-              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
-                Selecionar
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  setSelectedFile(f);
-                  setImportSummary(null);
-                  setImportError(null);
-                }}
-              />
-            </div>
-
-            {importError && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 flex gap-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{importError}</span>
-              </div>
-            )}
-
-            {importSummary && (
-              <div className="space-y-2">
-                <div className="rounded-md border bg-muted/30 p-3 flex gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-green-600" />
-                  <div className="flex-1">
-                    <p className="font-medium">Importação concluída</p>
-                    <p className="text-muted-foreground">
-                      {importSummary.created} criados · {importSummary.updated} atualizados · {importSummary.skipped} ignorados
-                    </p>
-                  </div>
-                </div>
-                {importSummary.errors.length > 0 && (
-                  <div className="rounded-md border p-3 max-h-48 overflow-y-auto">
-                    <p className="text-sm font-medium mb-2">Linhas ignoradas:</p>
-                    <ul className="text-xs space-y-1 text-muted-foreground">
-                      {importSummary.errors.slice(0, 50).map((err, i) => (
-                        <li key={i}>
-                          <span className="font-mono">L{err.row}</span>
-                          {err.field ? ` (${err.field})` : ""}: {err.message}
-                        </li>
-                      ))}
-                      {importSummary.errors.length > 50 && (
-                        <li className="italic">…e mais {importSummary.errors.length - 50} linhas</li>
-                      )}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsImportOpen(false)} disabled={importing}>
-              {importSummary ? "Fechar" : "Cancelar"}
-            </Button>
-            <Button onClick={submitImport} disabled={!selectedFile || importing}>
-              {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {importSummary ? "Importar novamente" : "Importar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ImportPlanilhaDialog
+        open={planilha.isImportOpen}
+        onOpenChange={planilha.setIsImportOpen}
+        title="Importar planilha — Quadro Funcional"
+        description="Envie a planilha modelo preenchida. Membros existentes serão atualizados (busca por CPF, depois e-mail). Limite: 2MB. Sem disparo automático de convite."
+        importing={planilha.importing}
+        selectedFile={planilha.selectedFile}
+        onFileChange={planilha.handleFilePicked}
+        fileInputRef={planilha.fileInputRef}
+        importError={planilha.importError}
+        importSummary={planilha.importSummary}
+        onSubmit={planilha.submitImport}
+      />
 
       <Dialog open={isBulkInviteOpen} onOpenChange={(open) => { if (!bulkInviting) setIsBulkInviteOpen(open); }}>
         <DialogContent className="sm:max-w-[560px]">

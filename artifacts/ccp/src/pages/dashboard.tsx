@@ -215,7 +215,7 @@ export default function Dashboard() {
                     cursor={{ fill: "var(--muted)" }}
                     contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)" }}
                   />
-                  <Bar dataKey="count" fill="currentColor" radius={[4, 4, 0, 0]} className="fill-primary" />
+                  <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (

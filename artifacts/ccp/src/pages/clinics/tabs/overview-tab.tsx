@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { Clinic } from "@workspace/api-client-react";
+import { TRILHA_TOTAL } from "@workspace/trilha";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -181,7 +182,7 @@ export default function OverviewTab({ clinic }: { clinic: Clinic }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex justify-between text-sm">
-            <span className="font-medium">Etapa Atual: {clinic.etapa}/10</span>
+            <span className="font-medium">Etapa Atual: {clinic.etapa}/{TRILHA_TOTAL}</span>
             <span>{clinic.progresso}% Concluído</span>
           </div>
           <Progress value={clinic.progresso} className="h-4" />

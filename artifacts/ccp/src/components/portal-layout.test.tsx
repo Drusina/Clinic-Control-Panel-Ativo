@@ -43,10 +43,6 @@ vi.mock("@/hooks/use-auth", async () => {
   };
 });
 
-vi.mock("@/components/notification-preferences-modal", () => ({
-  NotificationPreferencesModal: () => null,
-}));
-
 import { PortalLayout } from "./portal-layout";
 import { getActiveClinicId, setActiveClinicId } from "@/hooks/use-auth";
 

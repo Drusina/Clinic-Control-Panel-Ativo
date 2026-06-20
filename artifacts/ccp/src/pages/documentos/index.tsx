@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
 import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+import { ClinicSelectorList } from "@/components/clinic-selector-list";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -241,6 +242,13 @@ export default function DocumentosPage({ embedded = false }: { embedded?: boolea
         </div>
       )}
 
+      <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
+        <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Documentos</span> é o repositório oficial da clínica — contratos, certidões e documentos constitutivos, organizados por categoria e validade. Para comprovações que sustentam as respostas do diagnóstico por pilar, use <span className="font-medium text-foreground">Evidências</span>.
+        </p>
+      </div>
+
       <div className="flex gap-3 flex-wrap items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -418,69 +426,12 @@ export default function DocumentosPage({ embedded = false }: { embedded?: boolea
 }
 
 function ClinicSelector() {
-  const [, navigate] = useLocation();
-  const [search, setSearch] = useState("");
-  const { data: user } = useCurrentRole();
-  const isTeamMember = user?.role === "team_member";
-  const isSuperAdmin = user?.role === "super_admin";
-  const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
-
-  // Clinic-first: a manager must never see a list of their other clinics.
-  // Resolve to the active clinic (or their only one) and enter it directly;
-  // with 2+ clinics and no active selection, send them to the chooser.
-  useEffect(() => {
-    if (!isTeamMember || isLoading) return;
-    const active = getActiveClinicId();
-    const match =
-      (active && clinics.find((c) => c.id === active)) ||
-      (clinics.length === 1 ? clinics[0] : undefined);
-    navigate(match ? `/portal/documentos/${match.id}` : "/me/clinicas", {
-      replace: true,
-    });
-  }, [isTeamMember, isLoading, clinics, navigate]);
-
-  // Only a confirmed super_admin may render the clinic list. While the role is
-  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
-  // instead of flashing other clinics; the effect above scopes managers to
-  // their active clinic (or the chooser).
-  if (!isSuperAdmin) {
-    return (
-      <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-    );
-  }
-
-  const filtered = clinics.filter(c =>
-    c.nome.toLowerCase().includes(search.toLowerCase()) ||
-    (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Documentos</h1>
-        <p className="text-sm text-muted-foreground">Selecione uma clínica para gerenciar os documentos.</p>
-      </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar clínica..." className="pl-9" />
-      </div>
-      {isLoading ? (
-        <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map(c => (
-            <button key={c.id} onClick={() => navigate(`/documentos/${c.id}`)}
-              className="w-full text-left p-4 border rounded-lg hover:bg-muted/50 transition-colors flex items-center justify-between">
-              <div>
-                <div className="font-medium">{c.nome}</div>
-                <div className="text-sm text-muted-foreground">{c.cidade}{c.uf ? `, ${c.uf}` : ""}</div>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </button>
-          ))}
-          {filtered.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhuma clínica encontrada.</p>}
-        </div>
-      )}
-    </div>
+    <ClinicSelectorList
+      title="Documentos"
+      description="Selecione uma clínica para gerenciar os documentos."
+      hrefForClinic={(id) => `/documentos/${id}`}
+      portalModule="documentos"
+    />
   );
 }

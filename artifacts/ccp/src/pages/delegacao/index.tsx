@@ -4,6 +4,7 @@ import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
 import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
+import { ClinicSelectorList } from "@/components/clinic-selector-list";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -318,15 +319,20 @@ function InviteStatusBadge({
 
 // ─── Status visuals ─────────────────────────────────────────────────────────
 
+// Per-pillar delegation status uses the same semantic color language as the
+// INVITE_BADGE above (muted=not started, amber=waiting, blue=in progress,
+// green=done, red=overdue) so each state is visually distinct — previously
+// "andamento" and "concluido" both rendered as the primary variant and were
+// indistinguishable at a glance.
 const STATUS_CONFIG: Record<
   string,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }
+  { label: string; className: string; icon: React.ReactNode }
 > = {
-  nao_delegado: { label: "Não delegado", variant: "outline", icon: <UserX className="h-3 w-3" /> },
-  pendente: { label: "Pendente", variant: "secondary", icon: <Clock className="h-3 w-3" /> },
-  andamento: { label: "Em andamento", variant: "default", icon: <RefreshCw className="h-3 w-3" /> },
-  concluido: { label: "Concluído", variant: "default", icon: <CheckCircle2 className="h-3 w-3" /> },
-  atrasado: { label: "Atrasado", variant: "destructive", icon: <AlertTriangle className="h-3 w-3" /> },
+  nao_delegado: { label: "Não delegado", className: "bg-muted text-muted-foreground border-transparent", icon: <UserX className="h-3 w-3" /> },
+  pendente: { label: "Pendente", className: "bg-amber-100 text-amber-900 border-amber-300", icon: <Clock className="h-3 w-3" /> },
+  andamento: { label: "Em andamento", className: "bg-blue-100 text-blue-800 border-blue-300", icon: <RefreshCw className="h-3 w-3" /> },
+  concluido: { label: "Concluído", className: "bg-green-100 text-green-800 border-green-300", icon: <CheckCircle2 className="h-3 w-3" /> },
+  atrasado: { label: "Atrasado", className: "bg-red-100 text-red-800 border-red-300", icon: <AlertTriangle className="h-3 w-3" /> },
 };
 
 // ─── Data hooks ─────────────────────────────────────────────────────────────
@@ -968,7 +974,7 @@ function PilarRow(props: PilarRowProps) {
         </td>
         <td className="px-4 py-3 hidden md:table-cell">
           <div className="flex flex-col gap-1 items-start">
-            <Badge variant={statusCfg.variant} className="gap-1 text-xs">
+            <Badge variant="outline" className={`gap-1 text-xs ${statusCfg.className}`}>
               {statusCfg.icon}
               {statusCfg.label}
             </Badge>
@@ -1166,7 +1172,7 @@ function ExpandedPilar({
                 <span className="text-muted-foreground">
                   {ids.length} pergunta{ids.length === 1 ? "" : "s"}
                 </span>
-                <Badge variant={STATUS_CONFIG[d.status]?.variant ?? "outline"} className="text-[10px]">
+                <Badge variant="outline" className={`text-[10px] ${STATUS_CONFIG[d.status]?.className ?? ""}`}>
                   {STATUS_CONFIG[d.status]?.label ?? d.status}
                 </Badge>
                 <button
@@ -1200,7 +1206,7 @@ function ExpandedPilar({
                     : `Q${d.questaoInicio}–Q${d.questaoFim}`}
                 </span>
               )}
-              <Badge variant={STATUS_CONFIG[d.status]?.variant ?? "outline"} className="text-[10px]">
+              <Badge variant="outline" className={`text-[10px] ${STATUS_CONFIG[d.status]?.className ?? ""}`}>
                 {STATUS_CONFIG[d.status]?.label ?? d.status}
               </Badge>
               {d.responsavelEmail && (
@@ -1997,88 +2003,13 @@ function PerguntaDialog({
 // ─── Clinic selector (no clinicId in URL) ───────────────────────────────────
 
 function ClinicSelector() {
-  const [, navigate] = useLocation();
-  const [search, setSearch] = useState("");
-  const { data: user } = useCurrentRole();
-  const isTeamMember = user?.role === "team_member";
-  const isSuperAdmin = user?.role === "super_admin";
-  const { clinics, isLoading } = useClinicsForCurrentUser({ pageSize: 100 });
-
-  // Clinic-first: a manager must never see a list of their other clinics.
-  // Resolve to the active clinic (or their only one) and enter it directly;
-  // with 2+ clinics and no active selection, send them to the chooser.
-  useEffect(() => {
-    if (!isTeamMember || isLoading) return;
-    const active = getActiveClinicId();
-    const match =
-      (active && clinics.find((c) => c.id === active)) ||
-      (clinics.length === 1 ? clinics[0] : undefined);
-    navigate(match ? `/portal/delegacao/${match.id}` : "/me/clinicas", {
-      replace: true,
-    });
-  }, [isTeamMember, isLoading, clinics, navigate]);
-
-  // Only a confirmed super_admin may render the clinic list. While the role is
-  // still loading (user undefined) `isSuperAdmin` is false, so we show a spinner
-  // instead of flashing other clinics; the effect above scopes managers to
-  // their active clinic (or the chooser).
-  if (!isSuperAdmin) {
-    return (
-      <div className="py-12 flex justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  const filtered = clinics.filter(
-    (c) =>
-      c.nome.toLowerCase().includes(search.toLowerCase()) ||
-      (c.cidade ?? "").toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Delegação do Diagnóstico</h1>
-        <p className="text-sm text-muted-foreground">Selecione uma clínica para começar.</p>
-      </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar clínica..."
-          className="pl-9"
-        />
-      </div>
-      {isLoading ? (
-        <div className="py-12 flex justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => navigate(`/delegacao/${c.id}`)}
-              className="w-full text-left p-4 border rounded-lg hover:bg-muted/50 transition-colors flex items-center justify-between"
-            >
-              <div>
-                <div className="font-medium">{c.nome}</div>
-                <div className="text-sm text-muted-foreground">
-                  {c.cidade}
-                  {c.uf ? `, ${c.uf}` : ""}
-                </div>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <p className="text-center text-muted-foreground py-8">Nenhuma clínica encontrada.</p>
-          )}
-        </div>
-      )}
-    </div>
+    <ClinicSelectorList
+      title="Delegação do Diagnóstico"
+      description="Selecione uma clínica para começar."
+      hrefForClinic={(id) => `/delegacao/${id}`}
+      portalModule="delegacao"
+    />
   );
 }
 
