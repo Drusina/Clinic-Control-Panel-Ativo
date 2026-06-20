@@ -309,13 +309,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <Settings className="h-4 w-4" />
           Configurações
         </Button>
-        {isTeamMember && (
+        {(isSuperAdmin || isTeamMember) && (
           <Button
             variant="ghost"
             className="w-full justify-start gap-3 text-sidebar-foreground/70"
             onClick={async () => {
               await logout();
-              navigate("/entrar");
+              navigate(isSuperAdmin ? "/admin/login" : "/entrar");
             }}
             data-testid="logout-button"
           >

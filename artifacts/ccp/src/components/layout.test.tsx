@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 
 /**
  * Task #6 — "Seletor de clínicas: só mostrar escolha, sem módulos".
@@ -126,5 +126,61 @@ describe("AppLayout sidebar — team_member never sees modules on the chooser", 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Operacional")).toBeInTheDocument();
     expect(screen.getByText("Complementar")).toBeInTheDocument();
+  });
+});
+
+describe("AppLayout — logout button", () => {
+  beforeEach(() => {
+    mocks.navigateMock.mockClear();
+    mocks.logoutMock.mockClear();
+    mocks.role = undefined;
+    mocks.activeClinicId = null;
+    mocks.clinics = [];
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows 'Sair' for a super_admin and logs out to /admin/login", async () => {
+    mocks.role = { role: "super_admin" };
+    mocks.clinics = CLINICS;
+
+    render(
+      <AppLayout>
+        <div>conteúdo</div>
+      </AppLayout>,
+    );
+
+    const button = screen.getByTestId("logout-button");
+    expect(button).toHaveTextContent("Sair");
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mocks.logoutMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(mocks.navigateMock).toHaveBeenCalledWith("/admin/login"),
+    );
+  });
+
+  it("shows 'Sair' for a team_member and logs out to /entrar", async () => {
+    mocks.role = { role: "team_member" };
+    mocks.clinics = CLINICS;
+
+    render(
+      <AppLayout>
+        <div>conteúdo</div>
+      </AppLayout>,
+    );
+
+    const button = screen.getByTestId("logout-button");
+    expect(button).toHaveTextContent("Sair");
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mocks.logoutMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(mocks.navigateMock).toHaveBeenCalledWith("/entrar"),
+    );
   });
 });
