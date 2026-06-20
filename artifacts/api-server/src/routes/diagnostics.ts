@@ -5,12 +5,19 @@ import {
   ListDiagnosticsResponse,
   CompleteDiagnosticResponse,
 } from "@workspace/api-zod";
-import { recalculateScores } from "../lib/score-calculator";
+import {
+  recalculateScores,
+  computeProgressForDiagnostics,
+  type DiagnosticProgress,
+} from "../lib/score-calculator";
 import { assertClinicAccess, type AuthenticatedRequest as AuthRequest } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-function mapDiagnostic(d: typeof diagnosticsTable.$inferSelect) {
+function mapDiagnostic(
+  d: typeof diagnosticsTable.$inferSelect,
+  progress?: DiagnosticProgress,
+) {
   return {
     id: d.id,
     clinicId: d.clinicId,
@@ -23,6 +30,7 @@ function mapDiagnostic(d: typeof diagnosticsTable.$inferSelect) {
     metasPilares: d.metasPilares as Record<string, number> | null,
     insightsIa: d.insightsIa as Record<string, unknown> | null,
     createdAt: d.createdAt.toISOString(),
+    ...(progress ? { progresso: progress } : {}),
   };
 }
 
@@ -60,7 +68,13 @@ router.get("/clinics/:clinicId/diagnostics", async (req, res): Promise<void> => 
     .where(eq(diagnosticsTable.clinicId, clinicId))
     .orderBy(diagnosticsTable.createdAt);
 
-  res.json(ListDiagnosticsResponse.parse(diagnostics.map(mapDiagnostic)));
+  const progressMap = await computeProgressForDiagnostics(diagnostics.map((d) => d.id));
+
+  res.json(
+    ListDiagnosticsResponse.parse(
+      diagnostics.map((d) => mapDiagnostic(d, progressMap.get(d.id))),
+    ),
+  );
 });
 
 router.post("/clinics/:clinicId/diagnostics", async (req, res): Promise<void> => {
@@ -125,6 +139,19 @@ router.post("/diagnostics/:id/complete", async (req, res): Promise<void> => {
   }
   if (await assertClinicAccess(req, res, existing[0].clinicId)) return;
 
+  // Gate: a diagnostic can only be concluded once every question in the bank
+  // (all 8 pilares) has a response. Reject otherwise so the conclusion always
+  // reflects a fully answered diagnostic, independent of any frontend guard.
+  const progress = (await computeProgressForDiagnostics([id])).get(id);
+  if (!progress || !progress.completo) {
+    res.status(422).json({
+      error: progress
+        ? `O diagnóstico ainda não foi totalmente respondido (${progress.totalAnswered} de ${progress.totalQuestions} perguntas). Responda todas as perguntas dos pilares antes de concluir.`
+        : "Não foi possível verificar o progresso do diagnóstico.",
+    });
+    return;
+  }
+
   await recalculateScores(id);
 
   const [diagnostic] = await db
@@ -138,7 +165,7 @@ router.post("/diagnostics/:id/complete", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(CompleteDiagnosticResponse.parse(mapDiagnostic(diagnostic)));
+  res.json(CompleteDiagnosticResponse.parse(mapDiagnostic(diagnostic, progress)));
 });
 
 router.post("/diagnostics/:id/reopen", async (req, res): Promise<void> => {

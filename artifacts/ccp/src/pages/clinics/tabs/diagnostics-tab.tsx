@@ -14,12 +14,29 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, PlayCircle, CheckCircle, ListChecks, Unlock } from "lucide-react";
-import { Link } from "wouter";
+import { Loader2, Plus, PlayCircle, CheckCircle, ListChecks, Unlock, AlertTriangle } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { useCurrentRole } from "@/hooks/use-auth";
+import { GenerateRisksButton } from "@/components/riscos/generate-risks-button";
+
+const PILAR_LABELS: Record<string, string> = {
+  estrategia: "Estratégia e Governança",
+  financeiro: "Financeiro e Fluxo de Caixa",
+  contabil: "Contabilidade e Fiscal",
+  marketing: "Vendas, Marketing e Captação",
+  operacoes: "Processos Operacionais",
+  pessoas: "Gestão de Pessoas e Cultura",
+  tecnologia: "Tecnologia e Sistemas",
+  compliance: "Compliance e Regulamentação",
+};
+
+function pilarLabel(slug: string): string {
+  return PILAR_LABELS[slug] ?? slug.replace(/_/g, " ");
+}
 
 export default function DiagnosticsTab({
   clinicId,
@@ -33,6 +50,9 @@ export default function DiagnosticsTab({
     ((id: string) => `/delegacao/${clinicId}?diagnostico=${id}`);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+  const { data: currentUser } = useCurrentRole();
+  const isSuperAdmin = currentUser?.role === "super_admin";
   const { data: diagnostics, isLoading } = useListDiagnostics(clinicId, {
     query: { enabled: !!clinicId, queryKey: getListDiagnosticsQueryKey(clinicId) },
   });
@@ -64,8 +84,13 @@ export default function DiagnosticsTab({
           toast({ title: "Diagnóstico concluído", description: "O diagnóstico foi marcado como concluído." });
           queryClient.invalidateQueries({ queryKey: getListDiagnosticsQueryKey(clinicId) });
         },
-        onError: () => {
-          toast({ variant: "destructive", title: "Erro", description: "Falha ao concluir diagnóstico." });
+        onError: (err: unknown) => {
+          const data = (err as { data?: { error?: string } } | null)?.data;
+          toast({
+            variant: "destructive",
+            title: "Erro",
+            description: data?.error ?? "Falha ao concluir diagnóstico.",
+          });
         },
       }
     );
@@ -121,13 +146,70 @@ export default function DiagnosticsTab({
                   Iniciado em {format(new Date(inProgress.iniciadoEm), "dd/MM/yyyy", { locale: ptBR })}
                 </CardDescription>
               </div>
-              <Button size="sm" onClick={() => handleComplete(inProgress.id)} disabled={completeDiagnostic.isPending}>
+              <Button
+                size="sm"
+                onClick={() => handleComplete(inProgress.id)}
+                disabled={completeDiagnostic.isPending || !inProgress.progresso?.completo}
+                title={
+                  inProgress.progresso?.completo
+                    ? undefined
+                    : "Conclua todas as perguntas dos 8 pilares para liberar a conclusão."
+                }
+              >
                 {completeDiagnostic.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                 Concluir Diagnóstico
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {inProgress.progresso && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">
+                    {inProgress.progresso.totalAnswered} de {inProgress.progresso.totalQuestions} perguntas respondidas
+                  </span>
+                  <span className="text-muted-foreground">
+                    {inProgress.progresso.totalQuestions > 0
+                      ? Math.round(
+                          (inProgress.progresso.totalAnswered / inProgress.progresso.totalQuestions) * 100,
+                        )
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <Progress
+                  value={
+                    inProgress.progresso.totalQuestions > 0
+                      ? (inProgress.progresso.totalAnswered / inProgress.progresso.totalQuestions) * 100
+                      : 0
+                  }
+                  className="h-2"
+                />
+                {!inProgress.progresso.completo && (
+                  <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium">
+                        Faltam {inProgress.progresso.totalQuestions - inProgress.progresso.totalAnswered} de{" "}
+                        {inProgress.progresso.totalQuestions} perguntas para concluir.
+                      </p>
+                      {(() => {
+                        const incompletos = inProgress.progresso.pilares.filter((p) => !p.completo);
+                        if (incompletos.length === 0) return null;
+                        return (
+                          <p className="mt-1 text-amber-700">
+                            Pilares pendentes:{" "}
+                            {incompletos
+                              .map((p) => `${pilarLabel(p.slug)} (${p.answeredCount}/${p.questionCount})`)
+                              .join(", ")}
+                          </p>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="bg-muted/50 p-4 rounded-md text-sm text-muted-foreground text-center space-y-3">
               <p>Responda às perguntas e delegue pilares, módulos ou perguntas individuais na tela de Delegação.</p>
               <Link href={delegacaoHref(inProgress.id)}>
@@ -180,6 +262,16 @@ export default function DiagnosticsTab({
                     Concluído em: {diag.concluidoEm ? format(new Date(diag.concluidoEm), "dd/MM/yyyy", { locale: ptBR }) : "-"}
                   </div>
                   <div className="flex items-center gap-1">
+                    {diag.status === "concluido" && isSuperAdmin && (
+                      <GenerateRisksButton
+                        clinicId={clinicId}
+                        diagnosticId={diag.id}
+                        label="Gerar mapa de riscos"
+                        size="sm"
+                        className="text-xs"
+                        onCommitted={() => navigate(`/riscos/${clinicId}`)}
+                      />
+                    )}
                     {diag.status === "concluido" && !inProgress && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

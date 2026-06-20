@@ -789,6 +789,24 @@ export const ListDiagnosticsResponseItem = zod.object({
   scoreGlobal: zod.number().nullish(),
   scoresPilares: zod.object({}).passthrough().nullish(),
   createdAt: zod.string(),
+  progresso: zod
+    .object({
+      totalQuestions: zod.number(),
+      totalAnswered: zod.number(),
+      completo: zod.boolean(),
+      pilares: zod.array(
+        zod.object({
+          slug: zod.string(),
+          questionCount: zod.number(),
+          answeredCount: zod.number(),
+          completo: zod.boolean(),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Per-pillar and overall answer progress for a diagnostic. `completo` is true once every question in the bank has a response. Optional on the Diagnostic payload — only computed by the diagnostics list endpoint.\n",
+    ),
 });
 export const ListDiagnosticsResponse = zod.array(ListDiagnosticsResponseItem);
 
@@ -816,6 +834,24 @@ export const GetDiagnosticResponse = zod.object({
   scoreGlobal: zod.number().nullish(),
   scoresPilares: zod.object({}).passthrough().nullish(),
   createdAt: zod.string(),
+  progresso: zod
+    .object({
+      totalQuestions: zod.number(),
+      totalAnswered: zod.number(),
+      completo: zod.boolean(),
+      pilares: zod.array(
+        zod.object({
+          slug: zod.string(),
+          questionCount: zod.number(),
+          answeredCount: zod.number(),
+          completo: zod.boolean(),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Per-pillar and overall answer progress for a diagnostic. `completo` is true once every question in the bank has a response. Optional on the Diagnostic payload — only computed by the diagnostics list endpoint.\n",
+    ),
 });
 
 /**
@@ -835,6 +871,24 @@ export const CompleteDiagnosticResponse = zod.object({
   scoreGlobal: zod.number().nullish(),
   scoresPilares: zod.object({}).passthrough().nullish(),
   createdAt: zod.string(),
+  progresso: zod
+    .object({
+      totalQuestions: zod.number(),
+      totalAnswered: zod.number(),
+      completo: zod.boolean(),
+      pilares: zod.array(
+        zod.object({
+          slug: zod.string(),
+          questionCount: zod.number(),
+          answeredCount: zod.number(),
+          completo: zod.boolean(),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Per-pillar and overall answer progress for a diagnostic. `completo` is true once every question in the bank has a response. Optional on the Diagnostic payload — only computed by the diagnostics list endpoint.\n",
+    ),
 });
 
 /**
@@ -854,6 +908,24 @@ export const ReopenDiagnosticResponse = zod.object({
   scoreGlobal: zod.number().nullish(),
   scoresPilares: zod.object({}).passthrough().nullish(),
   createdAt: zod.string(),
+  progresso: zod
+    .object({
+      totalQuestions: zod.number(),
+      totalAnswered: zod.number(),
+      completo: zod.boolean(),
+      pilares: zod.array(
+        zod.object({
+          slug: zod.string(),
+          questionCount: zod.number(),
+          answeredCount: zod.number(),
+          completo: zod.boolean(),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Per-pillar and overall answer progress for a diagnostic. `completo` is true once every question in the bank has a response. Optional on the Diagnostic payload — only computed by the diagnostics list endpoint.\n",
+    ),
 });
 
 /**
@@ -873,6 +945,24 @@ export const CalculateDiagnosticScoresResponse = zod.object({
   scoreGlobal: zod.number().nullish(),
   scoresPilares: zod.object({}).passthrough().nullish(),
   createdAt: zod.string(),
+  progresso: zod
+    .object({
+      totalQuestions: zod.number(),
+      totalAnswered: zod.number(),
+      completo: zod.boolean(),
+      pilares: zod.array(
+        zod.object({
+          slug: zod.string(),
+          questionCount: zod.number(),
+          answeredCount: zod.number(),
+          completo: zod.boolean(),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      "Per-pillar and overall answer progress for a diagnostic. `completo` is true once every question in the bank has a response. Optional on the Diagnostic payload — only computed by the diagnostics list endpoint.\n",
+    ),
 });
 
 /**

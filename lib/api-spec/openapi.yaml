@@ -3165,6 +3165,8 @@ components:
           type: ["object", "null"]
         createdAt:
           type: string
+        progresso:
+          $ref: "#/components/schemas/DiagnosticProgress"
       required:
         - id
         - clinicId
@@ -3172,6 +3174,43 @@ components:
         - status
         - iniciadoEm
         - createdAt
+
+    DiagnosticProgress:
+      type: object
+      description: >
+        Per-pillar and overall answer progress for a diagnostic. `completo` is
+        true once every question in the bank has a response. Optional on the
+        Diagnostic payload — only computed by the diagnostics list endpoint.
+      properties:
+        totalQuestions:
+          type: integer
+        totalAnswered:
+          type: integer
+        completo:
+          type: boolean
+        pilares:
+          type: array
+          items:
+            type: object
+            properties:
+              slug:
+                type: string
+              questionCount:
+                type: integer
+              answeredCount:
+                type: integer
+              completo:
+                type: boolean
+            required:
+              - slug
+              - questionCount
+              - answeredCount
+              - completo
+      required:
+        - totalQuestions
+        - totalAnswered
+        - completo
+        - pilares
 
     DiagnosticPillar:
       type: object

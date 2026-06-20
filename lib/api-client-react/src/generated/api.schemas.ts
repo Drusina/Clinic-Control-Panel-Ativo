@@ -529,6 +529,24 @@ export const DiagnosticStatus = {
  */
 export type DiagnosticScoresPilares = { [key: string]: unknown } | null;
 
+export type DiagnosticProgressPilaresItem = {
+  slug: string;
+  questionCount: number;
+  answeredCount: number;
+  completo: boolean;
+};
+
+/**
+ * Per-pillar and overall answer progress for a diagnostic. `completo` is true once every question in the bank has a response. Optional on the Diagnostic payload — only computed by the diagnostics list endpoint.
+
+ */
+export interface DiagnosticProgress {
+  totalQuestions: number;
+  totalAnswered: number;
+  completo: boolean;
+  pilares: DiagnosticProgressPilaresItem[];
+}
+
 export interface Diagnostic {
   id: string;
   clinicId: string;
@@ -542,6 +560,7 @@ export interface Diagnostic {
   /** @nullable */
   scoresPilares?: DiagnosticScoresPilares;
   createdAt: string;
+  progresso?: DiagnosticProgress;
 }
 
 export interface DiagnosticPillar {
