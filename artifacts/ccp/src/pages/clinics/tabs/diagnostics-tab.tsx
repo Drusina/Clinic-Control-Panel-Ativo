@@ -38,6 +38,11 @@ function pilarLabel(slug: string): string {
   return PILAR_LABELS[slug] ?? slug.replace(/_/g, " ");
 }
 
+function progressPct(p?: { totalQuestions: number; totalAnswered: number } | null): number {
+  if (!p || p.totalQuestions <= 0) return 0;
+  return Math.round((p.totalAnswered / p.totalQuestions) * 100);
+}
+
 export default function DiagnosticsTab({
   clinicId,
   buildDelegacaoHref,
@@ -138,9 +143,20 @@ export default function DiagnosticsTab({
           <CardHeader className="pb-3">
             <div className="flex justify-between items-start">
               <div>
-                <CardTitle className="text-primary flex items-center gap-2">
+                <CardTitle className="text-primary flex flex-wrap items-center gap-2">
                   <PlayCircle className="h-5 w-5" />
                   Diagnóstico em Andamento (v{inProgress.versao})
+                  {inProgress.progresso &&
+                    (inProgress.progresso.completo ? (
+                      <Badge className="bg-green-600 text-white hover:bg-green-600">
+                        <CheckCircle className="mr-1 h-3 w-3" />
+                        Pronto para concluir
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">
+                        {progressPct(inProgress.progresso)}% respondido
+                      </Badge>
+                    ))}
                 </CardTitle>
                 <CardDescription>
                   Iniciado em {format(new Date(inProgress.iniciadoEm), "dd/MM/yyyy", { locale: ptBR })}
@@ -185,7 +201,7 @@ export default function DiagnosticsTab({
                   }
                   className="h-2"
                 />
-                {!inProgress.progresso.completo && (
+                {!inProgress.progresso.completo ? (
                   <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
                     <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                     <div>
@@ -205,6 +221,18 @@ export default function DiagnosticsTab({
                           </p>
                         );
                       })()}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2 rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+                    <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium">
+                        Todas as {inProgress.progresso.totalQuestions} perguntas dos 8 pilares foram respondidas.
+                      </p>
+                      <p className="mt-1 text-green-700">
+                        O diagnóstico está pronto para concluir.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -255,7 +283,20 @@ export default function DiagnosticsTab({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground italic">Nenhum score registrado para este diagnóstico.</p>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground italic">Nenhum score registrado para este diagnóstico.</p>
+                    {diag.progresso && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>
+                            {diag.progresso.totalAnswered} de {diag.progresso.totalQuestions} perguntas respondidas
+                          </span>
+                          <span>{progressPct(diag.progresso)}%</span>
+                        </div>
+                        <Progress value={progressPct(diag.progresso)} className="h-2" />
+                      </div>
+                    )}
+                  </div>
                 )}
                 <div className="flex items-center justify-between mt-4">
                   <div className="text-xs text-muted-foreground">
