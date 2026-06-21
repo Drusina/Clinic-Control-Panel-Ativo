@@ -62,6 +62,7 @@ interface TrilhaSignals {
   diagnosticoConcluidoCount: number;
   risksCount: number;
   actionsCount: number;
+  managerActiveCount: number;
 }
 
 async function countRows(table: PgTable, where: SQL | undefined): Promise<number> {
@@ -151,6 +152,7 @@ async function gatherSignals(clinic: Clinic): Promise<TrilhaSignals> {
     diagnosticoConcluidoCount,
     risksCount,
     actionsCount,
+    managerActiveCount,
   ] = await Promise.all([
     countConstitutiveDocs(cid),
     countLgpdFormalizados(cid),
@@ -174,6 +176,14 @@ async function gatherSignals(clinic: Clinic): Promise<TrilhaSignals> {
     ),
     countRows(risksTable, eq(risksTable.clinicId, cid)),
     countRows(actionsTable, eq(actionsTable.clinicId, cid)),
+    countRows(
+      teamTable,
+      and(
+        eq(teamTable.clinicId, cid),
+        eq(teamTable.temAcessoPlataforma, true),
+        isNotNull(teamTable.lastAccessAt),
+      ),
+    ),
   ]);
 
   return {
@@ -190,6 +200,7 @@ async function gatherSignals(clinic: Clinic): Promise<TrilhaSignals> {
     diagnosticoConcluidoCount,
     risksCount,
     actionsCount,
+    managerActiveCount,
   };
 }
 
@@ -280,9 +291,15 @@ function computeSuggestion(
         ? { pronto: true, motivo: `${s.actionsCount} ação(ões) no plano.` }
         : { pronto: false, motivo: "Nenhuma ação cadastrada." };
     case "painel_gestao":
-      return s.status === "ativa"
-        ? { pronto: true, motivo: "Clínica ativa — painel de gestão em uso." }
-        : { pronto: false, motivo: "Ative a clínica para liberar o painel." };
+      return s.managerActiveCount > 0
+        ? {
+            pronto: true,
+            motivo: "Gestor com acesso ativo e primeiro acesso registrado.",
+          }
+        : {
+            pronto: false,
+            motivo: "Aguardando primeiro acesso do gestor ao painel.",
+          };
     default:
       // Manual marcos: avaliacao, montagem_painel, treinamento, acompanhamento.
       return {

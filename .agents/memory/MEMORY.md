@@ -9,3 +9,4 @@
 - [Constitutive docs surfaces](constitutive-docs-surfaces.md) — "has constitutive docs?" must union 3 disjoint stores: docs_constitutivos.storage_path, docs_constitutivos_files, societary_extractions.
 - [Route fall-through 403](route-fallthrough-403.md) — a NEW clinic-scoped route 403ing as "super_admin role required" = unmatched route falling to global requireSuperAdmin layer; usually stale dev server, restart api-server.
 - [Orval body/param naming](orval-body-naming.md) — generated zod/hook names come from operationId, not the schema $ref name; grep generated output before importing.
+- [Portal dashboard tests](portal-dashboard-tests.md) — Visão Geral contract (4 testid blocks) must survive rewrites; extend the api-client-react vi.mock when adding hooks; keep recharts out of jsdom (no concluded diagnostic).

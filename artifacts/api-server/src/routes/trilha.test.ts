@@ -21,6 +21,7 @@ import {
   societaryExtractionsTable,
   clinicDocumentsTable,
   documentCategoriesTable,
+  teamTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { signToken, requireClinicAccess } from "../middleware/auth";
@@ -49,6 +50,8 @@ let docsSocietaryClinicId: string;
 let docsChildFileClinicId: string;
 let docsLegacyClinicId: string;
 let docsEmptyClinicId: string;
+let painelActiveClinicId: string;
+let painelPendingClinicId: string;
 
 const SYSTEM_ACTOR = "Sistema (automático)";
 
@@ -97,6 +100,38 @@ beforeAll(async () => {
   docsChildFileClinicId = await makeClinic("docs-childfile");
   docsLegacyClinicId = await makeClinic("docs-legacy");
   docsEmptyClinicId = await makeClinic("docs-empty");
+  painelActiveClinicId = await makeClinic("painel-active");
+  painelPendingClinicId = await makeClinic("painel-pending");
+
+  // painel_gestao signal — a manager WITH platform access who has logged in at
+  // least once (last_access_at set) satisfies the stage.
+  await db.insert(teamTable).values({
+    clinicId: painelActiveClinicId,
+    nome: "Gestor Ativo",
+    email: `gestor-ativo-${suffix}@example.com`,
+    temAcessoPlataforma: true,
+    lastAccessAt: new Date(),
+  });
+
+  // Negative — a manager with platform access but who has NEVER logged in
+  // (last_access_at NULL), plus a member who logged in but lacks platform
+  // access. Neither should satisfy painel_gestao.
+  await db.insert(teamTable).values([
+    {
+      clinicId: painelPendingClinicId,
+      nome: "Gestor Sem Acesso",
+      email: `gestor-nunca-${suffix}@example.com`,
+      temAcessoPlataforma: true,
+      lastAccessAt: null,
+    },
+    {
+      clinicId: painelPendingClinicId,
+      nome: "Membro Sem Plataforma",
+      email: `membro-${suffix}@example.com`,
+      temAcessoPlataforma: false,
+      lastAccessAt: new Date(),
+    },
+  ]);
 
   // Path 3 — "Documentos Societários (com análise por IA)": writes to
   // clinic_documents + societary_extractions, never docs_constitutivos.
@@ -161,6 +196,7 @@ afterAll(async () => {
     await db
       .delete(trilhaEtapasTable)
       .where(eq(trilhaEtapasTable.clinicId, id));
+    await db.delete(teamTable).where(eq(teamTable.clinicId, id));
     // clinic_documents must be removed before document_categories — the
     // category FK is ON DELETE RESTRICT, so deleting the category first (or
     // letting the clinic cascade race) would fail. Removing clinic_documents
@@ -360,6 +396,24 @@ describe("Trilha de Implementação — automatic completion", () => {
     expect(override.status).toBe(200);
     const after = findEtapa((await getTrilha(clinicId)).body.etapas, "contrato")!;
     expect(after.status).toBe("nao_aplicavel");
+  });
+
+  it("painel_gestao auto-concludes for a manager with platform access who has logged in", async () => {
+    const res = await getTrilha(painelActiveClinicId);
+    const painel = findEtapa(res.body.etapas, "painel_gestao")!;
+    expect(painel.manual).toBe(false);
+    expect(painel.status).toBe("concluido");
+    expect(painel.confirmadoPor).toBe(SYSTEM_ACTOR);
+    expect(painel.sugestao.pronto).toBe(true);
+    expect(painel.sugestao.motivo).toContain("acesso ativo");
+  });
+
+  it("painel_gestao stays pendente without a logged-in manager (no longer gated on clinic 'ativa')", async () => {
+    const res = await getTrilha(painelPendingClinicId);
+    const painel = findEtapa(res.body.etapas, "painel_gestao")!;
+    expect(painel.status).toBe("pendente");
+    expect(painel.sugestao.pronto).toBe(false);
+    expect(painel.sugestao.motivo).toContain("primeiro acesso");
   });
 
   it("rejects an unknown etapaKey with 400", async () => {

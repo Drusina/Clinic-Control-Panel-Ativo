@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useGetClinic, getGetClinicQueryKey } from "@workspace/api-client-react";
+import {
+  useGetClinic,
+  getGetClinicQueryKey,
+  useListRisks,
+  getListRisksQueryKey,
+  useListActions,
+  getListActionsQueryKey,
+  useListDiagnostics,
+  getListDiagnosticsQueryKey,
+  type Action,
+  type Risk,
+  type Diagnostic,
+} from "@workspace/api-client-react";
 import {
   getStoredToken,
   useMyClinics,
@@ -8,6 +20,8 @@ import {
 } from "@/hooks/use-auth";
 import { TrilhaStepper } from "@/components/trilha/trilha-stepper";
 import { ClinicLogo } from "@/components/clinic-logo";
+import { EmptyState } from "@/components/empty-state";
+import { PILAR_INFO, PILAR_ORDER, pilarShort } from "@/lib/pilares";
 import {
   Card,
   CardContent,
@@ -17,6 +31,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import {
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  ResponsiveContainer,
+  Legend,
+  Tooltip,
+} from "recharts";
 import {
   LayoutDashboard,
   Rocket,
@@ -41,6 +65,13 @@ import {
   Mail,
   Phone,
   UserRound,
+  Gauge,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  CalendarClock,
+  AlertTriangle,
+  CheckCircle,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -180,6 +211,80 @@ const PORTAL_MODULE_SECOES: Record<string, { secao: string; label: string }> = {
   plano_acao: { secao: "acao", label: "Abrir Plano de Ação" },
 };
 
+const PRIORIDADE_WEIGHT: Record<string, number> = { alta: 0, media: 1, baixa: 2 };
+const PRIORIDADE_LABEL: Record<string, string> = {
+  alta: "Alta",
+  media: "Média",
+  baixa: "Baixa",
+};
+const PRIORIDADE_VARIANT: Record<string, "destructive" | "secondary" | "outline"> = {
+  alta: "destructive",
+  media: "secondary",
+  baixa: "outline",
+};
+const RISK_OPEN_STATUS = new Set(["identificado", "em_mitigacao"]);
+const RISK_HIGH_SEVERIDADE = 14; // severidade > 14 ⇒ nível "alto" (vide severidadeToNivel)
+
+/** Coerce a possibly-unknown score value (scoresPilares is typed loosely). */
+function toNum(v: unknown): number | null {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Parse a `YYYY-MM-DD` (or ISO) prazo into a local date-only Date. */
+function parsePrazo(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatPrazo(s: string | null | undefined): string {
+  const d = parsePrazo(s);
+  if (!d) return "Sem prazo";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+function startOfToday(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+interface KpiCardProps {
+  icon: IconType;
+  label: string;
+  value: string;
+  hint?: React.ReactNode;
+  tone?: "default" | "danger" | "success";
+  testId?: string;
+}
+
+function KpiCard({ icon: Icon, label, value, hint, tone = "default", testId }: KpiCardProps) {
+  const toneClass =
+    tone === "danger"
+      ? "text-red-600"
+      : tone === "success"
+        ? "text-emerald-600"
+        : "text-primary";
+  return (
+    <Card data-testid={testId}>
+      <CardContent className="flex flex-col gap-2 p-5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {label}
+          </span>
+          <Icon className={`h-4 w-4 ${toneClass}`} />
+        </div>
+        <span className="text-2xl font-semibold tracking-tight text-foreground">
+          {value}
+        </span>
+        {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ModuleCard({
   clinicId,
   module,
@@ -225,6 +330,29 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
   const { data: myClinics } = useMyClinics();
   const card = myClinics?.clinics.find((c) => c.id === clinicId) ?? null;
 
+  const { data: risks, isLoading: risksLoading } = useListRisks(clinicId, {
+    query: { enabled: !!clinicId, queryKey: getListRisksQueryKey(clinicId) },
+  });
+  const { data: actions, isLoading: actionsLoading } = useListActions(
+    clinicId,
+    undefined,
+    {
+      query: {
+        enabled: !!clinicId,
+        queryKey: getListActionsQueryKey(clinicId),
+      },
+    },
+  );
+  const { data: diagnostics, isLoading: diagnosticsLoading } = useListDiagnostics(
+    clinicId,
+    {
+      query: {
+        enabled: !!clinicId,
+        queryKey: getListDiagnosticsQueryKey(clinicId),
+      },
+    },
+  );
+
   const [ics, setIcs] = useState<IcsStatus | null>(null);
   const [icsLoaded, setIcsLoaded] = useState(false);
 
@@ -253,6 +381,108 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
   const nome = clinic?.nome ?? card?.fantasia ?? card?.nome ?? "Clínica";
   const progresso = card?.progresso ?? 0;
   const etapa = card?.etapa ?? null;
+
+  // ─── Operational aggregation (client-side, from clinic-scoped data) ───
+  const ops = useMemo(() => {
+    const riskList: Risk[] = risks ?? [];
+    const actionList: Action[] = actions ?? [];
+    const diagList: Diagnostic[] = diagnostics ?? [];
+
+    const concluded = diagList
+      .filter((d) => d.status === "concluido")
+      .sort((a, b) => b.versao - a.versao);
+    const current = concluded[0] ?? null;
+    const previous = concluded[1] ?? null;
+
+    const currentScore = current ? toNum(current.scoreGlobal) : null;
+    const prevScore = previous ? toNum(previous.scoreGlobal) : null;
+    const scoreDelta =
+      currentScore != null && prevScore != null ? currentScore - prevScore : null;
+
+    const radarData = PILAR_ORDER.map((slug) => {
+      const cur = current
+        ? toNum((current.scoresPilares as Record<string, unknown> | null | undefined)?.[slug])
+        : null;
+      const prev = previous
+        ? toNum((previous.scoresPilares as Record<string, unknown> | null | undefined)?.[slug])
+        : null;
+      return {
+        slug,
+        pilar: pilarShort(slug),
+        atual: cur ?? 0,
+        anterior: prev ?? 0,
+      };
+    });
+
+    const weakest = current
+      ? Object.entries(
+          (current.scoresPilares as Record<string, unknown> | null | undefined) ?? {},
+        )
+          .map(([slug, v]) => ({ slug, score: toNum(v) }))
+          .filter((x): x is { slug: string; score: number } => x.score != null)
+          .sort((a, b) => a.score - b.score)
+          .slice(0, 3)
+      : [];
+
+    const openHighRisks = riskList
+      .filter(
+        (r) =>
+          RISK_OPEN_STATUS.has(r.status) &&
+          (r.nivel === "alto" || r.severidade > RISK_HIGH_SEVERIDADE),
+      )
+      .sort((a, b) => b.severidade - a.severidade);
+
+    const today = startOfToday();
+    const in7 = new Date(today);
+    in7.setDate(in7.getDate() + 7);
+
+    const activeActions = actionList.filter((a) => a.coluna !== "done");
+    const overdue = activeActions.filter((a) => {
+      const p = parsePrazo(a.prazo);
+      return p != null && p < today;
+    });
+    const upcoming = activeActions.filter((a) => {
+      const p = parsePrazo(a.prazo);
+      return p != null && p >= today && p <= in7;
+    });
+
+    const doneCount = actionList.filter((a) => a.coluna === "done").length;
+    const completionPct =
+      actionList.length > 0 ? Math.round((doneCount / actionList.length) * 100) : null;
+
+    const nextActions = [...activeActions]
+      .sort((a, b) => {
+        const wa = PRIORIDADE_WEIGHT[a.prioridade ?? ""] ?? 3;
+        const wb = PRIORIDADE_WEIGHT[b.prioridade ?? ""] ?? 3;
+        if (wa !== wb) return wa - wb;
+        const pa = parsePrazo(a.prazo);
+        const pb = parsePrazo(b.prazo);
+        if (pa && pb) return pa.getTime() - pb.getTime();
+        if (pa) return -1;
+        if (pb) return 1;
+        return 0;
+      })
+      .slice(0, 6);
+
+    return {
+      current,
+      previous,
+      currentScore,
+      scoreDelta,
+      radarData,
+      weakest,
+      openHighRisks,
+      overdue,
+      upcoming,
+      doneCount,
+      completionPct,
+      nextActions,
+      totalActions: actionList.length,
+    };
+  }, [risks, actions, diagnostics]);
+
+  const opsLoading = risksLoading || actionsLoading || diagnosticsLoading;
+  const today = startOfToday();
 
   const pendencias = useMemo<Pendencia[]>(() => {
     const list: Pendencia[] = [];
@@ -354,6 +584,79 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
         </div>
       </section>
 
+      {/* KPIs operacionais */}
+      <section
+        className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+        data-testid="painel-kpis"
+      >
+        <KpiCard
+          icon={Gauge}
+          label="Maturidade"
+          tone="default"
+          testId="kpi-maturidade"
+          value={
+            ops.currentScore != null
+              ? `${ops.currentScore.toFixed(1)} / 5,0`
+              : "—"
+          }
+          hint={
+            ops.scoreDelta != null ? (
+              <span
+                className={`inline-flex items-center gap-1 font-medium ${
+                  ops.scoreDelta > 0
+                    ? "text-emerald-600"
+                    : ops.scoreDelta < 0
+                      ? "text-red-600"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {ops.scoreDelta > 0 ? (
+                  <TrendingUp className="h-3 w-3" />
+                ) : ops.scoreDelta < 0 ? (
+                  <TrendingDown className="h-3 w-3" />
+                ) : (
+                  <Minus className="h-3 w-3" />
+                )}
+                {ops.scoreDelta > 0 ? "+" : ""}
+                {ops.scoreDelta.toFixed(1)} vs. anterior
+              </span>
+            ) : ops.currentScore != null ? (
+              "Primeiro diagnóstico"
+            ) : (
+              "Sem diagnóstico concluído"
+            )
+          }
+        />
+        <KpiCard
+          icon={ShieldAlert}
+          label="Riscos críticos"
+          tone={ops.openHighRisks.length > 0 ? "danger" : "success"}
+          testId="kpi-riscos-criticos"
+          value={String(ops.openHighRisks.length)}
+          hint="Alto impacto, em aberto"
+        />
+        <KpiCard
+          icon={CalendarClock}
+          label="Ações atrasadas"
+          tone={ops.overdue.length > 0 ? "danger" : "success"}
+          testId="kpi-acoes-atrasadas"
+          value={String(ops.overdue.length)}
+          hint={`${ops.upcoming.length} vencem em 7 dias`}
+        />
+        <KpiCard
+          icon={ListChecks}
+          label="Conclusão do plano"
+          tone="default"
+          testId="kpi-conclusao-plano"
+          value={ops.completionPct != null ? `${ops.completionPct}%` : "—"}
+          hint={
+            ops.totalActions > 0
+              ? `${ops.doneCount} de ${ops.totalActions} ações`
+              : "Sem ações no plano"
+          }
+        />
+      </section>
+
       <TrilhaStepper
         clinicId={clinicId}
         invalidateKeys={[MY_CLINICS_QUERY_KEY]}
@@ -368,6 +671,214 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
           };
         }}
       />
+
+      {/* Painel operacional: desempenho + ações + riscos */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        {/* Evolução do diagnóstico */}
+        <Card className="xl:col-span-7" data-testid="painel-evolucao">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Stethoscope className="h-4 w-4 text-primary" />
+              Evolução do diagnóstico
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {opsLoading ? (
+              <div className="h-[300px] animate-pulse rounded-lg bg-muted/40" />
+            ) : ops.current ? (
+              <div className="flex flex-col gap-4">
+                <ResponsiveContainer width="100%" height={300}>
+                  <RadarChart data={ops.radarData} outerRadius="72%">
+                    <PolarGrid />
+                    <PolarAngleAxis dataKey="pilar" tick={{ fontSize: 11 }} />
+                    <PolarRadiusAxis domain={[0, 5]} tick={{ fontSize: 10 }} />
+                    {ops.previous && (
+                      <Radar
+                        name={`Versão ${ops.previous.versao}`}
+                        dataKey="anterior"
+                        stroke="#94a3b8"
+                        fill="#94a3b8"
+                        fillOpacity={0.2}
+                      />
+                    )}
+                    <Radar
+                      name={`Versão ${ops.current.versao}`}
+                      dataKey="atual"
+                      stroke="#6366f1"
+                      fill="#6366f1"
+                      fillOpacity={0.35}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Tooltip formatter={(val) => [Number(val).toFixed(1), ""]} />
+                  </RadarChart>
+                </ResponsiveContainer>
+                {ops.weakest.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Pilares mais frágeis
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {ops.weakest.map((w) => (
+                        <div
+                          key={w.slug}
+                          className="flex items-center gap-3"
+                          data-testid={`weakest-${w.slug}`}
+                        >
+                          <span className="w-28 shrink-0 truncate text-sm text-foreground">
+                            {PILAR_INFO[w.slug]?.short ?? w.slug}
+                          </span>
+                          <Progress value={(w.score / 5) * 100} className="h-2 flex-1" />
+                          <span className="w-10 shrink-0 text-right text-sm font-medium text-foreground">
+                            {w.score.toFixed(1)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Stethoscope}
+                title="Nenhum diagnóstico concluído"
+                description="Conclua um Diagnóstico 360° para acompanhar a maturidade da clínica e sua evolução."
+                action={
+                  <Link href={`/portal/clinica/${clinicId}/diagnostico`}>
+                    <Button size="sm">Abrir Diagnóstico</Button>
+                  </Link>
+                }
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Próximas ações */}
+        <Card className="xl:col-span-5" data-testid="painel-proximas-acoes">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ListChecks className="h-4 w-4 text-primary" />
+              Próximas ações
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {opsLoading ? (
+              <div className="flex flex-col gap-2">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-12 animate-pulse rounded-lg bg-muted/40" />
+                ))}
+              </div>
+            ) : ops.nextActions.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {ops.nextActions.map((a) => {
+                  const prazoDate = parsePrazo(a.prazo);
+                  const overdue = prazoDate != null && prazoDate < today;
+                  const prio = a.prioridade ?? "baixa";
+                  return (
+                    <Link
+                      key={a.id}
+                      href={`/portal/clinica/${clinicId}/acao`}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2 transition-colors hover:border-primary/40"
+                      data-testid={`proxima-acao-${a.id}`}
+                    >
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate text-sm font-medium text-foreground">
+                          {a.titulo}
+                        </span>
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {a.responsavelNome && (
+                            <span className="truncate">{a.responsavelNome}</span>
+                          )}
+                          <span
+                            className={`inline-flex items-center gap-1 ${
+                              overdue ? "font-medium text-red-600" : ""
+                            }`}
+                          >
+                            <CalendarClock className="h-3 w-3" />
+                            {formatPrazo(a.prazo)}
+                          </span>
+                        </span>
+                      </div>
+                      <Badge
+                        variant={PRIORIDADE_VARIANT[prio] ?? "outline"}
+                        className="shrink-0 text-[11px]"
+                      >
+                        {PRIORIDADE_LABEL[prio] ?? prio}
+                      </Badge>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                compact
+                icon={CheckCircle}
+                title="Nenhuma ação pendente"
+                description="Todas as ações do plano estão concluídas ou ainda não há tarefas."
+                action={
+                  <Link href={`/portal/clinica/${clinicId}/acao`}>
+                    <Button size="sm" variant="outline">
+                      Abrir Plano de Ação
+                    </Button>
+                  </Link>
+                }
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Riscos em foco */}
+        <Card className="xl:col-span-12" data-testid="painel-riscos-foco">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldAlert className="h-4 w-4 text-primary" />
+              Riscos em foco
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {opsLoading ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-16 animate-pulse rounded-lg bg-muted/40" />
+                ))}
+              </div>
+            ) : ops.openHighRisks.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {ops.openHighRisks.slice(0, 6).map((r) => (
+                  <Link
+                    key={r.id}
+                    href={`/portal/clinica/${clinicId}/riscos`}
+                    className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50/60 p-3 transition-colors hover:border-red-300 dark:border-red-900/50 dark:bg-red-950/20"
+                    data-testid={`risco-foco-${r.id}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="line-clamp-2 text-sm font-medium text-foreground">
+                        {r.nome}
+                      </span>
+                      <Badge variant="destructive" className="shrink-0 text-[11px]">
+                        {r.severidade}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{pilarShort(r.pilarSlug)}</span>
+                      <span className="flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3 text-red-500" />
+                        P{r.probabilidade} × I{r.impacto}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                compact
+                icon={CheckCircle2}
+                title="Nenhum risco crítico em aberto"
+                description="Não há riscos de alto impacto pendentes de mitigação no momento."
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-12">
         {/* Hub de módulos */}

@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
 /**
  * Unified "Painel da Clínica" — Visão Geral (dashboard) contract.
@@ -15,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   clinic: null as Record<string, unknown> | null,
   card: null as Record<string, unknown> | null,
   ics: null as Record<string, unknown> | null,
+  risks: [] as Record<string, unknown>[],
+  actions: [] as Record<string, unknown>[],
+  diagnostics: [] as Record<string, unknown>[],
 }));
 
 vi.mock("wouter", () => ({
@@ -35,6 +44,12 @@ vi.mock("wouter", () => ({
 vi.mock("@workspace/api-client-react", () => ({
   useGetClinic: () => ({ data: mocks.clinic }),
   getGetClinicQueryKey: () => ["clinic"],
+  useListRisks: () => ({ data: mocks.risks, isLoading: false }),
+  getListRisksQueryKey: () => ["risks"],
+  useListActions: () => ({ data: mocks.actions, isLoading: false }),
+  getListActionsQueryKey: () => ["actions"],
+  useListDiagnostics: () => ({ data: mocks.diagnostics, isLoading: false }),
+  getListDiagnosticsQueryKey: () => ["diagnostics"],
 }));
 
 vi.mock("@/hooks/use-auth", () => ({
@@ -82,6 +97,9 @@ describe("PortalDashboard — Visão Geral contract", () => {
       etapa: "Implantação",
     };
     mocks.ics = { delegacoes: 0, risks: 0, actions: 0, seeded: false };
+    mocks.risks = [];
+    mocks.actions = [];
+    mocks.diagnostics = [];
     mockIcsFetch();
   });
 
@@ -150,5 +168,150 @@ describe("PortalDashboard — Visão Geral contract", () => {
     expect(
       screen.getByText("Nenhum contato principal cadastrado."),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * Operational panel — KPI aggregation + próximas ações ordering.
+ *
+ * These pin the client-side aggregation added in Fase 2: open high-severity
+ * risk count, overdue action count, plan completion %, and the prioridade
+ * (alta→média→baixa) ordering of "próximas ações". No concluded diagnostic is
+ * provided so the radar EmptyState renders instead of recharts.
+ */
+function isoDate(offsetDays: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+describe("PortalDashboard — Operational panel", () => {
+  beforeEach(() => {
+    mocks.clinic = { id: CLINIC_ID, nome: "Clínica Alpha" };
+    mocks.card = { id: CLINIC_ID, nome: "Clínica Alpha", progresso: 100 };
+    mocks.ics = { delegacoes: 3, risks: 2, actions: 5, seeded: true };
+    mocks.diagnostics = [];
+    mocks.risks = [
+      {
+        id: "r1",
+        nome: "Risco alto identificado",
+        status: "identificado",
+        nivel: "alto",
+        severidade: 20,
+        pilarSlug: "financeiro",
+        probabilidade: 4,
+        impacto: 5,
+      },
+      {
+        id: "r2",
+        nome: "Risco em mitigação",
+        status: "em_mitigacao",
+        nivel: "medio",
+        severidade: 16,
+        pilarSlug: "estrategia",
+        probabilidade: 4,
+        impacto: 4,
+      },
+      {
+        id: "r3",
+        nome: "Risco já mitigado",
+        status: "mitigado",
+        nivel: "alto",
+        severidade: 25,
+        pilarSlug: "contabil",
+        probabilidade: 5,
+        impacto: 5,
+      },
+      {
+        id: "r4",
+        nome: "Risco baixo aberto",
+        status: "identificado",
+        nivel: "baixo",
+        severidade: 8,
+        pilarSlug: "pessoas",
+        probabilidade: 2,
+        impacto: 4,
+      },
+    ];
+    mocks.actions = [
+      {
+        id: "a1",
+        titulo: "Ação atrasada",
+        coluna: "todo",
+        prazo: isoDate(-1),
+        prioridade: "alta",
+        responsavelNome: "João",
+      },
+      {
+        id: "a2",
+        titulo: "Ação próxima",
+        coluna: "doing",
+        prazo: isoDate(3),
+        prioridade: "media",
+        responsavelNome: "Maria",
+      },
+      {
+        id: "a3",
+        titulo: "Ação concluída",
+        coluna: "done",
+        prazo: isoDate(-5),
+        prioridade: "alta",
+        responsavelNome: "Ana",
+      },
+      {
+        id: "a4",
+        titulo: "Ação sem prazo",
+        coluna: "todo",
+        prazo: null,
+        prioridade: "baixa",
+        responsavelNome: "Pedro",
+      },
+    ];
+    mockIcsFetch();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("counts only open high-severity risks in the riscos críticos KPI", () => {
+    render(<PortalDashboard clinicId={CLINIC_ID} />);
+    expect(
+      within(screen.getByTestId("kpi-riscos-criticos")).getByText("2"),
+    ).toBeInTheDocument();
+  });
+
+  it("counts overdue active actions and plan completion %", () => {
+    render(<PortalDashboard clinicId={CLINIC_ID} />);
+    expect(
+      within(screen.getByTestId("kpi-acoes-atrasadas")).getByText("1"),
+    ).toBeInTheDocument();
+    // 1 of 4 actions done → 25%
+    expect(
+      within(screen.getByTestId("kpi-conclusao-plano")).getByText("25%"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows '—' for maturidade when no diagnostic is concluded", () => {
+    render(<PortalDashboard clinicId={CLINIC_ID} />);
+    expect(
+      within(screen.getByTestId("kpi-maturidade")).getByText("—"),
+    ).toBeInTheDocument();
+  });
+
+  it("orders próximas ações by prioridade alta → média → baixa", () => {
+    render(<PortalDashboard clinicId={CLINIC_ID} />);
+    const ordered = screen
+      .getAllByTestId(/^proxima-acao-/)
+      .map((el) => el.getAttribute("data-testid"));
+    expect(ordered).toEqual([
+      "proxima-acao-a1",
+      "proxima-acao-a2",
+      "proxima-acao-a4",
+    ]);
   });
 });

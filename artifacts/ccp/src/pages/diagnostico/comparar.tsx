@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, AlertTriangle, ArrowLeft, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
+import { PILAR_INFO, PILAR_ORDER } from "@/lib/pilares";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -28,28 +29,6 @@ async function apiFetch(path: string) {
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
-
-const PILAR_INFO: Record<string, { nome: string; short: string; color: string }> = {
-  estrategia: { nome: "Estratégia e Governança", short: "Estratégia", color: "#6366f1" },
-  financeiro: { nome: "Financeiro e Fluxo de Caixa", short: "Financeiro", color: "#10b981" },
-  contabil: { nome: "Contabilidade e Fiscal", short: "Contábil", color: "#f59e0b" },
-  marketing: { nome: "Vendas e Marketing", short: "Marketing", color: "#f43f5e" },
-  operacoes: { nome: "Processos Operacionais", short: "Operações", color: "#06b6d4" },
-  pessoas: { nome: "Gestão de Pessoas", short: "Pessoas", color: "#8b5cf6" },
-  tecnologia: { nome: "Tecnologia e Sistemas", short: "Tecnologia", color: "#0ea5e9" },
-  compliance: { nome: "Conformidade e LGPD", short: "Compliance", color: "#64748b" },
-};
-
-const PILAR_ORDER = [
-  "estrategia",
-  "financeiro",
-  "contabil",
-  "marketing",
-  "operacoes",
-  "pessoas",
-  "tecnologia",
-  "compliance",
-];
 
 interface DiagnosticData {
   id: string;

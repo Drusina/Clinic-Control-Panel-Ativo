@@ -177,7 +177,7 @@ export const TRILHA_ETAPAS: readonly TrilhaEtapaDef[] = [
     key: "painel_gestao",
     ordem: 13,
     titulo: "Painel de Gestão",
-    descricao: "Portal de gestão ativo.",
+    descricao: "Gestor com acesso ativo ao portal.",
     modulo: "painel",
     manual: false,
   },
