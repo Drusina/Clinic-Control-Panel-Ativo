@@ -31,6 +31,7 @@ import {
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { createSuggestedTarefas, sanitizeTarefaTitles } from "../lib/tarefas.js";
 import { suggestTarefasForAction } from "../lib/tarefa-suggester.js";
+import { regenerateTarefasForClinic } from "../lib/tarefa-regenerator.js";
 import {
   sendEmail,
   buildActionUpdateEmail,
@@ -306,6 +307,27 @@ router.post("/clinics/:clinicId/actions/suggest-tarefas", async (req, res): Prom
     descricao: parsed.data.descricao ?? null,
     pilarSlug: parsed.data.pilarSlug ?? null,
   });
+  res.json(result);
+});
+
+/**
+ * Backfill único, acionável SOMENTE pelo super-admin: (re)gera as tarefas
+ * sugeridas (somente títulos) de TODAS as ações já existentes da clínica.
+ * Ações do plano padrão reaproveitam a biblioteca curada; ações de risco/manuais
+ * usam a IA (com timeout + fallback, nunca quebra). As tarefas existentes são
+ * SUBSTITUÍDAS; os demais campos da ação são preservados. Idempotente.
+ *
+ * Auth: a montagem já aplica requireClinicAccess; aqui exigimos super_admin
+ * explicitamente (o acionamento da regeneração é operação de operador, não do
+ * gestor da clínica).
+ */
+router.post("/clinics/:clinicId/actions/regenerate-tarefas", async (req, res): Promise<void> => {
+  if ((req as unknown as AuthenticatedRequest).user?.role !== "super_admin") {
+    res.status(403).json({ error: "Apenas super_admin pode regenerar tarefas das ações." });
+    return;
+  }
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  const result = await regenerateTarefasForClinic(clinicId);
   res.json(result);
 });
 

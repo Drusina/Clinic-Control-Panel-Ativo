@@ -1004,6 +1004,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuggestTarefasResponse"
 
+  /clinics/{clinicId}/actions/regenerate-tarefas:
+    post:
+      operationId: regenerateActionTarefas
+      tags: [actions]
+      summary: (Re)generate suggested tarefas for all existing actions of a clinic (super-admin, one-time backfill)
+      description: >
+        Super-admin-only, clinic-scoped, idempotent one-time backfill. For every
+        existing action it REPLACES its tarefas with freshly suggested titles:
+        plano-padrão actions reuse the curated model library; risk/manual actions
+        use AI (with a timeout and curated fallback so it never blocks). Only
+        titles — never responsável, datas or status. The action's other fields
+        (coluna, responsável, prazo, prioridade, pilar, risco) are preserved.
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Backfill summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegenerateTarefasResponse"
+
   /clinics/{clinicId}/tarefas:
     get:
       operationId: listClinicTarefas
@@ -3940,6 +3966,37 @@ components:
             type: string
       required:
         - titulos
+
+    RegenerateTarefasResponse:
+      type: object
+      properties:
+        actionsProcessed:
+          type: integer
+          description: Total de ações da clínica processadas.
+        tarefasCreated:
+          type: integer
+          description: Total de tarefas (top-level) criadas no backfill.
+        bySource:
+          type: object
+          description: Quantidade de ações cujas tarefas vieram de cada origem.
+          properties:
+            modelo:
+              type: integer
+              description: Ações do plano padrão (biblioteca curada).
+            ia:
+              type: integer
+              description: Ações cujas tarefas foram geradas pela IA.
+            fallback:
+              type: integer
+              description: Ações que caíram no fallback curado/genérico (IA indisponível/falhou).
+          required:
+            - modelo
+            - ia
+            - fallback
+      required:
+        - actionsProcessed
+        - tarefasCreated
+        - bySource
 
     CreateChecklistItemBody:
       type: object

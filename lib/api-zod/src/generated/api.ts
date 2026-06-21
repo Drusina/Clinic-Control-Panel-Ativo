@@ -1365,6 +1365,37 @@ export const SuggestActionTarefasResponse = zod.object({
 });
 
 /**
+ * Super-admin-only, clinic-scoped, idempotent one-time backfill. For every existing action it REPLACES its tarefas with freshly suggested titles: plano-padrão actions reuse the curated model library; risk/manual actions use AI (with a timeout and curated fallback so it never blocks). Only titles — never responsável, datas or status. The action's other fields (coluna, responsável, prazo, prioridade, pilar, risco) are preserved.
+
+ * @summary (Re)generate suggested tarefas for all existing actions of a clinic (super-admin, one-time backfill)
+ */
+export const RegenerateActionTarefasParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const RegenerateActionTarefasResponse = zod.object({
+  actionsProcessed: zod
+    .number()
+    .describe("Total de ações da clínica processadas."),
+  tarefasCreated: zod
+    .number()
+    .describe("Total de tarefas (top-level) criadas no backfill."),
+  bySource: zod
+    .object({
+      modelo: zod
+        .number()
+        .describe("Ações do plano padrão (biblioteca curada)."),
+      ia: zod.number().describe("Ações cujas tarefas foram geradas pela IA."),
+      fallback: zod
+        .number()
+        .describe(
+          "Ações que caíram no fallback curado\/genérico (IA indisponível\/falhou).",
+        ),
+    })
+    .describe("Quantidade de ações cujas tarefas vieram de cada origem."),
+});
+
+/**
  * @summary List tarefas across a clinic's action plan (for dashboards/aggregation)
  */
 export const ListClinicTarefasParams = zod.object({

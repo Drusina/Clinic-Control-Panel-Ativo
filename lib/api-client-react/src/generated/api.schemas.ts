@@ -1038,6 +1038,27 @@ export interface BatchCreateTarefasBody {
   titulos: string[];
 }
 
+/**
+ * Quantidade de ações cujas tarefas vieram de cada origem.
+ */
+export type RegenerateTarefasResponseBySource = {
+  /** Ações do plano padrão (biblioteca curada). */
+  modelo: number;
+  /** Ações cujas tarefas foram geradas pela IA. */
+  ia: number;
+  /** Ações que caíram no fallback curado/genérico (IA indisponível/falhou). */
+  fallback: number;
+};
+
+export interface RegenerateTarefasResponse {
+  /** Total de ações da clínica processadas. */
+  actionsProcessed: number;
+  /** Total de tarefas (top-level) criadas no backfill. */
+  tarefasCreated: number;
+  /** Quantidade de ações cujas tarefas vieram de cada origem. */
+  bySource: RegenerateTarefasResponseBySource;
+}
+
 export interface CreateChecklistItemBody {
   texto: string;
   /** When true, notifies the action's responsável (email + web push) about the new checklist item, respecting their notification preferences. */
