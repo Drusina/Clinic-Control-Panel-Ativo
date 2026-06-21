@@ -14,6 +14,7 @@ import {
   generateRisksFromWeakAnswers,
   severidadeToNivel,
 } from "../lib/risk-generator.js";
+import { createSuggestedTarefas, sanitizeTarefaTitles } from "../lib/tarefas.js";
 import type { PerguntaFonte } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -260,6 +261,7 @@ router.post(
         nivel: g.nivel,
         acoesMitigadoras: g.acoesMitigadoras,
         perguntasFonte: g.perguntasFonte,
+        tarefasSugeridas: g.tarefasSugeridas,
       })),
     });
   },
@@ -310,6 +312,7 @@ router.post(
           acoesMitigadoras: r.acoesMitigadoras?.trim() || null,
           perguntasFonte,
           criarCard: r.criarCard,
+          tarefasSugeridas: sanitizeTarefaTitles(r.tarefasSugeridas),
         };
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
@@ -375,23 +378,37 @@ router.post(
 
       let nextOrdem = (maxOrdemRow?.ordem ?? 0) + 1;
 
-      const cardRisks = insertedRisks.filter((_, i) => items[i].criarCard);
-      if (cardRisks.length > 0) {
-        await tx.insert(actionsTable).values(
-          cardRisks.map((r) => ({
-            clinicId,
-            titulo: r.nome,
-            descricao: r.acoesMitigadoras ?? r.descricao ?? null,
-            pilarSlug: r.pilarSlug,
-            prioridade: r.nivel === "alto" ? "alta" : r.nivel === "medio" ? "media" : "baixa",
-            coluna: "backlog",
-            ordem: nextOrdem++,
-            riscoOrigemId: r.id,
-          })),
-        );
+      // Pareia cada risco inserido com seu item de origem (preserva a ordem da
+      // inserção) e mantém só os marcados para virar card.
+      const cardItems = insertedRisks
+        .map((risk, i) => ({ risk, item: items[i] }))
+        .filter(({ item }) => item.criarCard);
+
+      if (cardItems.length > 0) {
+        const insertedActions = await tx
+          .insert(actionsTable)
+          .values(
+            cardItems.map(({ risk }) => ({
+              clinicId,
+              titulo: risk.nome,
+              descricao: risk.acoesMitigadoras ?? risk.descricao ?? null,
+              pilarSlug: risk.pilarSlug,
+              prioridade:
+                risk.nivel === "alto" ? "alta" : risk.nivel === "medio" ? "media" : "baixa",
+              coluna: "backlog",
+              ordem: nextOrdem++,
+              riscoOrigemId: risk.id,
+            })),
+          )
+          .returning();
+
+        // INSERT...RETURNING preserva a ordem de cardItems → mesma posição.
+        for (let i = 0; i < insertedActions.length; i++) {
+          await createSuggestedTarefas(tx, insertedActions[i].id, cardItems[i].item.tarefasSugeridas);
+        }
       }
 
-      return { insertedRisks, cardsCreated: cardRisks.length };
+      return { insertedRisks, cardsCreated: cardItems.length };
     });
 
     res.status(201).json({

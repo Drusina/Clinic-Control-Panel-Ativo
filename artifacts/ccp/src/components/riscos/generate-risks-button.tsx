@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Loader2, Sparkles, Trash2, ListChecks } from "lucide-react";
+import { Loader2, Sparkles, Trash2, ListChecks, Plus, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +72,7 @@ type GeneratedRiskPreview = {
   nivel: "baixo" | "medio" | "alto";
   acoesMitigadoras: string;
   perguntasFonte: PerguntaFonte[];
+  tarefasSugeridas: string[];
 };
 
 type PreviewRisksResult = {
@@ -88,6 +89,7 @@ type CommitRiskItem = {
   acoesMitigadoras: string | null;
   perguntasFonte: PerguntaFonte[];
   criarCard: boolean;
+  tarefasSugeridas: string[];
 };
 
 export type CommitRisksResult = {
@@ -208,7 +210,13 @@ export function GenerateRisksButton({
         return;
       }
       setReviewDiagnosticId(result.diagnosticId);
-      setReviewRisks(result.risks.map((r) => ({ ...r, criarCard: r.nivel === "alto" })));
+      setReviewRisks(
+        result.risks.map((r) => ({
+          ...r,
+          tarefasSugeridas: r.tarefasSugeridas ?? [],
+          criarCard: r.nivel === "alto",
+        })),
+      );
       setReviewOpen(true);
     },
     onError: (err: Error) => {
@@ -271,6 +279,34 @@ export function GenerateRisksButton({
     setReviewRisks((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const updateReviewRiskTarefa = (riskIndex: number, tarefaIndex: number, value: string) => {
+    setReviewRisks((prev) =>
+      prev.map((r, i) =>
+        i === riskIndex
+          ? { ...r, tarefasSugeridas: r.tarefasSugeridas.map((t, j) => (j === tarefaIndex ? value : t)) }
+          : r,
+      ),
+    );
+  };
+
+  const addReviewRiskTarefa = (riskIndex: number) => {
+    setReviewRisks((prev) =>
+      prev.map((r, i) =>
+        i === riskIndex ? { ...r, tarefasSugeridas: [...r.tarefasSugeridas, ""] } : r,
+      ),
+    );
+  };
+
+  const removeReviewRiskTarefa = (riskIndex: number, tarefaIndex: number) => {
+    setReviewRisks((prev) =>
+      prev.map((r, i) =>
+        i === riskIndex
+          ? { ...r, tarefasSugeridas: r.tarefasSugeridas.filter((_, j) => j !== tarefaIndex) }
+          : r,
+      ),
+    );
+  };
+
   const handleCommitReview = () => {
     if (reviewRisks.length === 0) return;
     const items: CommitRiskItem[] = reviewRisks.map((r) => ({
@@ -282,6 +318,7 @@ export function GenerateRisksButton({
       acoesMitigadoras: r.acoesMitigadoras?.trim() || null,
       perguntasFonte: r.perguntasFonte,
       criarCard: r.criarCard,
+      tarefasSugeridas: r.tarefasSugeridas.map((t) => t.trim()).filter(Boolean),
     }));
     commitMut.mutate(items);
   };
@@ -508,6 +545,55 @@ export function GenerateRisksButton({
                       Criar card no Plano de Ação
                     </span>
                   </label>
+
+                  {r.criarCard && (
+                    <div className="rounded-md border border-dashed bg-muted/30 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          <ListChecks className="h-3.5 w-3.5 text-indigo-600" />
+                          Tarefas sugeridas do card ({r.tarefasSugeridas.length})
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => addReviewRiskTarefa(i)}
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
+                        </Button>
+                      </div>
+                      {r.tarefasSugeridas.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Nenhuma tarefa sugerida. Adicione tarefas (somente títulos) que nascerão
+                          junto com o card.
+                        </p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {r.tarefasSugeridas.map((t, j) => (
+                            <li key={j} className="flex items-center gap-2">
+                              <Input
+                                value={t}
+                                placeholder="Título da tarefa"
+                                onChange={(e) => updateReviewRiskTarefa(i, j, e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeReviewRiskTarefa(i, j)}
+                                title="Remover tarefa"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

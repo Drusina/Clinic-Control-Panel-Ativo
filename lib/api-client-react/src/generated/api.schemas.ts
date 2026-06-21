@@ -1007,6 +1007,37 @@ export interface UpdateTarefaBody {
   ordem?: number | null;
 }
 
+export interface SuggestTarefasBody {
+  titulo: string;
+  /** @nullable */
+  descricao?: string | null;
+  /** @nullable */
+  pilarSlug?: string | null;
+}
+
+/**
+ * 'ai' quando geradas pela IA; 'fallback' quando a IA falhou/expirou e foram usados modelos padrão.
+ */
+export type SuggestTarefasResponseSource =
+  (typeof SuggestTarefasResponseSource)[keyof typeof SuggestTarefasResponseSource];
+
+export const SuggestTarefasResponseSource = {
+  ai: "ai",
+  fallback: "fallback",
+} as const;
+
+export interface SuggestTarefasResponse {
+  /** Títulos de tarefas sugeridas (somente títulos). */
+  tarefas: string[];
+  /** 'ai' quando geradas pela IA; 'fallback' quando a IA falhou/expirou e foram usados modelos padrão. */
+  source: SuggestTarefasResponseSource;
+}
+
+export interface BatchCreateTarefasBody {
+  /** Títulos de tarefas top-level a criar em lote para a ação (sem responsável/datas/status). */
+  titulos: string[];
+}
+
 export interface CreateChecklistItemBody {
   texto: string;
   /** When true, notifies the action's responsável (email + web push) about the new checklist item, respecting their notification preferences. */
@@ -1060,6 +1091,8 @@ export interface CreateActionBody {
   pilarSlug?: string | null;
   /** @nullable */
   evidencias?: string | null;
+  /** Títulos de tarefas sugeridas a criar junto com a ação (somente títulos; sem responsável/datas/status). */
+  tarefasSugeridas?: string[];
 }
 
 export interface UpdateActionBody {
@@ -1174,6 +1207,8 @@ export interface GeneratedRiskPreview {
   nivel: GeneratedRiskPreviewNivel;
   acoesMitigadoras: string;
   perguntasFonte: PerguntaFonte[];
+  /** Tarefas de execução sugeridas pela IA para a ação derivada deste risco (somente títulos). */
+  tarefasSugeridas: string[];
 }
 
 export interface PreviewRisksResponse {
@@ -1193,6 +1228,11 @@ export interface CommitGeneratedRiskItem {
   acoesMitigadoras?: string | null;
   /** @nullable */
   perguntasFonte?: PerguntaFonte[] | null;
+  /**
+   * Títulos de tarefas a criar na ação gerada (quando criarCard=true). Editável pelo usuário antes do commit.
+   * @nullable
+   */
+  tarefasSugeridas?: string[] | null;
   criarCard: boolean;
 }
 

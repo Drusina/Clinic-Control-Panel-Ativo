@@ -1,5 +1,13 @@
-import { eq, and } from "drizzle-orm";
-import { db, delegacoesTable, risksTable, actionsTable, icsPlanTemplatesTable } from "@workspace/db";
+import { eq, and, inArray, isNull } from "drizzle-orm";
+import {
+  db,
+  delegacoesTable,
+  risksTable,
+  actionsTable,
+  icsPlanTemplatesTable,
+  acaoTarefasTable,
+} from "@workspace/db";
+import { createSuggestedTarefas } from "./tarefas.js";
 
 export const ICS_PILARES = [
   { slug: "estrategia", nome: "Estratégia e Governança", role: "CEO / Gestor Principal" },
@@ -78,7 +86,23 @@ export const ICS_RISKS = [
   },
 ];
 
-export const ICS_ACTIONS = [
+/**
+ * Modelo curado de uma ação ICS. `tarefas` são títulos de tarefas sugeridas
+ * (somente títulos; sem responsável/datas/status) criadas junto com a ação no
+ * seed. É opcional para que templates customizados (salvos em
+ * `ics_plan_templates.actions`) que ainda não tenham tarefas continuem válidos.
+ */
+export interface IcsActionTemplate {
+  titulo: string;
+  descricao: string;
+  pilarSlug: string;
+  prioridade: string;
+  coluna: string;
+  ordem: number;
+  tarefas?: string[];
+}
+
+export const ICS_ACTIONS: IcsActionTemplate[] = [
   {
     titulo: "Mapear processos operacionais da clínica",
     descricao: "Identificar e documentar todos os fluxos operacionais existentes como base para padronização.",
@@ -86,6 +110,12 @@ export const ICS_ACTIONS = [
     prioridade: "alta",
     coluna: "backlog",
     ordem: 1,
+    tarefas: [
+      "Listar os processos de cada setor",
+      "Entrevistar os responsáveis de cada área",
+      "Desenhar o fluxograma de cada processo",
+      "Validar o mapeamento com a equipe",
+    ],
   },
   {
     titulo: "Elaborar política de privacidade e proteção de dados (LGPD)",
@@ -94,6 +124,13 @@ export const ICS_ACTIONS = [
     prioridade: "alta",
     coluna: "backlog",
     ordem: 2,
+    tarefas: [
+      "Levantar os dados pessoais tratados pela clínica",
+      "Definir a base legal de cada tratamento",
+      "Redigir a política de privacidade",
+      "Nomear o encarregado (DPO)",
+      "Publicar e comunicar a política à equipe",
+    ],
   },
   {
     titulo: "Definir metas mensais de captação de pacientes",
@@ -102,6 +139,12 @@ export const ICS_ACTIONS = [
     prioridade: "media",
     coluna: "backlog",
     ordem: 3,
+    tarefas: [
+      "Levantar o histórico de captação dos últimos meses",
+      "Definir a meta mensal de novos pacientes",
+      "Escolher os indicadores de acompanhamento",
+      "Montar painel de acompanhamento das metas",
+    ],
   },
   {
     titulo: "Implantar controle de fluxo de caixa semanal",
@@ -110,6 +153,12 @@ export const ICS_ACTIONS = [
     prioridade: "alta",
     coluna: "todo",
     ordem: 1,
+    tarefas: [
+      "Escolher a planilha ou sistema de fluxo de caixa",
+      "Cadastrar contas a pagar e a receber",
+      "Definir a rotina semanal de atualização",
+      "Revisar o saldo projetado toda semana",
+    ],
   },
   {
     titulo: "Criar plano de cargos e salários",
@@ -118,6 +167,12 @@ export const ICS_ACTIONS = [
     prioridade: "media",
     coluna: "todo",
     ordem: 2,
+    tarefas: [
+      "Mapear cargos e funções atuais",
+      "Pesquisar faixas salariais de mercado",
+      "Definir faixas e critérios de progressão",
+      "Formalizar e comunicar o plano à equipe",
+    ],
   },
   {
     titulo: "Configurar sistema de gestão da clínica",
@@ -126,6 +181,12 @@ export const ICS_ACTIONS = [
     prioridade: "alta",
     coluna: "doing",
     ordem: 1,
+    tarefas: [
+      "Cadastrar usuários e permissões",
+      "Importar a base de pacientes",
+      "Parametrizar agenda e prontuário",
+      "Treinar a equipe no sistema",
+    ],
   },
   {
     titulo: "Estruturar reunião quinzenal de equipe",
@@ -134,6 +195,12 @@ export const ICS_ACTIONS = [
     prioridade: "media",
     coluna: "doing",
     ordem: 2,
+    tarefas: [
+      "Definir a pauta-padrão da reunião",
+      "Agendar a recorrência quinzenal",
+      "Definir o responsável pela ata",
+      "Acompanhar as pendências da reunião anterior",
+    ],
   },
   {
     titulo: "Revisar contratos com fornecedores",
@@ -142,6 +209,12 @@ export const ICS_ACTIONS = [
     prioridade: "media",
     coluna: "review",
     ordem: 1,
+    tarefas: [
+      "Levantar os contratos vigentes",
+      "Analisar prazos e condições de cada contrato",
+      "Identificar oportunidades de renegociação",
+      "Renegociar ou substituir fornecedores críticos",
+    ],
   },
   {
     titulo: "Realizar diagnóstico inicial ICS",
@@ -150,6 +223,12 @@ export const ICS_ACTIONS = [
     prioridade: "alta",
     coluna: "done",
     ordem: 1,
+    tarefas: [
+      "Agendar a aplicação do diagnóstico",
+      "Responder às perguntas do diagnóstico",
+      "Revisar os resultados por pilar",
+      "Priorizar os pilares críticos para o plano de ação",
+    ],
   },
 ];
 
@@ -188,94 +267,150 @@ export async function seedIcsData(clinicId: string, plan?: string | null): Promi
   delegacoes: number;
   risks: number;
   actions: number;
+  tarefas: number;
 }> {
   const template = await getTemplateForPlan(plan);
 
-  const [existingDelegacoes, existingRisks, existingActions] = await Promise.all([
-    db
+  // Tudo numa transação para manter "ação + tarefas curadas" atômico e
+  // idempotente. As queries rodam em sequência (a tx usa uma única conexão).
+  return db.transaction(async (tx) => {
+    const existingDelegacoes = await tx
       .select()
       .from(delegacoesTable)
-      .where(and(eq(delegacoesTable.clinicId, clinicId), eq(delegacoesTable.nivel, 1))),
-    db.select({ nome: risksTable.nome }).from(risksTable).where(eq(risksTable.clinicId, clinicId)),
-    db.select({ titulo: actionsTable.titulo }).from(actionsTable).where(eq(actionsTable.clinicId, clinicId)),
-  ]);
+      .where(and(eq(delegacoesTable.clinicId, clinicId), eq(delegacoesTable.nivel, 1)));
+    const existingRisks = await tx
+      .select({ nome: risksTable.nome })
+      .from(risksTable)
+      .where(eq(risksTable.clinicId, clinicId));
+    const existingActions = await tx
+      .select({
+        id: actionsTable.id,
+        titulo: actionsTable.titulo,
+        pilarSlug: actionsTable.pilarSlug,
+      })
+      .from(actionsTable)
+      .where(eq(actionsTable.clinicId, clinicId));
 
-  const existingSlugs = new Set(existingDelegacoes.map((d) => d.pilarSlug));
-  const existingRiskNames = new Set(existingRisks.map((r) => r.nome));
-  const existingActionTitles = new Set(existingActions.map((a) => a.titulo));
+    const existingSlugs = new Set(existingDelegacoes.map((d) => d.pilarSlug));
+    const existingRiskNames = new Set(existingRisks.map((r) => r.nome));
+    const existingActionTitles = new Set(existingActions.map((a) => a.titulo));
 
-  const pilaresToCreate = template.pilares.filter((p) => !existingSlugs.has(p.slug));
-  const risksToCreate = template.risks.filter((r) => !existingRiskNames.has(r.nome));
-  const actionsToCreate = template.actions.filter((a) => !existingActionTitles.has(a.titulo));
+    const pilaresToCreate = template.pilares.filter((p) => !existingSlugs.has(p.slug));
+    const risksToCreate = template.risks.filter((r) => !existingRiskNames.has(r.nome));
+    const actionsToCreate = template.actions.filter((a) => !existingActionTitles.has(a.titulo));
 
-  const now = new Date();
+    const now = new Date();
 
-  const [createdDelegacoes, createdRisks, createdActions] = await Promise.all([
-    pilaresToCreate.length > 0
-      ? db
-          .insert(delegacoesTable)
-          .values(
-            pilaresToCreate.map((p) => ({
-              clinicId,
-              pilarSlug: p.slug,
-              pilarNome: p.nome,
-              nivel: 1,
-              responsavelNome: p.role,
-              responsavelEmail: null,
-              prazo: null,
-              status: "pendente" as const,
-              questaoInicio: null,
-              questaoFim: null,
-              parentId: null,
-              observacoes: null,
-            }))
+    const createdDelegacoes =
+      pilaresToCreate.length > 0
+        ? await tx
+            .insert(delegacoesTable)
+            .values(
+              pilaresToCreate.map((p) => ({
+                clinicId,
+                pilarSlug: p.slug,
+                pilarNome: p.nome,
+                nivel: 1,
+                responsavelNome: p.role,
+                responsavelEmail: null,
+                prazo: null,
+                status: "pendente" as const,
+                questaoInicio: null,
+                questaoFim: null,
+                parentId: null,
+                observacoes: null,
+              }))
+            )
+            .returning()
+        : [];
+
+    const createdRisks =
+      risksToCreate.length > 0
+        ? await tx
+            .insert(risksTable)
+            .values(
+              risksToCreate.map((r) => ({
+                clinicId,
+                nome: r.nome,
+                descricao: r.descricao,
+                probabilidade: r.probabilidade,
+                impacto: r.impacto,
+                severidade: r.probabilidade * r.impacto,
+                pilarSlug: r.pilarSlug,
+                responsavel: null,
+                acoesMitigadoras: r.acoesMitigadoras,
+                status: "identificado" as const,
+              }))
+            )
+            .returning()
+        : [];
+
+    const createdActions =
+      actionsToCreate.length > 0
+        ? await tx
+            .insert(actionsTable)
+            .values(
+              actionsToCreate.map((a) => ({
+                clinicId,
+                titulo: a.titulo,
+                descricao: a.descricao,
+                pilarSlug: a.pilarSlug,
+                prioridade: a.prioridade,
+                coluna: a.coluna,
+                ordem: a.ordem,
+                responsavelNome: null,
+                prazo: null,
+                evidencias: null,
+                concluidoEm: a.coluna === "done" ? now : null,
+              }))
+            )
+            .returning()
+        : [];
+
+    // Anexa tarefas curadas. Match por titulo+pilarSlug; idempotente: só cria
+    // tarefas para ações (novas OU já existentes) que tenham ZERO tarefas
+    // top-level — assim re-rodar o seed nunca duplica.
+    const tarefasByKey = new Map<string, string[]>();
+    for (const a of template.actions) {
+      if (a.tarefas && a.tarefas.length > 0) {
+        tarefasByKey.set(`${a.titulo}__${a.pilarSlug ?? ""}`, a.tarefas);
+      }
+    }
+
+    const candidates: { id: string; titles: string[] }[] = [];
+    for (const act of [...existingActions, ...createdActions]) {
+      const titles = tarefasByKey.get(`${act.titulo}__${act.pilarSlug ?? ""}`);
+      if (titles) candidates.push({ id: act.id, titles });
+    }
+
+    let tarefasCreated = 0;
+    if (candidates.length > 0) {
+      const withTarefas = await tx
+        .selectDistinct({ acaoId: acaoTarefasTable.acaoId })
+        .from(acaoTarefasTable)
+        .where(
+          and(
+            inArray(
+              acaoTarefasTable.acaoId,
+              candidates.map((c) => c.id)
+            ),
+            isNull(acaoTarefasTable.parentTarefaId)
           )
-          .returning()
-      : Promise.resolve([]),
-    risksToCreate.length > 0
-      ? db
-          .insert(risksTable)
-          .values(
-            risksToCreate.map((r) => ({
-              clinicId,
-              nome: r.nome,
-              descricao: r.descricao,
-              probabilidade: r.probabilidade,
-              impacto: r.impacto,
-              severidade: r.probabilidade * r.impacto,
-              pilarSlug: r.pilarSlug,
-              responsavel: null,
-              acoesMitigadoras: r.acoesMitigadoras,
-              status: "identificado" as const,
-            }))
-          )
-          .returning()
-      : Promise.resolve([]),
-    actionsToCreate.length > 0
-      ? db
-          .insert(actionsTable)
-          .values(
-            actionsToCreate.map((a) => ({
-              clinicId,
-              titulo: a.titulo,
-              descricao: a.descricao,
-              pilarSlug: a.pilarSlug,
-              prioridade: a.prioridade,
-              coluna: a.coluna,
-              ordem: a.ordem,
-              responsavelNome: null,
-              prazo: null,
-              evidencias: null,
-              concluidoEm: a.coluna === "done" ? now : null,
-            }))
-          )
-          .returning()
-      : Promise.resolve([]),
-  ]);
+        );
+      const actionIdsWithTarefas = new Set(withTarefas.map((r) => r.acaoId));
 
-  return {
-    delegacoes: createdDelegacoes.length,
-    risks: createdRisks.length,
-    actions: createdActions.length,
-  };
+      for (const c of candidates) {
+        if (actionIdsWithTarefas.has(c.id)) continue;
+        const created = await createSuggestedTarefas(tx, c.id, c.titles);
+        tarefasCreated += created.length;
+      }
+    }
+
+    return {
+      delegacoes: createdDelegacoes.length,
+      risks: createdRisks.length,
+      actions: createdActions.length,
+      tarefas: tarefasCreated,
+    };
+  });
 }

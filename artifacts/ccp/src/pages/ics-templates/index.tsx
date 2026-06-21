@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +18,9 @@ import {
   Users,
   CheckCircle2,
   AlertCircle,
+  ListChecks,
+  Plus,
+  X,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -51,6 +55,7 @@ interface IcsAction {
   prioridade: string;
   coluna: string;
   ordem: number;
+  tarefas?: string[];
 }
 
 interface PlanTemplate {
@@ -96,6 +101,8 @@ interface PlanEditorState {
   risks: Set<string>;
   actions: Set<string>;
   pilares: Set<string>;
+  /** Curated tarefa titles per action titulo (editable in the library). */
+  actionTarefas: Record<string, string[]>;
 }
 
 export default function IcsTemplatesPage() {
@@ -112,9 +119,9 @@ export default function IcsTemplatesPage() {
     pilares: IcsPilar[];
   } | null>(null);
   const [editorState, setEditorState] = useState<Record<Plan, PlanEditorState>>({
-    starter: { risks: new Set(), actions: new Set(), pilares: new Set() },
-    pro: { risks: new Set(), actions: new Set(), pilares: new Set() },
-    enterprise: { risks: new Set(), actions: new Set(), pilares: new Set() },
+    starter: { risks: new Set(), actions: new Set(), pilares: new Set(), actionTarefas: {} },
+    pro: { risks: new Set(), actions: new Set(), pilares: new Set(), actionTarefas: {} },
+    enterprise: { risks: new Set(), actions: new Set(), pilares: new Set(), actionTarefas: {} },
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -162,17 +169,26 @@ export default function IcsTemplatesPage() {
       setTemplates(byPlan);
 
       const newEditorState: Record<Plan, PlanEditorState> = {
-        starter: { risks: new Set(), actions: new Set(), pilares: new Set() },
-        pro: { risks: new Set(), actions: new Set(), pilares: new Set() },
-        enterprise: { risks: new Set(), actions: new Set(), pilares: new Set() },
+        starter: { risks: new Set(), actions: new Set(), pilares: new Set(), actionTarefas: {} },
+        pro: { risks: new Set(), actions: new Set(), pilares: new Set(), actionTarefas: {} },
+        enterprise: { risks: new Set(), actions: new Set(), pilares: new Set(), actionTarefas: {} },
       };
+      const defaultTarefas: Record<string, string[]> = {};
+      for (const a of globalDefaults?.actions ?? []) {
+        defaultTarefas[a.titulo] = [...(a.tarefas ?? [])];
+      }
       for (const plan of ["starter", "pro", "enterprise"] as Plan[]) {
         const t = byPlan[plan];
         if (t) {
+          const actionTarefas: Record<string, string[]> = { ...defaultTarefas };
+          for (const a of t.actions) {
+            actionTarefas[a.titulo] = [...(a.tarefas ?? [])];
+          }
           newEditorState[plan] = {
             risks: new Set(t.risks.map((r) => r.nome)),
             actions: new Set(t.actions.map((a) => a.titulo)),
             pilares: new Set(t.pilares.map((p) => p.slug)),
+            actionTarefas,
           };
         }
       }
@@ -212,6 +228,49 @@ export default function IcsTemplatesPage() {
     });
   }
 
+  function setActionTarefa(plan: Plan, titulo: string, index: number, value: string) {
+    setEditorState((prev) => {
+      const current = prev[plan].actionTarefas[titulo] ?? [];
+      const next = current.map((t, i) => (i === index ? value : t));
+      return {
+        ...prev,
+        [plan]: {
+          ...prev[plan],
+          actionTarefas: { ...prev[plan].actionTarefas, [titulo]: next },
+        },
+      };
+    });
+  }
+
+  function addActionTarefa(plan: Plan, titulo: string) {
+    setEditorState((prev) => {
+      const current = prev[plan].actionTarefas[titulo] ?? [];
+      return {
+        ...prev,
+        [plan]: {
+          ...prev[plan],
+          actionTarefas: { ...prev[plan].actionTarefas, [titulo]: [...current, ""] },
+        },
+      };
+    });
+  }
+
+  function removeActionTarefa(plan: Plan, titulo: string, index: number) {
+    setEditorState((prev) => {
+      const current = prev[plan].actionTarefas[titulo] ?? [];
+      return {
+        ...prev,
+        [plan]: {
+          ...prev[plan],
+          actionTarefas: {
+            ...prev[plan].actionTarefas,
+            [titulo]: current.filter((_, i) => i !== index),
+          },
+        },
+      };
+    });
+  }
+
   function togglePilar(plan: Plan, slug: string) {
     setEditorState((prev) => {
       const current = new Set(prev[plan].pilares);
@@ -230,7 +289,14 @@ export default function IcsTemplatesPage() {
     try {
       const state = editorState[plan];
       const risks = defaults.risks.filter((r) => state.risks.has(r.nome));
-      const actions = defaults.actions.filter((a) => state.actions.has(a.titulo));
+      const actions = defaults.actions
+        .filter((a) => state.actions.has(a.titulo))
+        .map((a) => {
+          const tarefas = (state.actionTarefas[a.titulo] ?? a.tarefas ?? [])
+            .map((t) => t.trim())
+            .filter(Boolean);
+          return { ...a, tarefas };
+        });
       const pilares = defaults.pilares.filter((p) => state.pilares.has(p.slug));
 
       const res = await fetch(`${BASE}/api/admin/ics-templates/${plan}`, {
@@ -425,6 +491,7 @@ export default function IcsTemplatesPage() {
                     {defaults.actions.map((action, i) => {
                       const { label, cls } = prioridadeLabel(action.prioridade);
                       const checked = state.actions.has(action.titulo);
+                      const tarefas = state.actionTarefas[action.titulo] ?? action.tarefas ?? [];
                       return (
                         <div key={i}>
                           {i > 0 && <Separator className="mb-3" />}
@@ -447,6 +514,57 @@ export default function IcsTemplatesPage() {
                               </div>
                             </Label>
                           </div>
+                          {checked && (
+                            <div className="ml-7 mt-2 rounded-md border border-dashed bg-muted/30 p-2 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                                  <ListChecks className="h-3 w-3 text-indigo-600" />
+                                  Tarefas sugeridas ({tarefas.length})
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 text-[11px] px-1.5"
+                                  onClick={() => addActionTarefa(plan.id, action.titulo)}
+                                >
+                                  <Plus className="h-3 w-3 mr-0.5" /> Adicionar
+                                </Button>
+                              </div>
+                              {tarefas.length === 0 ? (
+                                <p className="text-[11px] text-muted-foreground">
+                                  Sem tarefas. A ação nascerá sem tarefas sugeridas neste plano.
+                                </p>
+                              ) : (
+                                <ul className="space-y-1">
+                                  {tarefas.map((t, j) => (
+                                    <li key={j} className="flex items-center gap-1.5">
+                                      <Input
+                                        value={t}
+                                        placeholder="Título da tarefa"
+                                        onChange={(e) =>
+                                          setActionTarefa(plan.id, action.titulo, j, e.target.value)
+                                        }
+                                        className="h-7 text-xs"
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                                        onClick={() =>
+                                          removeActionTarefa(plan.id, action.titulo, j)
+                                        }
+                                        title="Remover tarefa"
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

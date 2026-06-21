@@ -5,6 +5,7 @@ import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-a
 import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 import { ClinicSelectorList } from "@/components/clinic-selector-list";
 import ActionDetail from "@/components/acao/action-detail";
+import SuggestedTarefasEditor from "@/components/acao/suggested-tarefas-editor";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -299,6 +300,7 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
   const [filterPrioridade, setFilterPrioridade] = useState("all");
 
   const [detailAction, setDetailAction] = useState<Action | null>(null);
+  const [tarefasSugeridas, setTarefasSugeridas] = useState<string[]>([]);
 
   const [form, setForm] = useState({
     titulo: "",
@@ -360,11 +362,13 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
   const openCreate = () => {
     setEditingAction(null);
     setForm({ titulo: "", descricao: "", responsavelNome: "", dataInicio: "", prazo: "", prioridade: "media", pilarSlug: "", evidencias: "", coluna: "backlog" });
+    setTarefasSugeridas([]);
     setDialogOpen(true);
   };
 
   const openEdit = (action: Action) => {
     setEditingAction(action);
+    setTarefasSugeridas([]);
     setForm({
       titulo: action.titulo,
       descricao: action.descricao ?? "",
@@ -405,7 +409,8 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
         }
       );
     } else {
-      createMut.mutate(payload);
+      const sugeridas = tarefasSugeridas.map((t) => t.trim()).filter(Boolean);
+      createMut.mutate({ ...payload, tarefasSugeridas: sugeridas.length ? sugeridas : undefined });
     }
   };
 
@@ -642,6 +647,16 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
                 </SelectContent>
               </Select>
             </div>
+            {!editingAction && (
+              <SuggestedTarefasEditor
+                clinicId={clinicId}
+                titulo={form.titulo}
+                descricao={form.descricao}
+                pilarSlug={form.pilarSlug || undefined}
+                value={tarefasSugeridas}
+                onChange={setTarefasSugeridas}
+              />
+            )}
           </div>
           <DialogFooter className="flex-row justify-between">
             {editingAction ? (

@@ -25,8 +25,12 @@ import {
   CreateTarefaBody,
   UpdateTarefaBody,
   ListClinicTarefasQueryParams,
+  SuggestActionTarefasBody,
+  BatchCreateTarefasBody,
 } from "@workspace/api-zod";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
+import { createSuggestedTarefas, sanitizeTarefaTitles } from "../lib/tarefas.js";
+import { suggestTarefasForAction } from "../lib/tarefa-suggester.js";
 import {
   sendEmail,
   buildActionUpdateEmail,
@@ -254,23 +258,55 @@ router.post("/clinics/:clinicId/actions", async (req, res): Promise<void> => {
     return;
   }
 
-  const [action] = await db
-    .insert(actionsTable)
-    .values({
-      clinicId,
-      titulo: parsed.data.titulo,
-      descricao: parsed.data.descricao ?? null,
-      responsavelNome: parsed.data.responsavelNome ?? null,
-      dataInicio: parsed.data.dataInicio ?? null,
-      prazo: parsed.data.prazo ?? null,
-      prioridade: parsed.data.prioridade ?? null,
-      pilarSlug: parsed.data.pilarSlug ?? null,
-      evidencias: parsed.data.evidencias ?? null,
-      coluna: parsed.data.coluna ?? "backlog",
-    })
-    .returning();
+  // Tarefas sugeridas (somente títulos) são opcionais e criadas junto com a ação
+  // na mesma transação para manter "ação + tarefas" atômico.
+  const tarefasSugeridas = sanitizeTarefaTitles(parsed.data.tarefasSugeridas);
 
-  res.status(201).json(mapAction(action));
+  const action = await db.transaction(async (tx) => {
+    const [a] = await tx
+      .insert(actionsTable)
+      .values({
+        clinicId,
+        titulo: parsed.data.titulo,
+        descricao: parsed.data.descricao ?? null,
+        responsavelNome: parsed.data.responsavelNome ?? null,
+        dataInicio: parsed.data.dataInicio ?? null,
+        prazo: parsed.data.prazo ?? null,
+        prioridade: parsed.data.prioridade ?? null,
+        pilarSlug: parsed.data.pilarSlug ?? null,
+        evidencias: parsed.data.evidencias ?? null,
+        coluna: parsed.data.coluna ?? "backlog",
+      })
+      .returning();
+    if (tarefasSugeridas.length > 0) {
+      await createSuggestedTarefas(tx, a.id, tarefasSugeridas);
+    }
+    return a;
+  });
+
+  res.status(201).json(
+    mapAction(action, { total: tarefasSugeridas.length, concluidas: 0 }),
+  );
+});
+
+/**
+ * Suggest execution-task titles for a (not yet created) action. Uses the AI with
+ * a timeout and a curated fallback so it never blocks the manager. Returns only
+ * titles plus the `source` ("ai" | "fallback"). Nothing is persisted here.
+ * Auth is the mount-level requireClinicAccess on /clinics/:clinicId/...
+ */
+router.post("/clinics/:clinicId/actions/suggest-tarefas", async (req, res): Promise<void> => {
+  const parsed = SuggestActionTarefasBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const result = await suggestTarefasForAction({
+    titulo: parsed.data.titulo,
+    descricao: parsed.data.descricao ?? null,
+    pilarSlug: parsed.data.pilarSlug ?? null,
+  });
+  res.json(result);
 });
 
 router.patch("/actions/:id", async (req, res): Promise<void> => {
@@ -648,6 +684,33 @@ router.post("/actions/:id/tarefas", async (req, res): Promise<void> => {
   // Top-level tarefas carry an (initially empty) subtarefas array; subtarefas
   // themselves omit it.
   res.status(201).json(mapTarefa(tarefa, parentTarefaId ? undefined : []));
+});
+
+/**
+ * Create multiple top-level tarefas (titles only) for an action in one call —
+ * used when the manager accepts/edits AI-suggested tasks for an existing action.
+ * Sanitizes/dedups titles and appends them after the action's current top-level
+ * tarefas. Never sets responsável/datas/status.
+ */
+router.post("/actions/:id/tarefas/batch", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = BatchCreateTarefasBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  const created = await db.transaction((tx) =>
+    createSuggestedTarefas(tx, id, parsed.data.titulos),
+  );
+
+  res.status(201).json(created.map((t) => mapTarefa(t, [])));
 });
 
 router.patch("/actions/:id/tarefas/:tarefaId", async (req, res): Promise<void> => {

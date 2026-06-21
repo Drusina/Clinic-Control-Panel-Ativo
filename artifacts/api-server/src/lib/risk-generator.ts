@@ -3,6 +3,10 @@ import { eq } from "drizzle-orm";
 import { db, diagnosticsTable, perguntasTable, respostasTable } from "@workspace/db";
 import type { PerguntaFonte } from "@workspace/db";
 import { calcAnswerValue } from "./score-calculator";
+import { sanitizeTarefaTitles } from "./tarefas.js";
+
+/** Hard timeout for the risk-generation AI call so a hung request never blocks preview. */
+const RISK_AI_TIMEOUT_MS = 45_000;
 
 export const PILAR_NOMES: Record<string, string> = {
   estrategia: "Estratégia e Governança",
@@ -38,6 +42,8 @@ export type GeneratedRisk = {
   nivel: "baixo" | "medio" | "alto";
   acoesMitigadoras: string;
   perguntasFonte: PerguntaFonte[];
+  /** Títulos de tarefas de execução sugeridas pela IA (somente títulos). */
+  tarefasSugeridas: string[];
 };
 
 export function severidadeToNivel(sev: number): "baixo" | "medio" | "alto" {
@@ -105,6 +111,7 @@ type RawRisk = {
   impacto: number;
   acoesMitigadoras: string;
   perguntaIndices: number[];
+  tarefasSugeridas?: unknown;
 };
 
 function clampScore(n: unknown): number {
@@ -160,7 +167,8 @@ Responda EXCLUSIVAMENTE com um JSON válido neste formato (sem markdown, sem tex
       "probabilidade": 4,
       "impacto": 5,
       "acoesMitigadoras": "Ações concretas para mitigar o risco em 1-2 frases",
-      "perguntaIndices": [0, 3]
+      "perguntaIndices": [0, 3],
+      "tarefasSugeridas": ["Tarefa concreta 1", "Tarefa concreta 2", "Tarefa concreta 3"]
     }
   ]
 }
@@ -170,14 +178,18 @@ Regras:
 - pilarSlug deve ser exatamente o slug indicado no pilar de origem das perguntas.
 - perguntaIndices deve conter apenas índices que aparecem na lista acima, e cada risco deve referenciar pelo menos um índice.
 - probabilidade e impacto são inteiros de 1 a 5. Quanto mais pontos fracos e mais graves, maiores os valores.
+- tarefasSugeridas: liste de 3 a 5 tarefas de execução curtas e acionáveis (apenas o título da tarefa, no infinitivo, ex.: "Implantar planilha de fluxo de caixa") que a clínica deve fazer para tratar o risco. NÃO inclua responsável, datas nem prazos — somente o título da tarefa.
 - Escreva em português do Brasil, linguagem de negócio clara para um gestor não-técnico.`;
 
   const client = new Anthropic({ apiKey });
-  const message = await client.messages.create({
-    model: "claude-opus-4-5",
-    max_tokens: 4096,
-    messages: [{ role: "user", content: prompt }],
-  });
+  const message = await client.messages.create(
+    {
+      model: "claude-opus-4-5",
+      max_tokens: 4096,
+      messages: [{ role: "user", content: prompt }],
+    },
+    { timeout: RISK_AI_TIMEOUT_MS },
+  );
 
   const content = message.content[0];
   if (!content || content.type !== "text") {
@@ -229,6 +241,8 @@ Regras:
       nivel: severidadeToNivel(severidade),
       acoesMitigadoras: String(raw.acoesMitigadoras ?? "").trim(),
       perguntasFonte,
+      // Parse leniente: tarefas inválidas/ausentes viram [] e nunca rejeitam o risco.
+      tarefasSugeridas: sanitizeTarefaTitles(raw.tarefasSugeridas),
     });
   }
 

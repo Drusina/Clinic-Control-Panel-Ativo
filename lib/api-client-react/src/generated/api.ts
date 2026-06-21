@@ -26,6 +26,7 @@ import type {
   Activity,
   ApplySocietaryBody,
   ApplySocietaryResponse,
+  BatchCreateTarefasBody,
   BatchSaveRespostasBody,
   BulkInviteTeamMembers200,
   BulkInviteTeamMembersBody,
@@ -96,6 +97,8 @@ import type {
   SocietaryDoc,
   Socio,
   StatusHistory,
+  SuggestTarefasBody,
+  SuggestTarefasResponse,
   TeamMember,
   Trilha,
   TrilhaEtapaUpdate,
@@ -4081,6 +4084,98 @@ export const useCreateAction = <
 };
 
 /**
+ * Returns a short list of suggested tarefa titles for a (not yet created) action. Uses AI with a timeout; on any failure returns curated fallback titles. Never sets responsável, datas or status — only titles.
+
+ * @summary Suggest execution tasks (titles only) for an action via AI, without persisting
+ */
+export const getSuggestActionTarefasUrl = (clinicId: string) => {
+  return `/api/clinics/${clinicId}/actions/suggest-tarefas`;
+};
+
+export const suggestActionTarefas = async (
+  clinicId: string,
+  suggestTarefasBody: SuggestTarefasBody,
+  options?: RequestInit,
+): Promise<SuggestTarefasResponse> => {
+  return customFetch<SuggestTarefasResponse>(
+    getSuggestActionTarefasUrl(clinicId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(suggestTarefasBody),
+    },
+  );
+};
+
+export const getSuggestActionTarefasMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof suggestActionTarefas>>,
+    TError,
+    { clinicId: string; data: BodyType<SuggestTarefasBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof suggestActionTarefas>>,
+  TError,
+  { clinicId: string; data: BodyType<SuggestTarefasBody> },
+  TContext
+> => {
+  const mutationKey = ["suggestActionTarefas"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof suggestActionTarefas>>,
+    { clinicId: string; data: BodyType<SuggestTarefasBody> }
+  > = (props) => {
+    const { clinicId, data } = props ?? {};
+
+    return suggestActionTarefas(clinicId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SuggestActionTarefasMutationResult = NonNullable<
+  Awaited<ReturnType<typeof suggestActionTarefas>>
+>;
+export type SuggestActionTarefasMutationBody = BodyType<SuggestTarefasBody>;
+export type SuggestActionTarefasMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Suggest execution tasks (titles only) for an action via AI, without persisting
+ */
+export const useSuggestActionTarefas = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof suggestActionTarefas>>,
+    TError,
+    { clinicId: string; data: BodyType<SuggestTarefasBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof suggestActionTarefas>>,
+  TError,
+  { clinicId: string; data: BodyType<SuggestTarefasBody> },
+  TContext
+> => {
+  return useMutation(getSuggestActionTarefasMutationOptions(options));
+};
+
+/**
  * @summary List tarefas across a clinic's action plan (for dashboards/aggregation)
  */
 export const getListClinicTarefasUrl = (
@@ -5325,6 +5420,95 @@ export const useCreateTarefa = <
   TContext
 > => {
   return useMutation(getCreateTarefaMutationOptions(options));
+};
+
+/**
+ * Bulk-creates top-level tarefas from a list of titles, appended after any existing tarefas. Only titulo/ordem are set (no responsável/datas/status).
+
+ * @summary Create multiple top-level tarefas (titles only) for an action in one call
+ */
+export const getBatchCreateTarefasUrl = (id: string) => {
+  return `/api/actions/${id}/tarefas/batch`;
+};
+
+export const batchCreateTarefas = async (
+  id: string,
+  batchCreateTarefasBody: BatchCreateTarefasBody,
+  options?: RequestInit,
+): Promise<AcaoTarefa[]> => {
+  return customFetch<AcaoTarefa[]>(getBatchCreateTarefasUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(batchCreateTarefasBody),
+  });
+};
+
+export const getBatchCreateTarefasMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof batchCreateTarefas>>,
+    TError,
+    { id: string; data: BodyType<BatchCreateTarefasBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof batchCreateTarefas>>,
+  TError,
+  { id: string; data: BodyType<BatchCreateTarefasBody> },
+  TContext
+> => {
+  const mutationKey = ["batchCreateTarefas"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof batchCreateTarefas>>,
+    { id: string; data: BodyType<BatchCreateTarefasBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return batchCreateTarefas(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BatchCreateTarefasMutationResult = NonNullable<
+  Awaited<ReturnType<typeof batchCreateTarefas>>
+>;
+export type BatchCreateTarefasMutationBody = BodyType<BatchCreateTarefasBody>;
+export type BatchCreateTarefasMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create multiple top-level tarefas (titles only) for an action in one call
+ */
+export const useBatchCreateTarefas = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof batchCreateTarefas>>,
+    TError,
+    { id: string; data: BodyType<BatchCreateTarefasBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof batchCreateTarefas>>,
+  TError,
+  { id: string; data: BodyType<BatchCreateTarefasBody> },
+  TContext
+> => {
+  return useMutation(getBatchCreateTarefasMutationOptions(options));
 };
 
 /**

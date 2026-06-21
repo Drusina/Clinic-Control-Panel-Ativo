@@ -975,6 +975,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/Action"
 
+  /clinics/{clinicId}/actions/suggest-tarefas:
+    post:
+      operationId: suggestActionTarefas
+      tags: [actions]
+      summary: Suggest execution tasks (titles only) for an action via AI, without persisting
+      description: >
+        Returns a short list of suggested tarefa titles for a (not yet created)
+        action. Uses AI with a timeout; on any failure returns curated fallback
+        titles. Never sets responsável, datas or status — only titles.
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuggestTarefasBody"
+      responses:
+        "200":
+          description: Suggested tarefa titles (AI or curated fallback)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuggestTarefasResponse"
+
   /clinics/{clinicId}/tarefas:
     get:
       operationId: listClinicTarefas
@@ -1301,6 +1330,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AcaoTarefa"
+
+  /actions/{id}/tarefas/batch:
+    post:
+      operationId: batchCreateTarefas
+      tags: [actions]
+      summary: Create multiple top-level tarefas (titles only) for an action in one call
+      description: >
+        Bulk-creates top-level tarefas from a list of titles, appended after any
+        existing tarefas. Only titulo/ordem are set (no responsável/datas/status).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchCreateTarefasBody"
+      responses:
+        "201":
+          description: Created tarefas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AcaoTarefa"
 
   /actions/{id}/tarefas/{tarefaId}:
     patch:
@@ -3843,6 +3902,45 @@ components:
         ordem:
           type: ["integer", "null"]
 
+    SuggestTarefasBody:
+      type: object
+      properties:
+        titulo:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        pilarSlug:
+          type: ["string", "null"]
+      required:
+        - titulo
+
+    SuggestTarefasResponse:
+      type: object
+      properties:
+        tarefas:
+          type: array
+          description: Títulos de tarefas sugeridas (somente títulos).
+          items:
+            type: string
+        source:
+          type: string
+          enum: [ai, fallback]
+          description: "'ai' quando geradas pela IA; 'fallback' quando a IA falhou/expirou e foram usados modelos padrão."
+      required:
+        - tarefas
+        - source
+
+    BatchCreateTarefasBody:
+      type: object
+      properties:
+        titulos:
+          type: array
+          description: Títulos de tarefas top-level a criar em lote para a ação (sem responsável/datas/status).
+          items:
+            type: string
+      required:
+        - titulos
+
     CreateChecklistItemBody:
       type: object
       properties:
@@ -3905,6 +4003,11 @@ components:
           type: ["string", "null"]
         evidencias:
           type: ["string", "null"]
+        tarefasSugeridas:
+          type: array
+          description: Títulos de tarefas sugeridas a criar junto com a ação (somente títulos; sem responsável/datas/status).
+          items:
+            type: string
       required:
         - titulo
 
@@ -4042,6 +4145,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PerguntaFonte"
+        tarefasSugeridas:
+          type: array
+          description: Tarefas de execução sugeridas pela IA para a ação derivada deste risco (somente títulos).
+          items:
+            type: string
       required:
         - pilarSlug
         - nome
@@ -4052,6 +4160,7 @@ components:
         - nivel
         - acoesMitigadoras
         - perguntasFonte
+        - tarefasSugeridas
 
     PreviewRisksResponse:
       type: object
@@ -4085,6 +4194,11 @@ components:
           type: ["array", "null"]
           items:
             $ref: "#/components/schemas/PerguntaFonte"
+        tarefasSugeridas:
+          type: ["array", "null"]
+          description: Títulos de tarefas a criar na ação gerada (quando criarCard=true). Editável pelo usuário antes do commit.
+          items:
+            type: string
         criarCard:
           type: boolean
       required:

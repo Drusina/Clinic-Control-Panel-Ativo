@@ -25,6 +25,10 @@ const IcsActionSchema = z.object({
   prioridade: z.enum(["alta", "media", "baixa"]),
   coluna: z.enum(["backlog", "todo", "doing", "review", "done"]),
   ordem: z.number().int().min(1),
+  // Títulos de tarefas sugeridas criadas junto com a ação no seed (somente
+  // títulos; sem responsável/datas/status). Opcional p/ compat com templates
+  // antigos sem tarefas.
+  tarefas: z.array(z.string()).optional(),
 });
 
 const IcsPilarSchema = z.object({

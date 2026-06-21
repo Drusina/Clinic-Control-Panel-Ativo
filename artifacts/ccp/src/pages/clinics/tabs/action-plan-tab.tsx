@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, Loader2, Calendar, CalendarClock, User, MoreVertical, ListChecks } from "lucide-react";
 import AgendaModule from "@/components/agenda/agenda-module";
 import ActionDetail from "@/components/acao/action-detail";
+import SuggestedTarefasEditor from "@/components/acao/suggested-tarefas-editor";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -64,6 +65,7 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
 
   const [agendaAction, setAgendaAction] = useState<Action | null>(null);
   const [detailAction, setDetailAction] = useState<Action | null>(null);
+  const [tarefasSugeridas, setTarefasSugeridas] = useState<string[]>([]);
 
   const { data: actions, isLoading } = useListActions(clinicId, undefined, {
     query: { enabled: !!clinicId, queryKey: getListActionsQueryKey(clinicId) },
@@ -132,6 +134,7 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
         coluna: "backlog",
       });
     }
+    setTarefasSugeridas([]);
     setIsDialogOpen(true);
   };
 
@@ -149,8 +152,12 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
         }
       );
     } else {
+      const sugeridas = tarefasSugeridas.map((t) => t.trim()).filter(Boolean);
       createAction.mutate(
-        { clinicId, data: values as any },
+        {
+          clinicId,
+          data: { ...values, tarefasSugeridas: sugeridas.length ? sugeridas : undefined } as any,
+        },
         {
           onSuccess: () => {
             toast({ title: "Ação criada" });
@@ -411,6 +418,15 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                   )}
                 />
               </div>
+              {!editingAction && (
+                <SuggestedTarefasEditor
+                  clinicId={clinicId}
+                  titulo={form.watch("titulo")}
+                  descricao={form.watch("descricao")}
+                  value={tarefasSugeridas}
+                  onChange={setTarefasSugeridas}
+                />
+              )}
               <DialogFooter className="pt-4">
                 <Button type="submit" disabled={createAction.isPending || updateAction.isPending}>
                   Salvar

@@ -1330,6 +1330,38 @@ export const CreateActionBody = zod.object({
   coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
   pilarSlug: zod.string().nullish(),
   evidencias: zod.string().nullish(),
+  tarefasSugeridas: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Títulos de tarefas sugeridas a criar junto com a ação (somente títulos; sem responsável\/datas\/status).",
+    ),
+});
+
+/**
+ * Returns a short list of suggested tarefa titles for a (not yet created) action. Uses AI with a timeout; on any failure returns curated fallback titles. Never sets responsável, datas or status — only titles.
+
+ * @summary Suggest execution tasks (titles only) for an action via AI, without persisting
+ */
+export const SuggestActionTarefasParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const SuggestActionTarefasBody = zod.object({
+  titulo: zod.string(),
+  descricao: zod.string().nullish(),
+  pilarSlug: zod.string().nullish(),
+});
+
+export const SuggestActionTarefasResponse = zod.object({
+  tarefas: zod
+    .array(zod.string())
+    .describe("Títulos de tarefas sugeridas (somente títulos)."),
+  source: zod
+    .enum(["ai", "fallback"])
+    .describe(
+      "'ai' quando geradas pela IA; 'fallback' quando a IA falhou\/expirou e foram usados modelos padrão.",
+    ),
 });
 
 /**
@@ -1729,6 +1761,23 @@ export const CreateTarefaBody = zod.object({
 });
 
 /**
+ * Bulk-creates top-level tarefas from a list of titles, appended after any existing tarefas. Only titulo/ordem are set (no responsável/datas/status).
+
+ * @summary Create multiple top-level tarefas (titles only) for an action in one call
+ */
+export const BatchCreateTarefasParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const BatchCreateTarefasBody = zod.object({
+  titulos: zod
+    .array(zod.string())
+    .describe(
+      "Títulos de tarefas top-level a criar em lote para a ação (sem responsável\/datas\/status).",
+    ),
+});
+
+/**
  * @summary Update a tarefa (status, responsável, datas, título, ordem)
  */
 export const UpdateTarefaParams = zod.object({
@@ -2114,6 +2163,11 @@ export const PreviewRisksFromDiagnosticResponse = zod.object({
           pilarSlug: zod.string().nullish(),
         }),
       ),
+      tarefasSugeridas: zod
+        .array(zod.string())
+        .describe(
+          "Tarefas de execução sugeridas pela IA para a ação derivada deste risco (somente títulos).",
+        ),
     }),
   ),
 });
@@ -2144,6 +2198,12 @@ export const CommitRisksFromDiagnosticBody = zod.object({
           }),
         )
         .nullish(),
+      tarefasSugeridas: zod
+        .array(zod.string())
+        .nullish()
+        .describe(
+          "Títulos de tarefas a criar na ação gerada (quando criarCard=true). Editável pelo usuário antes do commit.",
+        ),
       criarCard: zod.boolean(),
     }),
   ),
