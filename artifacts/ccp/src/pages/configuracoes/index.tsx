@@ -2,9 +2,10 @@ import { Link, Redirect } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bell, KeyRound, Loader2, Mail, ShieldCheck, User } from "lucide-react";
+import { Bell, KeyRound, Loader2, Mail, ShieldCheck, User, Wrench } from "lucide-react";
 import { useCurrentRole } from "@/hooks/use-auth";
 import { NotificationPreferencesPanel } from "@/components/notification-preferences-panel";
+import { MaintenanceTab } from "./maintenance-tab";
 
 function roleLabel(role: string | null | undefined): string {
   if (role === "super_admin") return "Super administrador";
@@ -28,6 +29,7 @@ export default function ConfiguracoesPage() {
   }
 
   const isTeamMember = user.role === "team_member";
+  const isSuperAdmin = user.role === "super_admin";
 
   return (
     <div className="space-y-6">
@@ -48,6 +50,12 @@ export default function ConfiguracoesPage() {
             <User className="h-4 w-4" />
             Dados da conta
           </TabsTrigger>
+          {isSuperAdmin && (
+            <TabsTrigger value="manutencao" className="gap-2" data-testid="tab-manutencao">
+              <Wrench className="h-4 w-4" />
+              Manutenção
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="notificacoes">
@@ -133,6 +141,12 @@ export default function ConfiguracoesPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isSuperAdmin && (
+          <TabsContent value="manutencao">
+            <MaintenanceTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

@@ -51,6 +51,7 @@ import respondentRouter from "./respondent";
 import trilhaRouter from "./trilha";
 import compromissosRouter from "./compromissos";
 import { clinicLogoPublicRouter, clinicLogoScopedRouter } from "./clinic-logo";
+import maintenanceRouter from "./maintenance";
 
 const router: IRouter = Router();
 
@@ -143,5 +144,6 @@ router.use(requireSuperAdmin, icsTemplatesRouter);
 router.use(requireSuperAdmin, serverConfigRouter);
 router.use(requireSuperAdmin, documentAccessLogRouter);
 router.use(requireSuperAdmin, cnpjRouter);
+router.use(requireSuperAdmin, maintenanceRouter);
 
 export default router;

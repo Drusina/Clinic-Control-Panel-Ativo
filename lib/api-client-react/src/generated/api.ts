@@ -91,6 +91,7 @@ import type {
   PerguntasImportResult,
   PipelineItem,
   PreviewRisksResponse,
+  RegenerateAllTarefasResponse,
   RegenerateTarefasResponse,
   ResetPerguntasToSeed200,
   Risk,
@@ -4263,6 +4264,92 @@ export const useRegenerateActionTarefas = <
   TContext
 > => {
   return useMutation(getRegenerateActionTarefasMutationOptions(options));
+};
+
+/**
+ * Super-admin-only global backfill. Runs the same per-clinic regeneration across every clinic in the system, REPLACING each existing action's tarefas with freshly suggested titles (curated model library for plano-padrão actions, AI with timeout+fallback for risk/manual actions). Only titles change — the actions themselves (coluna, responsável, prazo, prioridade, pilar, risco) are preserved. Idempotent.
+
+ * @summary (Re)generate suggested tarefas for ALL clinics at once (super-admin, one-time backfill)
+ */
+export const getRegenerateAllTarefasUrl = () => {
+  return `/api/admin/actions/regenerate-tarefas`;
+};
+
+export const regenerateAllTarefas = async (
+  options?: RequestInit,
+): Promise<RegenerateAllTarefasResponse> => {
+  return customFetch<RegenerateAllTarefasResponse>(
+    getRegenerateAllTarefasUrl(),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRegenerateAllTarefasMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateAllTarefas>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof regenerateAllTarefas>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["regenerateAllTarefas"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof regenerateAllTarefas>>,
+    void
+  > = () => {
+    return regenerateAllTarefas(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RegenerateAllTarefasMutationResult = NonNullable<
+  Awaited<ReturnType<typeof regenerateAllTarefas>>
+>;
+
+export type RegenerateAllTarefasMutationError = ErrorType<unknown>;
+
+/**
+ * @summary (Re)generate suggested tarefas for ALL clinics at once (super-admin, one-time backfill)
+ */
+export const useRegenerateAllTarefas = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateAllTarefas>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof regenerateAllTarefas>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRegenerateAllTarefasMutationOptions(options));
 };
 
 /**
