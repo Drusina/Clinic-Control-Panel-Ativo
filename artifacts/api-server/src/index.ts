@@ -6,6 +6,7 @@ import { initTokenSigningSecret } from "./lib/token-secret.js";
 import { bootstrapContratadaDefaults } from "./lib/config.js";
 import { seedPerguntasIfEmpty } from "./lib/perguntas-seed.js";
 import { backfillTrilha } from "./lib/trilha.js";
+import { backfillAcaoChecklistToTarefas } from "./lib/tarefa-backfill.js";
 import { normalizeLegacyFaturaStatuses } from "./lib/faturas-status.js";
 
 if (!process.env.SUPER_ADMIN_SECRET || process.env.SUPER_ADMIN_SECRET.length === 0) {
@@ -101,6 +102,17 @@ async function main(): Promise<void> {
     })
     .catch((e) =>
       logger.error({ err: e }, "Failed to backfill trilha — stages will materialize lazily on first GET"),
+    );
+
+  // Migrate legacy action checklist items into `acao_tarefas` (Fase 3). The
+  // original checklist rows are preserved; this only fills tarefas that don't
+  // exist yet (idempotent via origem_checklist_id). Non-fatal.
+  await backfillAcaoChecklistToTarefas()
+    .then((n) => {
+      if (n > 0) logger.info({ tarefas: n }, "Migrated checklist items into acao_tarefas");
+    })
+    .catch((e) =>
+      logger.error({ err: e }, "Failed to backfill checklist→tarefas"),
     );
 
   // Normalize any legacy fatura statuses (pendente/pago/atrasado/cancelado) to

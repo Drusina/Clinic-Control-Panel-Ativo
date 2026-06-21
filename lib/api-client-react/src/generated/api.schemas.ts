@@ -806,6 +806,10 @@ export interface Action {
   riscoOrigemId?: string | null;
   /** @nullable */
   concluidoEm?: string | null;
+  /** Number of top-level tarefas (parentTarefaId IS NULL) for this action. */
+  tarefasTotal?: number;
+  /** Number of completed top-level tarefas. Action progress = tarefasConcluidas / tarefasTotal. */
+  tarefasConcluidas?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -851,12 +855,156 @@ export interface ActionNota {
   createdAt: string;
 }
 
+export type AcaoTarefaStatus =
+  (typeof AcaoTarefaStatus)[keyof typeof AcaoTarefaStatus];
+
+export const AcaoTarefaStatus = {
+  a_fazer: "a_fazer",
+  fazendo: "fazendo",
+  concluida: "concluida",
+} as const;
+
+export interface AcaoTarefa {
+  id: string;
+  acaoId: string;
+  /** @nullable */
+  parentTarefaId?: string | null;
+  titulo: string;
+  /** @nullable */
+  descricao?: string | null;
+  /** @nullable */
+  responsavelNome?: string | null;
+  /** @nullable */
+  responsavelEmail?: string | null;
+  /** @nullable */
+  dataInicio?: string | null;
+  /** @nullable */
+  prazo?: string | null;
+  status: AcaoTarefaStatus;
+  ordem: number;
+  /** @nullable */
+  concluidaEm?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Nested one-level subtarefas (only populated for top-level tarefas). */
+  subtarefas?: AcaoTarefa[];
+}
+
 export interface ActionDetail {
   action: Action;
   riscoVinculado?: ActionLinkedRisk | null;
+  /** DEPRECATED — legacy checklist items, retained for data continuity. Use `tarefas` instead. */
   checklist: ActionChecklistItem[];
+  /** Top-level tarefas for this action, each with its nested subtarefas. */
+  tarefas: AcaoTarefa[];
   evidencias: ActionEvidenciaLink[];
   notas: ActionNota[];
+}
+
+export type ClinicTarefaStatus =
+  (typeof ClinicTarefaStatus)[keyof typeof ClinicTarefaStatus];
+
+export const ClinicTarefaStatus = {
+  a_fazer: "a_fazer",
+  fazendo: "fazendo",
+  concluida: "concluida",
+} as const;
+
+export type ClinicTarefaColuna =
+  (typeof ClinicTarefaColuna)[keyof typeof ClinicTarefaColuna];
+
+export const ClinicTarefaColuna = {
+  backlog: "backlog",
+  todo: "todo",
+  doing: "doing",
+  review: "review",
+  done: "done",
+} as const;
+
+/**
+ * A tarefa enriched with its parent action context, for clinic-wide aggregation (dashboard).
+ */
+export interface ClinicTarefa {
+  id: string;
+  acaoId: string;
+  acaoTitulo: string;
+  clinicId: string;
+  /** @nullable */
+  parentTarefaId?: string | null;
+  titulo: string;
+  /** @nullable */
+  responsavelNome?: string | null;
+  /** @nullable */
+  responsavelEmail?: string | null;
+  /** @nullable */
+  dataInicio?: string | null;
+  /** @nullable */
+  prazo?: string | null;
+  status: ClinicTarefaStatus;
+  coluna?: ClinicTarefaColuna;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateTarefaBodyStatus =
+  (typeof CreateTarefaBodyStatus)[keyof typeof CreateTarefaBodyStatus];
+
+export const CreateTarefaBodyStatus = {
+  a_fazer: "a_fazer",
+  fazendo: "fazendo",
+  concluida: "concluida",
+} as const;
+
+export interface CreateTarefaBody {
+  titulo: string;
+  /** @nullable */
+  descricao?: string | null;
+  /** @nullable */
+  responsavelNome?: string | null;
+  /** @nullable */
+  responsavelEmail?: string | null;
+  /** @nullable */
+  dataInicio?: string | null;
+  /** @nullable */
+  prazo?: string | null;
+  status?: CreateTarefaBodyStatus;
+  /**
+   * When set, creates a subtarefa under the given top-level tarefa.
+   * @nullable
+   */
+  parentTarefaId?: string | null;
+}
+
+/**
+ * @nullable
+ */
+export type UpdateTarefaBodyStatus =
+  | (typeof UpdateTarefaBodyStatus)[keyof typeof UpdateTarefaBodyStatus]
+  | null;
+
+export const UpdateTarefaBodyStatus = {
+  a_fazer: "a_fazer",
+  fazendo: "fazendo",
+  concluida: "concluida",
+} as const;
+
+export interface UpdateTarefaBody {
+  /** @nullable */
+  titulo?: string | null;
+  /** @nullable */
+  descricao?: string | null;
+  /** @nullable */
+  responsavelNome?: string | null;
+  /** @nullable */
+  responsavelEmail?: string | null;
+  /** @nullable */
+  dataInicio?: string | null;
+  /** @nullable */
+  prazo?: string | null;
+  /** @nullable */
+  status?: UpdateTarefaBodyStatus;
+  /** @nullable */
+  ordem?: number | null;
 }
 
 export interface CreateChecklistItemBody {
@@ -1908,6 +2056,40 @@ export type ListActionsParams = {
    */
   coluna?: string | null;
 };
+
+export type ListClinicTarefasParams = {
+  /**
+   * When true, only tarefas assigned to the current user's email. Always enforced for team_member callers.
+   * @nullable
+   */
+  mine?: boolean | null;
+  /**
+   * Filter by status. Use `open` for any non-concluida tarefa.
+   * @nullable
+   */
+  status?: ListClinicTarefasStatus;
+  /**
+   * Only tarefas with prazo on/after this date (YYYY-MM-DD).
+   * @nullable
+   */
+  from?: string | null;
+  /**
+   * Only tarefas with prazo on/before this date (YYYY-MM-DD).
+   * @nullable
+   */
+  to?: string | null;
+};
+
+export type ListClinicTarefasStatus =
+  | (typeof ListClinicTarefasStatus)[keyof typeof ListClinicTarefasStatus]
+  | null;
+
+export const ListClinicTarefasStatus = {
+  a_fazer: "a_fazer",
+  fazendo: "fazendo",
+  concluida: "concluida",
+  open: "open",
+} as const;
 
 export type ListCompromissosParams = {
   /**

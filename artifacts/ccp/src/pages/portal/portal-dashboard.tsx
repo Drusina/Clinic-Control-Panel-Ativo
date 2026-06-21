@@ -9,13 +9,17 @@ import {
   getListActionsQueryKey,
   useListDiagnostics,
   getListDiagnosticsQueryKey,
+  useListClinicTarefas,
+  getListClinicTarefasQueryKey,
   type Action,
   type Risk,
   type Diagnostic,
+  type ClinicTarefa,
 } from "@workspace/api-client-react";
 import {
   getStoredToken,
   useMyClinics,
+  useCurrentRole,
   MY_CLINICS_QUERY_KEY,
 } from "@/hooks/use-auth";
 import { TrilhaStepper } from "@/components/trilha/trilha-stepper";
@@ -353,6 +357,24 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
     },
   );
 
+  const { data: currentUser } = useCurrentRole();
+  const isTeamMember = currentUser?.role === "team_member";
+  // "Minhas próximas tarefas" é um recurso do gestor (team_member). `mine` é
+  // sempre forçado no backend para team_member; passamos explicitamente para
+  // deixar a intenção clara. Não buscamos para super_admin (não tem tarefas
+  // próprias atribuídas numa clínica).
+  const tarefaParams = { mine: true, status: "open" } as const;
+  const { data: minhasTarefas, isLoading: tarefasLoading } = useListClinicTarefas(
+    clinicId,
+    tarefaParams,
+    {
+      query: {
+        enabled: !!clinicId && isTeamMember,
+        queryKey: getListClinicTarefasQueryKey(clinicId, tarefaParams),
+      },
+    },
+  );
+
   const [ics, setIcs] = useState<IcsStatus | null>(null);
   const [icsLoaded, setIcsLoaded] = useState(false);
 
@@ -524,6 +546,22 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
     }
     return list;
   }, [ics, icsLoaded, progresso]);
+
+  // "Minhas próximas tarefas" — tarefas abertas do gestor ordenadas por prazo
+  // (atrasadas primeiro, sem prazo por último), limitadas às 6 mais urgentes.
+  const proximasTarefas = useMemo<ClinicTarefa[]>(() => {
+    const list: ClinicTarefa[] = minhasTarefas ?? [];
+    return [...list]
+      .sort((a, b) => {
+        const pa = parsePrazo(a.prazo);
+        const pb = parsePrazo(b.prazo);
+        if (pa && pb) return pa.getTime() - pb.getTime();
+        if (pa) return -1;
+        if (pb) return 1;
+        return 0;
+      })
+      .slice(0, 6);
+  }, [minhasTarefas]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -911,6 +949,65 @@ export default function PortalDashboard({ clinicId }: { clinicId: string }) {
 
         {/* Coluna de apoio */}
         <div className="flex flex-col gap-6 xl:col-span-4">
+          {isTeamMember && (
+            <Card data-testid="painel-minhas-tarefas">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ListChecks className="h-4 w-4 text-primary" />
+                  Minhas próximas tarefas
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {tarefasLoading ? (
+                  <div className="flex flex-col gap-2">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="h-12 animate-pulse rounded-lg bg-muted/40" />
+                    ))}
+                  </div>
+                ) : proximasTarefas.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {proximasTarefas.map((t) => {
+                      const prazoDate = parsePrazo(t.prazo);
+                      const overdue = prazoDate != null && prazoDate < today;
+                      return (
+                        <Link
+                          key={t.id}
+                          href={`/portal/clinica/${clinicId}/acao`}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2 transition-colors hover:border-primary/40"
+                          data-testid={`minha-tarefa-${t.id}`}
+                        >
+                          <div className="flex min-w-0 flex-col">
+                            <span className="truncate text-sm font-medium text-foreground">
+                              {t.titulo}
+                            </span>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {t.acaoTitulo}
+                            </span>
+                          </div>
+                          <span
+                            className={`inline-flex shrink-0 items-center gap-1 text-xs ${
+                              overdue ? "font-medium text-red-600" : "text-muted-foreground"
+                            }`}
+                          >
+                            <CalendarClock className="h-3 w-3" />
+                            {formatPrazo(t.prazo)}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState
+                    compact
+                    icon={CheckCircle}
+                    title="Nenhuma tarefa pendente"
+                    description="Você não tem tarefas em aberto atribuídas nesta clínica."
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card data-testid="painel-pendencias">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">

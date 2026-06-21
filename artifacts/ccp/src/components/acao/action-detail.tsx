@@ -5,18 +5,16 @@ import {
   getGetActionDetailQueryKey,
   getListActionsQueryKey,
   useUpdateAction,
-  useAddChecklistItem,
-  useUpdateChecklistItem,
-  useDeleteChecklistItem,
   useLinkActionEvidencia,
   useUnlinkActionEvidencia,
   useAddActionNota,
   useDeleteActionNota,
+  useListTeam,
+  getListTeamQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -27,16 +25,15 @@ import {
 import {
   AlertTriangle,
   Loader2,
-  Plus,
   Send,
   Trash2,
   X,
   Paperclip,
-  ListChecks,
   MessageSquare,
   Pencil,
 } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
+import TarefaList, { type TeamOption } from "./tarefa-list";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -84,8 +81,6 @@ export default function ActionDetail({
   onEdit?: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [novoItem, setNovoItem] = useState("");
-  const [notificarItem, setNotificarItem] = useState(false);
   const [novaNota, setNovaNota] = useState("");
   const [notificarResponsavel, setNotificarResponsavel] = useState(false);
   const [evidenciaToLink, setEvidenciaToLink] = useState("");
@@ -100,10 +95,11 @@ export default function ActionDetail({
     enabled: !!clinicId,
   });
 
+  const { data: teamRaw = [] } = useListTeam(clinicId, {
+    query: { queryKey: getListTeamQueryKey(clinicId), enabled: !!clinicId },
+  });
+
   const updateAction = useUpdateAction();
-  const addChecklistItem = useAddChecklistItem();
-  const updateChecklistItem = useUpdateChecklistItem();
-  const deleteChecklistItem = useDeleteChecklistItem();
   const linkEvidencia = useLinkActionEvidencia();
   const unlinkEvidencia = useUnlinkActionEvidencia();
   const addNota = useAddActionNota();
@@ -118,13 +114,18 @@ export default function ActionDetail({
   };
 
   const action = data?.action;
-  const checklist = data?.checklist ?? [];
+  const tarefas = data?.tarefas ?? [];
   const evidencias = data?.evidencias ?? [];
   const notas = data?.notas ?? [];
   const risco = data?.riscoVinculado;
 
-  const doneCount = checklist.filter((c) => c.feito).length;
-  const progressPct = checklist.length > 0 ? (doneCount / checklist.length) * 100 : 0;
+  const teamMembers = useMemo<TeamOption[]>(
+    () =>
+      teamRaw
+        .filter((m): m is typeof m & { email: string } => !!m.email)
+        .map((m) => ({ nome: m.nome, email: m.email })),
+    [teamRaw],
+  );
 
   const linkedIds = useMemo(
     () => new Set(evidencias.map((e) => e.evidenciaId)),
@@ -137,31 +138,6 @@ export default function ActionDetail({
       { id: actionId, data: { [field]: value || null } },
       { onSuccess: invalidateAll },
     );
-  };
-
-  const handleAddItem = () => {
-    const texto = novoItem.trim();
-    if (!texto) return;
-    addChecklistItem.mutate(
-      { id: actionId, data: { texto, notificar: notificarItem } },
-      {
-        onSuccess: () => {
-          setNovoItem("");
-          invalidate();
-        },
-      },
-    );
-  };
-
-  const handleToggleItem = (itemId: string, feito: boolean) => {
-    updateChecklistItem.mutate(
-      { id: actionId, itemId, data: { feito } },
-      { onSuccess: invalidate },
-    );
-  };
-
-  const handleDeleteItem = (itemId: string) => {
-    deleteChecklistItem.mutate({ id: actionId, itemId }, { onSuccess: invalidate });
   };
 
   const handleLinkEvidencia = (evidenciaId: string) => {
@@ -279,76 +255,13 @@ export default function ActionDetail({
         )}
       </div>
 
-      {/* Checklist card */}
-      <div className="rounded-xl border bg-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-base font-semibold">Checklist</h3>
-          </div>
-          <span className="text-xs font-medium border rounded-full px-2 py-0.5 text-muted-foreground">
-            {doneCount}/{checklist.length}
-          </span>
-        </div>
-        <Progress value={progressPct} className="h-2" />
-        <div className="space-y-1">
-          {checklist.map((item) => (
-            <div key={item.id} className="group flex items-center gap-2.5 py-1">
-              <Checkbox
-                checked={item.feito}
-                onCheckedChange={(v) => handleToggleItem(item.id, v === true)}
-              />
-              <span
-                className={`flex-1 text-sm ${item.feito ? "line-through text-muted-foreground" : ""}`}
-              >
-                {item.texto}
-              </span>
-              <button
-                onClick={() => handleDeleteItem(item.id)}
-                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                aria-label="Remover item"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-          {checklist.length === 0 && (
-            <p className="text-sm text-center text-muted-foreground py-2">
-              Nenhum item no checklist.
-            </p>
-          )}
-        </div>
-        <div className="space-y-2 pt-1">
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="Adicionar item…"
-              value={novoItem}
-              onChange={(e) => setNovoItem(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleAddItem();
-                }
-              }}
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleAddItem}
-              disabled={!novoItem.trim() || addChecklistItem.isPending}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-            <Checkbox
-              checked={notificarItem}
-              onCheckedChange={(v) => setNotificarItem(v === true)}
-            />
-            Notificar responsável{action.responsavelNome ? ` (${action.responsavelNome})` : ""} por e-mail e push
-          </label>
-        </div>
-      </div>
+      {/* Tarefas card */}
+      <TarefaList
+        actionId={actionId}
+        tarefas={tarefas}
+        teamMembers={teamMembers}
+        onChanged={invalidateAll}
+      />
 
       {/* Evidências Vinculadas card */}
       <div className="rounded-xl border bg-card p-4 space-y-3">

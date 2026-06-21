@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plus, ArrowLeft, Search, ChevronRight, Calendar, GripVertical, ShieldAlert } from "lucide-react";
+import { Loader2, Plus, ArrowLeft, Search, ChevronRight, Calendar, GripVertical, ShieldAlert, ListChecks } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -93,6 +93,8 @@ type Action = {
   ordem: number;
   riscoOrigemId: string | null;
   concluidoEm: string | null;
+  tarefasTotal?: number;
+  tarefasConcluidas?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -198,6 +200,14 @@ function KanbanCard({ action, onOpenDetail }: { action: Action; onOpenDetail: (a
                 {action.responsavelNome.charAt(0).toUpperCase()}
               </div>
               <span className="truncate">{action.responsavelNome}</span>
+            </div>
+          )}
+          {(action.tarefasTotal ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5">
+              <ListChecks className="h-3 w-3 flex-shrink-0" />
+              <span>
+                {action.tarefasConcluidas ?? 0}/{action.tarefasTotal} tarefas
+              </span>
             </div>
           )}
         </div>

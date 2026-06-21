@@ -1296,6 +1296,18 @@ export const ListActionsResponseItem = zod.object({
   ordem: zod.number(),
   riscoOrigemId: zod.string().nullish(),
   concluidoEm: zod.string().nullish(),
+  tarefasTotal: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of top-level tarefas (parentTarefaId IS NULL) for this action.",
+    ),
+  tarefasConcluidas: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of completed top-level tarefas. Action progress = tarefasConcluidas \/ tarefasTotal.",
+    ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -1319,6 +1331,64 @@ export const CreateActionBody = zod.object({
   pilarSlug: zod.string().nullish(),
   evidencias: zod.string().nullish(),
 });
+
+/**
+ * @summary List tarefas across a clinic's action plan (for dashboards/aggregation)
+ */
+export const ListClinicTarefasParams = zod.object({
+  clinicId: zod.coerce.string(),
+});
+
+export const ListClinicTarefasQueryParams = zod.object({
+  mine: zod.coerce
+    .boolean()
+    .nullish()
+    .describe(
+      "When true, only tarefas assigned to the current user's email. Always enforced for team_member callers.",
+    ),
+  status: zod
+    .union([
+      zod.literal("a_fazer"),
+      zod.literal("fazendo"),
+      zod.literal("concluida"),
+      zod.literal("open"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe("Filter by status. Use `open` for any non-concluida tarefa."),
+  from: zod.coerce
+    .string()
+    .nullish()
+    .describe("Only tarefas with prazo on\/after this date (YYYY-MM-DD)."),
+  to: zod.coerce
+    .string()
+    .nullish()
+    .describe("Only tarefas with prazo on\/before this date (YYYY-MM-DD)."),
+});
+
+export const ListClinicTarefasResponseItem = zod
+  .object({
+    id: zod.string(),
+    acaoId: zod.string(),
+    acaoTitulo: zod.string(),
+    clinicId: zod.string(),
+    parentTarefaId: zod.string().nullish(),
+    titulo: zod.string(),
+    responsavelNome: zod.string().nullish(),
+    responsavelEmail: zod.string().nullish(),
+    dataInicio: zod.string().nullish(),
+    prazo: zod.string().nullish(),
+    status: zod.enum(["a_fazer", "fazendo", "concluida"]),
+    coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+  })
+  .describe(
+    "A tarefa enriched with its parent action context, for clinic-wide aggregation (dashboard).",
+  );
+export const ListClinicTarefasResponse = zod.array(
+  ListClinicTarefasResponseItem,
+);
 
 /**
  * @summary Update action (move column, update status, etc.)
@@ -1362,6 +1432,18 @@ export const UpdateActionResponse = zod.object({
   ordem: zod.number(),
   riscoOrigemId: zod.string().nullish(),
   concluidoEm: zod.string().nullish(),
+  tarefasTotal: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of top-level tarefas (parentTarefaId IS NULL) for this action.",
+    ),
+  tarefasConcluidas: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of completed top-level tarefas. Action progress = tarefasConcluidas \/ tarefasTotal.",
+    ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -1403,6 +1485,18 @@ export const GetActionDetailResponse = zod.object({
     ordem: zod.number(),
     riscoOrigemId: zod.string().nullish(),
     concluidoEm: zod.string().nullish(),
+    tarefasTotal: zod
+      .number()
+      .optional()
+      .describe(
+        "Number of top-level tarefas (parentTarefaId IS NULL) for this action.",
+      ),
+    tarefasConcluidas: zod
+      .number()
+      .optional()
+      .describe(
+        "Number of completed top-level tarefas. Action progress = tarefasConcluidas \/ tarefasTotal.",
+      ),
     createdAt: zod.string(),
     updatedAt: zod.string(),
   }),
@@ -1419,16 +1513,48 @@ export const GetActionDetailResponse = zod.object({
       zod.null(),
     ])
     .optional(),
-  checklist: zod.array(
-    zod.object({
-      id: zod.string(),
-      acaoId: zod.string(),
-      texto: zod.string(),
-      feito: zod.boolean(),
-      ordem: zod.number(),
-      createdAt: zod.string(),
-    }),
-  ),
+  checklist: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        acaoId: zod.string(),
+        texto: zod.string(),
+        feito: zod.boolean(),
+        ordem: zod.number(),
+        createdAt: zod.string(),
+      }),
+    )
+    .describe(
+      "DEPRECATED — legacy checklist items, retained for data continuity. Use `tarefas` instead.",
+    ),
+  tarefas: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        acaoId: zod.string(),
+        parentTarefaId: zod.string().nullish(),
+        titulo: zod.string(),
+        descricao: zod.string().nullish(),
+        responsavelNome: zod.string().nullish(),
+        responsavelEmail: zod.string().nullish(),
+        dataInicio: zod.string().nullish(),
+        prazo: zod.string().nullish(),
+        status: zod.enum(["a_fazer", "fazendo", "concluida"]),
+        ordem: zod.number(),
+        concluidaEm: zod.string().nullish(),
+        createdAt: zod.string(),
+        updatedAt: zod.string(),
+        subtarefas: zod
+          .array(zod.unknown())
+          .optional()
+          .describe(
+            "Nested one-level subtarefas (only populated for top-level tarefas).",
+          ),
+      }),
+    )
+    .describe(
+      "Top-level tarefas for this action, each with its nested subtarefas.",
+    ),
   evidencias: zod.array(
     zod.object({
       id: zod.string(),
@@ -1577,6 +1703,86 @@ export const AddActionNotaBody = zod.object({
 export const DeleteActionNotaParams = zod.object({
   id: zod.coerce.string(),
   notaId: zod.coerce.string(),
+});
+
+/**
+ * @summary Add a tarefa (or subtarefa, via parentTarefaId) to an action
+ */
+export const CreateTarefaParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreateTarefaBody = zod.object({
+  titulo: zod.string(),
+  descricao: zod.string().nullish(),
+  responsavelNome: zod.string().nullish(),
+  responsavelEmail: zod.string().nullish(),
+  dataInicio: zod.string().nullish(),
+  prazo: zod.string().nullish(),
+  status: zod.enum(["a_fazer", "fazendo", "concluida"]).optional(),
+  parentTarefaId: zod
+    .string()
+    .nullish()
+    .describe(
+      "When set, creates a subtarefa under the given top-level tarefa.",
+    ),
+});
+
+/**
+ * @summary Update a tarefa (status, responsável, datas, título, ordem)
+ */
+export const UpdateTarefaParams = zod.object({
+  id: zod.coerce.string(),
+  tarefaId: zod.coerce.string(),
+});
+
+export const UpdateTarefaBody = zod.object({
+  titulo: zod.string().nullish(),
+  descricao: zod.string().nullish(),
+  responsavelNome: zod.string().nullish(),
+  responsavelEmail: zod.string().nullish(),
+  dataInicio: zod.string().nullish(),
+  prazo: zod.string().nullish(),
+  status: zod
+    .union([
+      zod.literal("a_fazer"),
+      zod.literal("fazendo"),
+      zod.literal("concluida"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  ordem: zod.number().nullish(),
+});
+
+export const UpdateTarefaResponse = zod.object({
+  id: zod.string(),
+  acaoId: zod.string(),
+  parentTarefaId: zod.string().nullish(),
+  titulo: zod.string(),
+  descricao: zod.string().nullish(),
+  responsavelNome: zod.string().nullish(),
+  responsavelEmail: zod.string().nullish(),
+  dataInicio: zod.string().nullish(),
+  prazo: zod.string().nullish(),
+  status: zod.enum(["a_fazer", "fazendo", "concluida"]),
+  ordem: zod.number(),
+  concluidaEm: zod.string().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+  subtarefas: zod
+    .array(zod.unknown())
+    .optional()
+    .describe(
+      "Nested one-level subtarefas (only populated for top-level tarefas).",
+    ),
+});
+
+/**
+ * @summary Delete a tarefa (cascades to its subtarefas)
+ */
+export const DeleteTarefaParams = zod.object({
+  id: zod.coerce.string(),
+  tarefaId: zod.coerce.string(),
 });
 
 /**

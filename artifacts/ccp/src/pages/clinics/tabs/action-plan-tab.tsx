@@ -9,7 +9,7 @@ import {
   getListCompromissosQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, Calendar, CalendarClock, User, MoreVertical } from "lucide-react";
+import { Plus, Loader2, Calendar, CalendarClock, User, MoreVertical, ListChecks } from "lucide-react";
 import AgendaModule from "@/components/agenda/agenda-module";
 import ActionDetail from "@/components/acao/action-detail";
 import { Badge } from "@/components/ui/badge";
@@ -266,6 +266,14 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                     {action.responsavelNome && (
                       <div className="flex items-center gap-1.5 truncate">
                         <User className="h-3 w-3 shrink-0" /> <span className="truncate">{action.responsavelNome}</span>
+                      </div>
+                    )}
+                    {(action.tarefasTotal ?? 0) > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <ListChecks className="h-3 w-3 shrink-0" />
+                        <span>
+                          {action.tarefasConcluidas ?? 0}/{action.tarefasTotal} tarefas
+                        </span>
                       </div>
                     )}
                     {nextByAction.get(action.id) && (

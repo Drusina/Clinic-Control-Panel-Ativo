@@ -50,6 +50,8 @@ vi.mock("@workspace/api-client-react", () => ({
   getListActionsQueryKey: () => ["actions"],
   useListDiagnostics: () => ({ data: mocks.diagnostics, isLoading: false }),
   getListDiagnosticsQueryKey: () => ["diagnostics"],
+  useListClinicTarefas: () => ({ data: [], isLoading: false }),
+  getListClinicTarefasQueryKey: () => ["clinic-tarefas"],
 }));
 
 vi.mock("@/hooks/use-auth", () => ({
@@ -58,6 +60,7 @@ vi.mock("@/hooks/use-auth", () => ({
   useMyClinics: () => ({
     data: { clinics: mocks.card ? [mocks.card] : [] },
   }),
+  useCurrentRole: () => ({ data: { role: "super_admin" } }),
 }));
 
 vi.mock("@/components/trilha/trilha-stepper", () => ({

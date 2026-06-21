@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, asc, sql } from "drizzle-orm";
+import { eq, and, asc, sql, isNull, inArray } from "drizzle-orm";
 import {
   db,
   actionsTable,
@@ -9,9 +9,10 @@ import {
   acaoChecklistItensTable,
   acaoEvidenciasTable,
   acaoNotasTable,
+  acaoTarefasTable,
   teamTable,
 } from "@workspace/db";
-import { assertClinicAccess } from "../middleware/auth";
+import { assertClinicAccess, type AuthenticatedRequest } from "../middleware/auth";
 import {
   CreateActionBody,
   UpdateActionBody,
@@ -21,16 +22,27 @@ import {
   UpdateChecklistItemBody,
   LinkActionEvidenciaBody,
   AddActionNotaBody,
+  CreateTarefaBody,
+  UpdateTarefaBody,
+  ListClinicTarefasQueryParams,
 } from "@workspace/api-zod";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
-import { sendEmail, buildActionUpdateEmail, resolveAppUrl } from "../lib/email.js";
+import {
+  sendEmail,
+  buildActionUpdateEmail,
+  buildTarefaAssignedEmail,
+  resolveAppUrl,
+} from "../lib/email.js";
 import { getRecipientPrefs } from "../lib/preferences.js";
 import { sendPushToEmail } from "../lib/push.js";
 import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
-function mapAction(a: typeof actionsTable.$inferSelect) {
+function mapAction(
+  a: typeof actionsTable.$inferSelect,
+  progress?: { total: number; concluidas: number },
+) {
   return {
     id: a.id,
     clinicId: a.clinicId,
@@ -46,9 +58,126 @@ function mapAction(a: typeof actionsTable.$inferSelect) {
     ordem: a.ordem,
     riscoOrigemId: a.riscoOrigemId,
     concluidoEm: a.concluidoEm?.toISOString() ?? null,
+    tarefasTotal: progress?.total ?? 0,
+    tarefasConcluidas: progress?.concluidas ?? 0,
     createdAt: a.createdAt.toISOString(),
     updatedAt: a.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Aggregate top-level tarefa progress (parentTarefaId IS NULL) for a set of
+ * actions in a single grouped query — avoids N+1 across the Kanban/list. Returns
+ * a Map keyed by acaoId; actions with no tarefas are simply absent (callers
+ * default to 0/0 via `mapAction`).
+ */
+async function getProgressMap(
+  acaoIds: string[],
+): Promise<Map<string, { total: number; concluidas: number }>> {
+  const map = new Map<string, { total: number; concluidas: number }>();
+  if (acaoIds.length === 0) return map;
+  const rows = await db
+    .select({
+      acaoId: acaoTarefasTable.acaoId,
+      total: sql<number>`cast(count(*) as int)`,
+      concluidas: sql<number>`cast(count(*) filter (where ${acaoTarefasTable.status} = 'concluida') as int)`,
+    })
+    .from(acaoTarefasTable)
+    .where(
+      and(
+        inArray(acaoTarefasTable.acaoId, acaoIds),
+        isNull(acaoTarefasTable.parentTarefaId),
+      ),
+    )
+    .groupBy(acaoTarefasTable.acaoId);
+  for (const r of rows) {
+    map.set(r.acaoId, { total: Number(r.total), concluidas: Number(r.concluidas) });
+  }
+  return map;
+}
+
+type TarefaDTO = {
+  id: string;
+  acaoId: string;
+  parentTarefaId: string | null;
+  titulo: string;
+  descricao: string | null;
+  responsavelNome: string | null;
+  responsavelEmail: string | null;
+  dataInicio: string | null;
+  prazo: string | null;
+  status: string;
+  ordem: number;
+  concluidaEm: string | null;
+  createdAt: string;
+  updatedAt: string;
+  subtarefas?: TarefaDTO[];
+};
+
+function mapTarefa(
+  t: typeof acaoTarefasTable.$inferSelect,
+  subtarefas?: TarefaDTO[],
+): TarefaDTO {
+  return {
+    id: t.id,
+    acaoId: t.acaoId,
+    parentTarefaId: t.parentTarefaId,
+    titulo: t.titulo,
+    descricao: t.descricao,
+    responsavelNome: t.responsavelNome,
+    responsavelEmail: t.responsavelEmail,
+    dataInicio: t.dataInicio,
+    prazo: t.prazo,
+    status: t.status,
+    ordem: t.ordem,
+    concluidaEm: t.concluidaEm?.toISOString() ?? null,
+    createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
+    ...(subtarefas ? { subtarefas } : {}),
+  };
+}
+
+function mapClinicTarefa(
+  t: typeof acaoTarefasTable.$inferSelect,
+  acaoTitulo: string,
+  coluna: string,
+  clinicId: string,
+) {
+  return {
+    id: t.id,
+    acaoId: t.acaoId,
+    acaoTitulo,
+    clinicId,
+    parentTarefaId: t.parentTarefaId,
+    titulo: t.titulo,
+    responsavelNome: t.responsavelNome,
+    responsavelEmail: t.responsavelEmail,
+    dataInicio: t.dataInicio,
+    prazo: t.prazo,
+    status: t.status,
+    coluna,
+    createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
+  };
+}
+
+/**
+ * True when `email` belongs to a member of the given clinic's `equipe_interna`
+ * (case-insensitive). Used to keep a tarefa's responsável scoped to its own
+ * clinic so a notification can never be addressed to an outside identity.
+ */
+async function isClinicTeamEmail(clinicId: string, email: string): Promise<boolean> {
+  const [member] = await db
+    .select({ email: teamTable.email })
+    .from(teamTable)
+    .where(
+      and(
+        eq(teamTable.clinicId, clinicId),
+        sql`lower(${teamTable.email}) = lower(${email})`,
+      ),
+    )
+    .limit(1);
+  return Boolean(member);
 }
 
 function mapChecklistItem(c: typeof acaoChecklistItensTable.$inferSelect) {
@@ -113,7 +242,8 @@ router.get("/clinics/:clinicId/actions", async (req, res): Promise<void> => {
     .where(and(...conditions))
     .orderBy(actionsTable.ordem);
 
-  res.json(actions.map(mapAction));
+  const progressMap = await getProgressMap(actions.map((a) => a.id));
+  res.json(actions.map((a) => mapAction(a, progressMap.get(a.id))));
 });
 
 router.post("/clinics/:clinicId/actions", async (req, res): Promise<void> => {
@@ -190,7 +320,8 @@ router.patch("/actions/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(UpdateActionResponse.parse(mapAction(action)));
+  const progressMap = await getProgressMap([action.id]);
+  res.json(UpdateActionResponse.parse(mapAction(action, progressMap.get(action.id))));
 });
 
 
@@ -233,7 +364,7 @@ router.post("/clinics/:clinicId/actions/seed", async (req, res): Promise<void> =
     )
     .returning();
 
-  res.status(201).json({ created: created.length, actions: created.map(mapAction) });
+  res.status(201).json({ created: created.length, actions: created.map((a) => mapAction(a)) });
 });
 
 router.delete("/actions/:id", async (req, res): Promise<void> => {
@@ -290,6 +421,33 @@ router.get("/actions/:id/detail", async (req, res): Promise<void> => {
     .where(eq(acaoChecklistItensTable.acaoId, id))
     .orderBy(asc(acaoChecklistItensTable.ordem), asc(acaoChecklistItensTable.createdAt));
 
+  // Tarefas — loaded flat (ordered), then assembled into a one-level tree.
+  const tarefaRows = await db
+    .select()
+    .from(acaoTarefasTable)
+    .where(eq(acaoTarefasTable.acaoId, id))
+    .orderBy(asc(acaoTarefasTable.ordem), asc(acaoTarefasTable.createdAt));
+
+  const childrenByParent = new Map<string, typeof tarefaRows>();
+  for (const t of tarefaRows) {
+    if (t.parentTarefaId) {
+      const arr = childrenByParent.get(t.parentTarefaId) ?? [];
+      arr.push(t);
+      childrenByParent.set(t.parentTarefaId, arr);
+    }
+  }
+  const topLevel = tarefaRows.filter((t) => t.parentTarefaId === null);
+  const tarefas = topLevel.map((t) =>
+    mapTarefa(
+      t,
+      (childrenByParent.get(t.id) ?? []).map((c) => mapTarefa(c)),
+    ),
+  );
+  const progress = {
+    total: topLevel.length,
+    concluidas: topLevel.filter((t) => t.status === "concluida").length,
+  };
+
   const evidenciaRows = await db
     .select({ link: acaoEvidenciasTable, ev: evidenciasTable })
     .from(acaoEvidenciasTable)
@@ -304,9 +462,10 @@ router.get("/actions/:id/detail", async (req, res): Promise<void> => {
     .orderBy(asc(acaoNotasTable.createdAt));
 
   res.json({
-    action: mapAction(action),
+    action: mapAction(action, progress),
     riscoVinculado,
     checklist: checklist.map(mapChecklistItem),
+    tarefas,
     evidencias: evidenciaRows.map((r) => mapEvidenciaLink(r.link, r.ev)),
     notas: notas.map(mapNota),
   });
@@ -399,6 +558,289 @@ router.delete("/actions/:id/checklist/:itemId", async (req, res): Promise<void> 
     .delete(acaoChecklistItensTable)
     .where(and(eq(acaoChecklistItensTable.id, itemId), eq(acaoChecklistItensTable.acaoId, id)));
   res.sendStatus(204);
+});
+
+// ─── TAREFAS ────────────────────────────────────────────────────────────────
+
+router.post("/actions/:id/tarefas", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = CreateTarefaBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  // Subtarefa: the parent must belong to the same action and itself be top-level
+  // (we only support one level of nesting).
+  const parentTarefaId = parsed.data.parentTarefaId ?? null;
+  if (parentTarefaId) {
+    const [parent] = await db
+      .select({
+        id: acaoTarefasTable.id,
+        acaoId: acaoTarefasTable.acaoId,
+        parentTarefaId: acaoTarefasTable.parentTarefaId,
+      })
+      .from(acaoTarefasTable)
+      .where(eq(acaoTarefasTable.id, parentTarefaId))
+      .limit(1);
+    if (!parent || parent.acaoId !== id) {
+      res.status(400).json({ error: "Tarefa-mãe inválida para esta ação" });
+      return;
+    }
+    if (parent.parentTarefaId) {
+      res.status(400).json({ error: "Subtarefas não podem ter subtarefas" });
+      return;
+    }
+  }
+
+  const responsavelEmail = parsed.data.responsavelEmail?.trim() || null;
+  if (responsavelEmail && !(await isClinicTeamEmail(action.clinicId, responsavelEmail))) {
+    res.status(400).json({ error: "Responsável inválido para esta clínica" });
+    return;
+  }
+
+  const siblings = await db
+    .select({ ordem: acaoTarefasTable.ordem })
+    .from(acaoTarefasTable)
+    .where(
+      and(
+        eq(acaoTarefasTable.acaoId, id),
+        parentTarefaId
+          ? eq(acaoTarefasTable.parentTarefaId, parentTarefaId)
+          : isNull(acaoTarefasTable.parentTarefaId),
+      ),
+    );
+  const nextOrdem = siblings.reduce((max, s) => Math.max(max, s.ordem), -1) + 1;
+
+  const status = parsed.data.status ?? "a_fazer";
+  const [tarefa] = await db
+    .insert(acaoTarefasTable)
+    .values({
+      acaoId: id,
+      parentTarefaId,
+      titulo: parsed.data.titulo,
+      descricao: parsed.data.descricao ?? null,
+      responsavelNome: parsed.data.responsavelNome ?? null,
+      responsavelEmail,
+      dataInicio: parsed.data.dataInicio ?? null,
+      prazo: parsed.data.prazo ?? null,
+      status,
+      ordem: nextOrdem,
+      concluidaEm: status === "concluida" ? new Date() : null,
+    })
+    .returning();
+
+  if (responsavelEmail) {
+    void notifyTarefaAssigned(action, tarefa).catch((err) => {
+      logger.error(
+        { err, acaoId: id, tarefaId: tarefa.id, clinicId: action.clinicId },
+        "Failed to notify responsável about new tarefa assignment",
+      );
+    });
+  }
+
+  // Top-level tarefas carry an (initially empty) subtarefas array; subtarefas
+  // themselves omit it.
+  res.status(201).json(mapTarefa(tarefa, parentTarefaId ? undefined : []));
+});
+
+router.patch("/actions/:id/tarefas/:tarefaId", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const tarefaId = Array.isArray(req.params.tarefaId) ? req.params.tarefaId[0] : req.params.tarefaId;
+  const parsed = UpdateTarefaBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  const [existing] = await db
+    .select()
+    .from(acaoTarefasTable)
+    .where(and(eq(acaoTarefasTable.id, tarefaId), eq(acaoTarefasTable.acaoId, id)))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Tarefa not found" });
+    return;
+  }
+
+  const d = parsed.data;
+  const updates: Partial<typeof acaoTarefasTable.$inferInsert> = {};
+  if (d.titulo != null) updates.titulo = d.titulo;
+  if (d.descricao !== undefined) updates.descricao = d.descricao;
+  if (d.responsavelNome !== undefined) updates.responsavelNome = d.responsavelNome;
+
+  let notifyAssignment = false;
+  if (d.responsavelEmail !== undefined) {
+    const email = d.responsavelEmail?.trim() || null;
+    if (email && !(await isClinicTeamEmail(action.clinicId, email))) {
+      res.status(400).json({ error: "Responsável inválido para esta clínica" });
+      return;
+    }
+    updates.responsavelEmail = email;
+    // Notify only when the assignee actually changes to a (non-null) person.
+    if (email && email.toLowerCase() !== (existing.responsavelEmail ?? "").toLowerCase()) {
+      notifyAssignment = true;
+    }
+  }
+  if (d.dataInicio !== undefined) updates.dataInicio = d.dataInicio;
+  if (d.prazo !== undefined) {
+    updates.prazo = d.prazo;
+    // A changed prazo re-arms the deadline reminder for the next daily run.
+    updates.lembretePrazoEnviadoEm = null;
+  }
+  if (d.status != null) {
+    updates.status = d.status;
+    if (d.status === "concluida" && existing.status !== "concluida") {
+      updates.concluidaEm = new Date();
+    } else if (d.status !== "concluida" && existing.status === "concluida") {
+      updates.concluidaEm = null;
+    }
+  }
+  if (d.ordem != null) updates.ordem = d.ordem;
+  updates.updatedAt = new Date();
+
+  const [tarefa] = await db
+    .update(acaoTarefasTable)
+    .set(updates)
+    .where(and(eq(acaoTarefasTable.id, tarefaId), eq(acaoTarefasTable.acaoId, id)))
+    .returning();
+  if (!tarefa) {
+    res.status(404).json({ error: "Tarefa not found" });
+    return;
+  }
+
+  if (notifyAssignment) {
+    void notifyTarefaAssigned(action, tarefa).catch((err) => {
+      logger.error(
+        { err, acaoId: id, tarefaId: tarefa.id, clinicId: action.clinicId },
+        "Failed to notify responsável about tarefa reassignment",
+      );
+    });
+  }
+
+  res.json(mapTarefa(tarefa, tarefa.parentTarefaId ? undefined : []));
+});
+
+router.delete("/actions/:id/tarefas/:tarefaId", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const tarefaId = Array.isArray(req.params.tarefaId) ? req.params.tarefaId[0] : req.params.tarefaId;
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  // FK onDelete cascade removes any subtarefas of this tarefa.
+  await db
+    .delete(acaoTarefasTable)
+    .where(and(eq(acaoTarefasTable.id, tarefaId), eq(acaoTarefasTable.acaoId, id)));
+  res.sendStatus(204);
+});
+
+/**
+ * Notify a tarefa's responsável that it was assigned to them. Best-effort: each
+ * channel swallows its own failure so a notification can never fail the write.
+ * The responsável's email is validated to belong to the action's clinic before
+ * this runs, and web push is resolved clinic-scoped so a duplicate email across
+ * clinics can never receive another clinic's notification. Email respects the
+ * recipient's `emailEnabled` preference.
+ */
+export async function notifyTarefaAssigned(
+  action: typeof actionsTable.$inferSelect,
+  tarefa: typeof acaoTarefasTable.$inferSelect,
+): Promise<void> {
+  const recipient = tarefa.responsavelEmail?.trim();
+  if (!recipient) return;
+
+  const [clinic] = await db
+    .select({ nome: clinicsTable.nome })
+    .from(clinicsTable)
+    .where(eq(clinicsTable.id, action.clinicId))
+    .limit(1);
+  const clinicName = clinic?.nome ?? "Clínica";
+
+  const acaoPath = `/portal/clinica/${action.clinicId}/acao`;
+
+  await sendPushToEmail(recipient, action.clinicId, {
+    title: `Nova tarefa: ${tarefa.titulo}`,
+    body: `Ação: ${action.titulo}`,
+    url: acaoPath,
+    tag: `tarefa-assign-${tarefa.id}`,
+  }).catch(() => ({ sent: 0, failed: 0 }));
+
+  const prefs = await getRecipientPrefs(recipient, action.clinicId);
+  if (prefs.emailEnabled) {
+    const appUrl = await resolveAppUrl();
+    const html = buildTarefaAssignedEmail({
+      clinicName,
+      acaoTitulo: action.titulo,
+      tarefaTitulo: tarefa.titulo,
+      responsavelNome: tarefa.responsavelNome ?? recipient,
+      prazo: tarefa.prazo,
+      appUrl,
+      acaoPath,
+    });
+    await sendEmail({
+      to: recipient,
+      subject: `[IONEX360] Nova tarefa atribuída: ${tarefa.titulo}`,
+      html,
+    }).catch(() => false);
+  }
+}
+
+// ─── CLINIC-WIDE TAREFA AGGREGATION (dashboard) ─────────────────────────────
+
+router.get("/clinics/:clinicId/tarefas", async (req, res): Promise<void> => {
+  const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
+  const qp = ListClinicTarefasQueryParams.safeParse(req.query);
+  if (!qp.success) {
+    res.status(400).json({ error: qp.error.message });
+    return;
+  }
+
+  // team_member callers are always scoped to their own tarefas; super_admin can
+  // opt in with ?mine=true.
+  const user = (req as unknown as AuthenticatedRequest).user;
+  const myEmail = (user.email ?? user.sub ?? "").trim();
+  const mine = user.role === "team_member" ? true : qp.data.mine === true;
+  if (mine && !myEmail) {
+    res.json([]);
+    return;
+  }
+
+  const conditions = [eq(actionsTable.clinicId, clinicId)];
+  if (mine) {
+    conditions.push(sql`lower(${acaoTarefasTable.responsavelEmail}) = lower(${myEmail})`);
+  }
+  if (qp.data.status === "open") {
+    conditions.push(sql`${acaoTarefasTable.status} <> 'concluida'`);
+  } else if (qp.data.status) {
+    conditions.push(eq(acaoTarefasTable.status, qp.data.status));
+  }
+  if (qp.data.from) conditions.push(sql`${acaoTarefasTable.prazo} >= ${qp.data.from}`);
+  if (qp.data.to) conditions.push(sql`${acaoTarefasTable.prazo} <= ${qp.data.to}`);
+
+  const rows = await db
+    .select({ t: acaoTarefasTable, acaoTitulo: actionsTable.titulo, coluna: actionsTable.coluna })
+    .from(acaoTarefasTable)
+    .innerJoin(actionsTable, eq(acaoTarefasTable.acaoId, actionsTable.id))
+    .where(and(...conditions))
+    .orderBy(asc(acaoTarefasTable.prazo), asc(acaoTarefasTable.createdAt));
+
+  res.json(rows.map((r) => mapClinicTarefa(r.t, r.acaoTitulo, r.coluna, clinicId)));
 });
 
 // ─── EVIDENCE LINKS ─────────────────────────────────────────────────────────
@@ -579,7 +1021,7 @@ export async function notifyResponsavelOfActionUpdate(
     .limit(1);
   const clinicName = clinic?.nome ?? "Clínica";
 
-  const acaoPath = `/portal/clinica/${action.clinicId}/plano-de-acao`;
+  const acaoPath = `/portal/clinica/${action.clinicId}/acao`;
   const isNota = kind === "nota";
   const pushTitle = `${isNota ? "Nova nota" : "Novo item"}: ${action.titulo}`;
   const subject = isNota

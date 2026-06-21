@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AcaoTarefa,
   Action,
   ActionChecklistItem,
   ActionDetail,
@@ -30,6 +31,7 @@ import type {
   BulkInviteTeamMembersBody,
   Clinic,
   ClinicListResponse,
+  ClinicTarefa,
   CommitGeneratedRisksBody,
   Compromisso,
   CompromissoInput,
@@ -45,6 +47,7 @@ import type {
   CreateRiskBody,
   CreateSistemaUsoBody,
   CreateSocioBody,
+  CreateTarefaBody,
   CreateTeamMemberBody,
   DashboardSummary,
   DeletePerguntaParams,
@@ -77,6 +80,7 @@ import type {
   Kickoff,
   LinkEvidenciaBody,
   ListActionsParams,
+  ListClinicTarefasParams,
   ListClinicsParams,
   ListCompromissosParams,
   ListDocumentosComerciaisParams,
@@ -104,6 +108,7 @@ import type {
   UpdateRiskBody,
   UpdateSistemaUsoBody,
   UpdateSocioBody,
+  UpdateTarefaBody,
   UpdateTeamMemberBody,
   UpsertKickoffBody,
 } from "./api.schemas";
@@ -4076,6 +4081,126 @@ export const useCreateAction = <
 };
 
 /**
+ * @summary List tarefas across a clinic's action plan (for dashboards/aggregation)
+ */
+export const getListClinicTarefasUrl = (
+  clinicId: string,
+  params?: ListClinicTarefasParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/clinics/${clinicId}/tarefas?${stringifiedParams}`
+    : `/api/clinics/${clinicId}/tarefas`;
+};
+
+export const listClinicTarefas = async (
+  clinicId: string,
+  params?: ListClinicTarefasParams,
+  options?: RequestInit,
+): Promise<ClinicTarefa[]> => {
+  return customFetch<ClinicTarefa[]>(
+    getListClinicTarefasUrl(clinicId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListClinicTarefasQueryKey = (
+  clinicId: string,
+  params?: ListClinicTarefasParams,
+) => {
+  return [
+    `/api/clinics/${clinicId}/tarefas`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListClinicTarefasQueryOptions = <
+  TData = Awaited<ReturnType<typeof listClinicTarefas>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  params?: ListClinicTarefasParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClinicTarefas>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListClinicTarefasQueryKey(clinicId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listClinicTarefas>>
+  > = ({ signal }) =>
+    listClinicTarefas(clinicId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clinicId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listClinicTarefas>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListClinicTarefasQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listClinicTarefas>>
+>;
+export type ListClinicTarefasQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List tarefas across a clinic's action plan (for dashboards/aggregation)
+ */
+
+export function useListClinicTarefas<
+  TData = Awaited<ReturnType<typeof listClinicTarefas>>,
+  TError = ErrorType<unknown>,
+>(
+  clinicId: string,
+  params?: ListClinicTarefasParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClinicTarefas>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListClinicTarefasQueryOptions(
+    clinicId,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Update action (move column, update status, etc.)
  */
 export const getUpdateActionUrl = (id: string) => {
@@ -5113,6 +5238,266 @@ export const useDeleteActionNota = <
   TContext
 > => {
   return useMutation(getDeleteActionNotaMutationOptions(options));
+};
+
+/**
+ * @summary Add a tarefa (or subtarefa, via parentTarefaId) to an action
+ */
+export const getCreateTarefaUrl = (id: string) => {
+  return `/api/actions/${id}/tarefas`;
+};
+
+export const createTarefa = async (
+  id: string,
+  createTarefaBody: CreateTarefaBody,
+  options?: RequestInit,
+): Promise<AcaoTarefa> => {
+  return customFetch<AcaoTarefa>(getCreateTarefaUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createTarefaBody),
+  });
+};
+
+export const getCreateTarefaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createTarefa>>,
+    TError,
+    { id: string; data: BodyType<CreateTarefaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createTarefa>>,
+  TError,
+  { id: string; data: BodyType<CreateTarefaBody> },
+  TContext
+> => {
+  const mutationKey = ["createTarefa"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createTarefa>>,
+    { id: string; data: BodyType<CreateTarefaBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createTarefa(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateTarefaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createTarefa>>
+>;
+export type CreateTarefaMutationBody = BodyType<CreateTarefaBody>;
+export type CreateTarefaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a tarefa (or subtarefa, via parentTarefaId) to an action
+ */
+export const useCreateTarefa = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createTarefa>>,
+    TError,
+    { id: string; data: BodyType<CreateTarefaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createTarefa>>,
+  TError,
+  { id: string; data: BodyType<CreateTarefaBody> },
+  TContext
+> => {
+  return useMutation(getCreateTarefaMutationOptions(options));
+};
+
+/**
+ * @summary Update a tarefa (status, responsável, datas, título, ordem)
+ */
+export const getUpdateTarefaUrl = (id: string, tarefaId: string) => {
+  return `/api/actions/${id}/tarefas/${tarefaId}`;
+};
+
+export const updateTarefa = async (
+  id: string,
+  tarefaId: string,
+  updateTarefaBody: UpdateTarefaBody,
+  options?: RequestInit,
+): Promise<AcaoTarefa> => {
+  return customFetch<AcaoTarefa>(getUpdateTarefaUrl(id, tarefaId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateTarefaBody),
+  });
+};
+
+export const getUpdateTarefaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTarefa>>,
+    TError,
+    { id: string; tarefaId: string; data: BodyType<UpdateTarefaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateTarefa>>,
+  TError,
+  { id: string; tarefaId: string; data: BodyType<UpdateTarefaBody> },
+  TContext
+> => {
+  const mutationKey = ["updateTarefa"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateTarefa>>,
+    { id: string; tarefaId: string; data: BodyType<UpdateTarefaBody> }
+  > = (props) => {
+    const { id, tarefaId, data } = props ?? {};
+
+    return updateTarefa(id, tarefaId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateTarefaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateTarefa>>
+>;
+export type UpdateTarefaMutationBody = BodyType<UpdateTarefaBody>;
+export type UpdateTarefaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a tarefa (status, responsável, datas, título, ordem)
+ */
+export const useUpdateTarefa = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTarefa>>,
+    TError,
+    { id: string; tarefaId: string; data: BodyType<UpdateTarefaBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateTarefa>>,
+  TError,
+  { id: string; tarefaId: string; data: BodyType<UpdateTarefaBody> },
+  TContext
+> => {
+  return useMutation(getUpdateTarefaMutationOptions(options));
+};
+
+/**
+ * @summary Delete a tarefa (cascades to its subtarefas)
+ */
+export const getDeleteTarefaUrl = (id: string, tarefaId: string) => {
+  return `/api/actions/${id}/tarefas/${tarefaId}`;
+};
+
+export const deleteTarefa = async (
+  id: string,
+  tarefaId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteTarefaUrl(id, tarefaId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteTarefaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteTarefa>>,
+    TError,
+    { id: string; tarefaId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteTarefa>>,
+  TError,
+  { id: string; tarefaId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteTarefa"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteTarefa>>,
+    { id: string; tarefaId: string }
+  > = (props) => {
+    const { id, tarefaId } = props ?? {};
+
+    return deleteTarefa(id, tarefaId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteTarefaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteTarefa>>
+>;
+
+export type DeleteTarefaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a tarefa (cascades to its subtarefas)
+ */
+export const useDeleteTarefa = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteTarefa>>,
+    TError,
+    { id: string; tarefaId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteTarefa>>,
+  TError,
+  { id: string; tarefaId: string },
+  TContext
+> => {
+  return useMutation(getDeleteTarefaMutationOptions(options));
 };
 
 /**

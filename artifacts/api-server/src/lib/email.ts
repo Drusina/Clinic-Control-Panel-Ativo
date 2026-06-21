@@ -529,6 +529,95 @@ export function buildActionUpdateEmail(params: {
   return baseTemplate(`${heading} — IONEX360`, body);
 }
 
+function formatTarefaDate(value?: string | null): string | null {
+  if (!value) return null;
+  // `value` is a YYYY-MM-DD date string; render as DD/MM/YYYY without timezone drift.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
+}
+
+export function buildTarefaAssignedEmail(params: {
+  clinicName: string;
+  acaoTitulo: string;
+  tarefaTitulo: string;
+  responsavelNome?: string | null;
+  prazo?: string | null;
+  appUrl: string;
+  acaoPath?: string;
+}): string {
+  const detailRow = (label: string, value: string) => `
+      <tr>
+        <td style="padding:8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;width:120px;vertical-align:top;">${label}</td>
+        <td style="padding:8px 0;color:#e2e8f0;font-size:14px;">${value}</td>
+      </tr>`;
+
+  const acaoLink = `${params.appUrl}${params.acaoPath ?? "/portal"}`;
+  const prazoFmt = formatTarefaDate(params.prazo);
+  const prazoRow = prazoFmt ? detailRow("Prazo", prazoFmt) : "";
+  const greeting = params.responsavelNome
+    ? `Olá <strong style="color:#e2e8f0;">${params.responsavelNome}</strong>, uma nova tarefa foi atribuída a você.`
+    : "Uma nova tarefa foi atribuída a você.";
+
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">Nova tarefa atribuída</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      ${greeting} Clínica <strong style="color:#e2e8f0;">${params.clinicName}</strong>.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
+      ${detailRow("Tarefa", params.tarefaTitulo)}
+      ${detailRow("Ação", params.acaoTitulo)}
+      ${prazoRow}
+    </table>
+
+    ${primaryButton(acaoLink, "Abrir plano de ação →")}
+  `;
+  return baseTemplate("Nova tarefa atribuída — IONEX360", body);
+}
+
+export function buildTarefaDeadlineEmail(params: {
+  clinicName: string;
+  acaoTitulo: string;
+  tarefaTitulo: string;
+  responsavelNome?: string | null;
+  prazo?: string | null;
+  vencidaHoje: boolean;
+  appUrl: string;
+  acaoPath?: string;
+}): string {
+  const detailRow = (label: string, value: string) => `
+      <tr>
+        <td style="padding:8px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;width:120px;vertical-align:top;">${label}</td>
+        <td style="padding:8px 0;color:#e2e8f0;font-size:14px;">${value}</td>
+      </tr>`;
+
+  const acaoLink = `${params.appUrl}${params.acaoPath ?? "/portal"}`;
+  const prazoFmt = formatTarefaDate(params.prazo);
+  const prazoRow = prazoFmt ? detailRow("Prazo", prazoFmt) : "";
+  const heading = params.vencidaHoje ? "Tarefa vence hoje" : "Tarefa próxima do prazo";
+  const greeting = params.responsavelNome
+    ? `Olá <strong style="color:#e2e8f0;">${params.responsavelNome}</strong>, ${params.vencidaHoje ? "uma tarefa sua vence hoje" : "uma tarefa sua está próxima do prazo"}.`
+    : params.vencidaHoje
+      ? "Uma tarefa sob sua responsabilidade vence hoje."
+      : "Uma tarefa sob sua responsabilidade está próxima do prazo.";
+
+  const body = `
+    <h1 style="color:#f8fafc;font-size:26px;font-weight:700;margin:0 0 8px 0;">${heading}</h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 24px 0;">
+      ${greeting} Clínica <strong style="color:#e2e8f0;">${params.clinicName}</strong>.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;border:1px solid #1e2333;border-radius:8px;padding:20px 24px;margin-bottom:24px;">
+      ${detailRow("Tarefa", params.tarefaTitulo)}
+      ${detailRow("Ação", params.acaoTitulo)}
+      ${prazoRow}
+    </table>
+
+    ${primaryButton(acaoLink, "Abrir plano de ação →")}
+  `;
+  return baseTemplate(`${heading} — IONEX360`, body);
+}
+
 export function buildSigningConfirmationEmail(params: {
   signatarioNome: string;
   termoNome: string;

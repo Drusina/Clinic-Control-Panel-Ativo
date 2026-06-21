@@ -975,6 +975,48 @@ paths:
               schema:
                 $ref: "#/components/schemas/Action"
 
+  /clinics/{clinicId}/tarefas:
+    get:
+      operationId: listClinicTarefas
+      tags: [actions]
+      summary: List tarefas across a clinic's action plan (for dashboards/aggregation)
+      parameters:
+        - name: clinicId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: mine
+          in: query
+          description: When true, only tarefas assigned to the current user's email. Always enforced for team_member callers.
+          schema:
+            type: ["boolean", "null"]
+        - name: status
+          in: query
+          description: Filter by status. Use `open` for any non-concluida tarefa.
+          schema:
+            type: ["string", "null"]
+            enum: [a_fazer, fazendo, concluida, open, null]
+        - name: from
+          in: query
+          description: Only tarefas with prazo on/after this date (YYYY-MM-DD).
+          schema:
+            type: ["string", "null"]
+        - name: to
+          in: query
+          description: Only tarefas with prazo on/before this date (YYYY-MM-DD).
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Tarefas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClinicTarefa"
+
   /actions/{id}:
     patch:
       operationId: updateAction
@@ -1227,6 +1269,79 @@ paths:
           schema:
             type: string
         - name: notaId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /actions/{id}/tarefas:
+    post:
+      operationId: createTarefa
+      tags: [actions]
+      summary: Add a tarefa (or subtarefa, via parentTarefaId) to an action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTarefaBody"
+      responses:
+        "201":
+          description: Created tarefa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcaoTarefa"
+
+  /actions/{id}/tarefas/{tarefaId}:
+    patch:
+      operationId: updateTarefa
+      tags: [actions]
+      summary: Update a tarefa (status, responsável, datas, título, ordem)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tarefaId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTarefaBody"
+      responses:
+        "200":
+          description: Updated tarefa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcaoTarefa"
+    delete:
+      operationId: deleteTarefa
+      tags: [actions]
+      summary: Delete a tarefa (cascades to its subtarefas)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tarefaId
           in: path
           required: true
           schema:
@@ -3453,6 +3568,12 @@ components:
           type: ["string", "null"]
         concluidoEm:
           type: ["string", "null"]
+        tarefasTotal:
+          type: integer
+          description: Number of top-level tarefas (parentTarefaId IS NULL) for this action.
+        tarefasConcluidas:
+          type: integer
+          description: Number of completed top-level tarefas. Action progress = tarefasConcluidas / tarefasTotal.
         createdAt:
           type: string
         updatedAt:
@@ -3564,8 +3685,14 @@ components:
             - type: "null"
         checklist:
           type: array
+          description: DEPRECATED — legacy checklist items, retained for data continuity. Use `tarefas` instead.
           items:
             $ref: "#/components/schemas/ActionChecklistItem"
+        tarefas:
+          type: array
+          description: Top-level tarefas for this action, each with its nested subtarefas.
+          items:
+            $ref: "#/components/schemas/AcaoTarefa"
         evidencias:
           type: array
           items:
@@ -3577,8 +3704,144 @@ components:
       required:
         - action
         - checklist
+        - tarefas
         - evidencias
         - notas
+
+    AcaoTarefa:
+      type: object
+      properties:
+        id:
+          type: string
+        acaoId:
+          type: string
+        parentTarefaId:
+          type: ["string", "null"]
+        titulo:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        responsavelNome:
+          type: ["string", "null"]
+        responsavelEmail:
+          type: ["string", "null"]
+        dataInicio:
+          type: ["string", "null"]
+        prazo:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [a_fazer, fazendo, concluida]
+        ordem:
+          type: integer
+        concluidaEm:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        subtarefas:
+          type: array
+          description: Nested one-level subtarefas (only populated for top-level tarefas).
+          items:
+            $ref: "#/components/schemas/AcaoTarefa"
+      required:
+        - id
+        - acaoId
+        - titulo
+        - status
+        - ordem
+        - createdAt
+        - updatedAt
+
+    ClinicTarefa:
+      type: object
+      description: A tarefa enriched with its parent action context, for clinic-wide aggregation (dashboard).
+      properties:
+        id:
+          type: string
+        acaoId:
+          type: string
+        acaoTitulo:
+          type: string
+        clinicId:
+          type: string
+        parentTarefaId:
+          type: ["string", "null"]
+        titulo:
+          type: string
+        responsavelNome:
+          type: ["string", "null"]
+        responsavelEmail:
+          type: ["string", "null"]
+        dataInicio:
+          type: ["string", "null"]
+        prazo:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [a_fazer, fazendo, concluida]
+        coluna:
+          type: string
+          enum: [backlog, todo, doing, review, done]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - acaoId
+        - acaoTitulo
+        - clinicId
+        - titulo
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateTarefaBody:
+      type: object
+      properties:
+        titulo:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        responsavelNome:
+          type: ["string", "null"]
+        responsavelEmail:
+          type: ["string", "null"]
+        dataInicio:
+          type: ["string", "null"]
+        prazo:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [a_fazer, fazendo, concluida]
+        parentTarefaId:
+          type: ["string", "null"]
+          description: When set, creates a subtarefa under the given top-level tarefa.
+      required:
+        - titulo
+
+    UpdateTarefaBody:
+      type: object
+      properties:
+        titulo:
+          type: ["string", "null"]
+        descricao:
+          type: ["string", "null"]
+        responsavelNome:
+          type: ["string", "null"]
+        responsavelEmail:
+          type: ["string", "null"]
+        dataInicio:
+          type: ["string", "null"]
+        prazo:
+          type: ["string", "null"]
+        status:
+          type: ["string", "null"]
+          enum: [a_fazer, fazendo, concluida, null]
+        ordem:
+          type: ["integer", "null"]
 
     CreateChecklistItemBody:
       type: object

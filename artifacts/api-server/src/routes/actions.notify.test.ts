@@ -91,11 +91,12 @@ describe("notifyResponsavelOfActionUpdate", () => {
 
     expect(sendPushToEmailMock).toHaveBeenCalledTimes(1);
     // Push must resolve with the clinicId (cross-clinic leak guard) and deep
-    // link to the clinic-scoped plano-de-acao route.
+    // link to the clinic-scoped action-plan route (`acao` is the canonical
+    // PainelClinica section slug; `plano-de-acao` renders a blank section).
     expect(sendPushToEmailMock).toHaveBeenCalledWith(
       respEmail,
       clinicId,
-      expect.objectContaining({ url: `/portal/clinica/${clinicId}/plano-de-acao` }),
+      expect.objectContaining({ url: `/portal/clinica/${clinicId}/acao` }),
     );
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
     expect(sendEmailMock).toHaveBeenCalledWith(

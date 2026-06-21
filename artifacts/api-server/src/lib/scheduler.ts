@@ -2,11 +2,14 @@ import { type JobWithMetadata, PgBoss } from "pg-boss";
 import { logger } from "./logger.js";
 import { runExpiryCheck } from "./expiry-check.js";
 import { runReminderCheck } from "./reminder-check.js";
+import { runTarefaDeadlineCheck } from "./tarefa-deadline-check.js";
 
 const EXPIRY_JOB_NAME = "expiry-digest";
 const EXPIRY_CRON = "0 7 * * *";
 const REMINDER_JOB_NAME = "compromisso-reminder";
 const REMINDER_CRON = "*/15 * * * *";
+const TAREFA_DEADLINE_JOB_NAME = "acao-tarefa-deadline-reminder";
+const TAREFA_DEADLINE_CRON = "0 8 * * *";
 const RETRY_LIMIT = 3;
 const RETRY_DELAY_SECONDS = 300;
 
@@ -121,6 +124,45 @@ export async function startScheduler(): Promise<void> {
 
   await boss.schedule(REMINDER_JOB_NAME, REMINDER_CRON, {}, { tz: "America/Sao_Paulo" });
   logger.info({ cron: REMINDER_CRON }, "Compromisso reminder job scheduled");
+
+  await boss.createQueue(TAREFA_DEADLINE_JOB_NAME, queueOptions);
+  await boss.updateQueue(TAREFA_DEADLINE_JOB_NAME, queueOptions);
+
+  await boss.work(
+    TAREFA_DEADLINE_JOB_NAME,
+    { includeMetadata: true },
+    async (jobs: JobWithMetadata[]) => {
+      const job = jobs[0];
+      if (!job) return;
+
+      const retryCount = job.retryCount;
+      const retryLimit = job.retryLimit;
+      logger.info({ jobId: job.id, retryCount, retryLimit }, "Running scheduled tarefa deadline check");
+
+      try {
+        const result = await runTarefaDeadlineCheck();
+        logger.info({ jobId: job.id, retryCount, retryLimit, result }, "Scheduled tarefa deadline check completed");
+        return result;
+      } catch (err: unknown) {
+        const isPermanentFailure = retryCount >= retryLimit;
+        if (isPermanentFailure) {
+          logger.error(
+            { err, jobId: job.id, retryCount, retryLimit },
+            "Tarefa deadline job permanently failed after all retries exhausted"
+          );
+        } else {
+          logger.warn(
+            { err, jobId: job.id, retryCount, retryLimit },
+            "Tarefa deadline job attempt failed; will retry"
+          );
+        }
+        throw err;
+      }
+    }
+  );
+
+  await boss.schedule(TAREFA_DEADLINE_JOB_NAME, TAREFA_DEADLINE_CRON, {}, { tz: "America/Sao_Paulo" });
+  logger.info({ cron: TAREFA_DEADLINE_CRON }, "Tarefa deadline job scheduled");
 }
 
 export async function stopScheduler(): Promise<void> {
