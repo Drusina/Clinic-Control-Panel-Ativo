@@ -3679,6 +3679,14 @@ components:
         tarefasConcluidas:
           type: integer
           description: Number of completed top-level tarefas. Action progress = tarefasConcluidas / tarefasTotal.
+        origemDiagnostico:
+          description: >-
+            Diagnostic origin of this action — how its pillar performed in the clinic's
+            latest concluded diagnostic. Computed live; null when the clinic has no
+            concluded diagnostic or the pillar has no score.
+          oneOf:
+            - $ref: "#/components/schemas/OrigemDiagnostico"
+            - type: "null"
         createdAt:
           type: string
         updatedAt:
@@ -3691,6 +3699,29 @@ components:
         - ordem
         - createdAt
         - updatedAt
+
+    OrigemDiagnostico:
+      type: object
+      properties:
+        pilarSlug:
+          type: string
+        pilarNome:
+          type: string
+        score:
+          type: number
+          description: The pillar's score (0–5 scale) in the latest concluded diagnostic.
+        meta:
+          type: number
+          description: The pillar's target (meta) score; defaults to 4 when not stored.
+        abaixoDaMeta:
+          type: boolean
+          description: True when the pillar score is below its meta.
+      required:
+        - pilarSlug
+        - pilarNome
+        - score
+        - meta
+        - abaixoDaMeta
 
     ActionLinkedRisk:
       type: object

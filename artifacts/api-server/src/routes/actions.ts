@@ -41,12 +41,18 @@ import {
 import { getRecipientPrefs } from "../lib/preferences.js";
 import { sendPushToEmail } from "../lib/push.js";
 import { logger } from "../lib/logger.js";
+import {
+  loadPilarScores,
+  buildOrigemDiagnostico,
+  type OrigemDiagnostico,
+} from "../lib/origem-diagnostico.js";
 
 const router: IRouter = Router();
 
 function mapAction(
   a: typeof actionsTable.$inferSelect,
   progress?: { total: number; concluidas: number },
+  origemDiagnostico: OrigemDiagnostico | null = null,
 ) {
   return {
     id: a.id,
@@ -65,6 +71,7 @@ function mapAction(
     concluidoEm: a.concluidoEm?.toISOString() ?? null,
     tarefasTotal: progress?.total ?? 0,
     tarefasConcluidas: progress?.concluidas ?? 0,
+    origemDiagnostico,
     createdAt: a.createdAt.toISOString(),
     updatedAt: a.updatedAt.toISOString(),
   };
@@ -247,8 +254,15 @@ router.get("/clinics/:clinicId/actions", async (req, res): Promise<void> => {
     .where(and(...conditions))
     .orderBy(actionsTable.ordem);
 
-  const progressMap = await getProgressMap(actions.map((a) => a.id));
-  res.json(actions.map((a) => mapAction(a, progressMap.get(a.id))));
+  const [progressMap, pilarScores] = await Promise.all([
+    getProgressMap(actions.map((a) => a.id)),
+    loadPilarScores(clinicId),
+  ]);
+  res.json(
+    actions.map((a) =>
+      mapAction(a, progressMap.get(a.id), buildOrigemDiagnostico(a.pilarSlug, pilarScores)),
+    ),
+  );
 });
 
 router.post("/clinics/:clinicId/actions", async (req, res): Promise<void> => {
@@ -519,8 +533,11 @@ router.get("/actions/:id/detail", async (req, res): Promise<void> => {
     .where(eq(acaoNotasTable.acaoId, id))
     .orderBy(asc(acaoNotasTable.createdAt));
 
+  const pilarScores = await loadPilarScores(action.clinicId);
+  const origemDiagnostico = buildOrigemDiagnostico(action.pilarSlug, pilarScores);
+
   res.json({
-    action: mapAction(action, progress),
+    action: mapAction(action, progress, origemDiagnostico),
     riscoVinculado,
     checklist: checklist.map(mapChecklistItem),
     tarefas,

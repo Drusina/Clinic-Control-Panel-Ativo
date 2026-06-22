@@ -6,6 +6,8 @@ import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 import { ClinicSelectorList } from "@/components/clinic-selector-list";
 import ActionDetail from "@/components/acao/action-detail";
 import SuggestedTarefasEditor from "@/components/acao/suggested-tarefas-editor";
+import OrigemDiagnosticoBadge from "@/components/acao/origem-diagnostico-badge";
+import type { OrigemDiagnostico } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -96,6 +98,7 @@ type Action = {
   concluidoEm: string | null;
   tarefasTotal?: number;
   tarefasConcluidas?: number;
+  origemDiagnostico?: OrigemDiagnostico | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -210,6 +213,9 @@ function KanbanCard({ action, onOpenDetail }: { action: Action; onOpenDetail: (a
                 {action.tarefasConcluidas ?? 0}/{action.tarefasTotal} tarefas
               </span>
             </div>
+          )}
+          {action.origemDiagnostico && (
+            <OrigemDiagnosticoBadge origem={action.origemDiagnostico} />
           )}
         </div>
         <div className="flex items-center gap-1.5 mt-2 flex-wrap">

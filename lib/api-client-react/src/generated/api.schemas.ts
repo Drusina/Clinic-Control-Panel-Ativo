@@ -782,6 +782,17 @@ export const ActionColuna = {
   done: "done",
 } as const;
 
+export interface OrigemDiagnostico {
+  pilarSlug: string;
+  pilarNome: string;
+  /** The pillar's score (0–5 scale) in the latest concluded diagnostic. */
+  score: number;
+  /** The pillar's target (meta) score; defaults to 4 when not stored. */
+  meta: number;
+  /** True when the pillar score is below its meta. */
+  abaixoDaMeta: boolean;
+}
+
 export interface Action {
   id: string;
   clinicId: string;
@@ -810,6 +821,8 @@ export interface Action {
   tarefasTotal?: number;
   /** Number of completed top-level tarefas. Action progress = tarefasConcluidas / tarefasTotal. */
   tarefasConcluidas?: number;
+  /** Diagnostic origin of this action — how its pillar performed in the clinic's latest concluded diagnostic. Computed live; null when the clinic has no concluded diagnostic or the pillar has no score. */
+  origemDiagnostico?: OrigemDiagnostico | null;
   createdAt: string;
   updatedAt: string;
 }

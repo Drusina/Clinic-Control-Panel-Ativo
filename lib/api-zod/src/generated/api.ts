@@ -1308,6 +1308,31 @@ export const ListActionsResponseItem = zod.object({
     .describe(
       "Number of completed top-level tarefas. Action progress = tarefasConcluidas \/ tarefasTotal.",
     ),
+  origemDiagnostico: zod
+    .union([
+      zod.object({
+        pilarSlug: zod.string(),
+        pilarNome: zod.string(),
+        score: zod
+          .number()
+          .describe(
+            "The pillar's score (0–5 scale) in the latest concluded diagnostic.",
+          ),
+        meta: zod
+          .number()
+          .describe(
+            "The pillar's target (meta) score; defaults to 4 when not stored.",
+          ),
+        abaixoDaMeta: zod
+          .boolean()
+          .describe("True when the pillar score is below its meta."),
+      }),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Diagnostic origin of this action — how its pillar performed in the clinic's latest concluded diagnostic. Computed live; null when the clinic has no concluded diagnostic or the pillar has no score.",
+    ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -1539,6 +1564,31 @@ export const UpdateActionResponse = zod.object({
     .describe(
       "Number of completed top-level tarefas. Action progress = tarefasConcluidas \/ tarefasTotal.",
     ),
+  origemDiagnostico: zod
+    .union([
+      zod.object({
+        pilarSlug: zod.string(),
+        pilarNome: zod.string(),
+        score: zod
+          .number()
+          .describe(
+            "The pillar's score (0–5 scale) in the latest concluded diagnostic.",
+          ),
+        meta: zod
+          .number()
+          .describe(
+            "The pillar's target (meta) score; defaults to 4 when not stored.",
+          ),
+        abaixoDaMeta: zod
+          .boolean()
+          .describe("True when the pillar score is below its meta."),
+      }),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Diagnostic origin of this action — how its pillar performed in the clinic's latest concluded diagnostic. Computed live; null when the clinic has no concluded diagnostic or the pillar has no score.",
+    ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -1591,6 +1641,31 @@ export const GetActionDetailResponse = zod.object({
       .optional()
       .describe(
         "Number of completed top-level tarefas. Action progress = tarefasConcluidas \/ tarefasTotal.",
+      ),
+    origemDiagnostico: zod
+      .union([
+        zod.object({
+          pilarSlug: zod.string(),
+          pilarNome: zod.string(),
+          score: zod
+            .number()
+            .describe(
+              "The pillar's score (0–5 scale) in the latest concluded diagnostic.",
+            ),
+          meta: zod
+            .number()
+            .describe(
+              "The pillar's target (meta) score; defaults to 4 when not stored.",
+            ),
+          abaixoDaMeta: zod
+            .boolean()
+            .describe("True when the pillar score is below its meta."),
+        }),
+        zod.null(),
+      ])
+      .optional()
+      .describe(
+        "Diagnostic origin of this action — how its pillar performed in the clinic's latest concluded diagnostic. Computed live; null when the clinic has no concluded diagnostic or the pillar has no score.",
       ),
     createdAt: zod.string(),
     updatedAt: zod.string(),

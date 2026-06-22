@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import {
   AlertTriangle,
+  Activity,
   Loader2,
   Send,
   Trash2,
@@ -34,6 +35,7 @@ import {
 } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
 import TarefaList, { type TeamOption } from "./tarefa-list";
+import { formatScore } from "./origem-diagnostico-badge";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -241,6 +243,38 @@ export default function ActionDetail({
             />
           </div>
         </div>
+
+        {action.origemDiagnostico ? (
+          <div className="rounded-lg border bg-muted/40 p-3">
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <Activity className="h-4 w-4 text-muted-foreground" /> Origem no diagnóstico
+            </div>
+            <p className="mt-1 text-sm">{action.origemDiagnostico.pilarNome}</p>
+            <p className="text-xs text-muted-foreground">
+              Score do pilar:{" "}
+              <span
+                className={
+                  action.origemDiagnostico.abaixoDaMeta
+                    ? "text-amber-600 font-medium"
+                    : "text-foreground font-medium"
+                }
+              >
+                {formatScore(action.origemDiagnostico.score)}/5
+              </span>{" "}
+              · meta {formatScore(action.origemDiagnostico.meta)}/5
+              {action.origemDiagnostico.abaixoDaMeta ? " — abaixo da meta" : ""}
+            </p>
+          </div>
+        ) : action.pilarSlug ? (
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+              <Activity className="h-4 w-4" /> Origem no diagnóstico
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Sem diagnóstico concluído para exibir a pontuação deste pilar.
+            </p>
+          </div>
+        ) : null}
 
         {risco && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3">

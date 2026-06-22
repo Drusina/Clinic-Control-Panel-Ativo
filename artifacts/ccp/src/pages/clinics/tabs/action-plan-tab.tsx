@@ -13,6 +13,7 @@ import { Plus, Loader2, Calendar, CalendarClock, User, MoreVertical, ListChecks 
 import AgendaModule from "@/components/agenda/agenda-module";
 import ActionDetail from "@/components/acao/action-detail";
 import SuggestedTarefasEditor from "@/components/acao/suggested-tarefas-editor";
+import OrigemDiagnosticoBadge from "@/components/acao/origem-diagnostico-badge";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -282,6 +283,9 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                           {action.tarefasConcluidas ?? 0}/{action.tarefasTotal} tarefas
                         </span>
                       </div>
+                    )}
+                    {action.origemDiagnostico && (
+                      <OrigemDiagnosticoBadge origem={action.origemDiagnostico} />
                     )}
                     {nextByAction.get(action.id) && (
                       <button
