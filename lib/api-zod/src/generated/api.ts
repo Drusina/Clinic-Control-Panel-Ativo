@@ -1295,6 +1295,45 @@ export const ListActionsResponseItem = zod.object({
   coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]),
   ordem: zod.number(),
   riscoOrigemId: zod.string().nullish(),
+  camada: zod
+    .union([
+      zod.literal("pontual"),
+      zod.literal("consolidada"),
+      zod.literal("estrutural"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Generation layer derived server-side from the pillar's diagnostic score. Null for manual\/ICS actions.",
+    ),
+  responsaveis: zod
+    .array(
+      zod.object({
+        email: zod.string(),
+        nome: zod.string().nullish(),
+      }),
+    )
+    .describe(
+      "Responsáveis atribuídos à ação (N:N por e-mail). Vazio quando ainda não atribuída.",
+    ),
+  riscoSeveridade: zod
+    .number()
+    .nullish()
+    .describe(
+      "Severidade (P×I) do risco vinculado, resolvida com checagem cross-clinic. Null quando a ação não tem risco. Alimenta a borda de severidade e o selo SEV do mini-card.",
+    ),
+  riscoProbabilidade: zod
+    .number()
+    .nullish()
+    .describe(
+      "Probabilidade (1–5) do risco vinculado. Null quando a ação não tem risco.",
+    ),
+  riscoImpacto: zod
+    .number()
+    .nullish()
+    .describe(
+      "Impacto (1–5) do risco vinculado. Null quando a ação não tem risco.",
+    ),
   concluidoEm: zod.string().nullish(),
   tarefasTotal: zod
     .number()
@@ -1551,6 +1590,45 @@ export const UpdateActionResponse = zod.object({
   coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]),
   ordem: zod.number(),
   riscoOrigemId: zod.string().nullish(),
+  camada: zod
+    .union([
+      zod.literal("pontual"),
+      zod.literal("consolidada"),
+      zod.literal("estrutural"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Generation layer derived server-side from the pillar's diagnostic score. Null for manual\/ICS actions.",
+    ),
+  responsaveis: zod
+    .array(
+      zod.object({
+        email: zod.string(),
+        nome: zod.string().nullish(),
+      }),
+    )
+    .describe(
+      "Responsáveis atribuídos à ação (N:N por e-mail). Vazio quando ainda não atribuída.",
+    ),
+  riscoSeveridade: zod
+    .number()
+    .nullish()
+    .describe(
+      "Severidade (P×I) do risco vinculado, resolvida com checagem cross-clinic. Null quando a ação não tem risco. Alimenta a borda de severidade e o selo SEV do mini-card.",
+    ),
+  riscoProbabilidade: zod
+    .number()
+    .nullish()
+    .describe(
+      "Probabilidade (1–5) do risco vinculado. Null quando a ação não tem risco.",
+    ),
+  riscoImpacto: zod
+    .number()
+    .nullish()
+    .describe(
+      "Impacto (1–5) do risco vinculado. Null quando a ação não tem risco.",
+    ),
   concluidoEm: zod.string().nullish(),
   tarefasTotal: zod
     .number()
@@ -1629,6 +1707,45 @@ export const GetActionDetailResponse = zod.object({
     coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]),
     ordem: zod.number(),
     riscoOrigemId: zod.string().nullish(),
+    camada: zod
+      .union([
+        zod.literal("pontual"),
+        zod.literal("consolidada"),
+        zod.literal("estrutural"),
+        zod.literal(null),
+      ])
+      .nullish()
+      .describe(
+        "Generation layer derived server-side from the pillar's diagnostic score. Null for manual\/ICS actions.",
+      ),
+    responsaveis: zod
+      .array(
+        zod.object({
+          email: zod.string(),
+          nome: zod.string().nullish(),
+        }),
+      )
+      .describe(
+        "Responsáveis atribuídos à ação (N:N por e-mail). Vazio quando ainda não atribuída.",
+      ),
+    riscoSeveridade: zod
+      .number()
+      .nullish()
+      .describe(
+        "Severidade (P×I) do risco vinculado, resolvida com checagem cross-clinic. Null quando a ação não tem risco. Alimenta a borda de severidade e o selo SEV do mini-card.",
+      ),
+    riscoProbabilidade: zod
+      .number()
+      .nullish()
+      .describe(
+        "Probabilidade (1–5) do risco vinculado. Null quando a ação não tem risco.",
+      ),
+    riscoImpacto: zod
+      .number()
+      .nullish()
+      .describe(
+        "Impacto (1–5) do risco vinculado. Null quando a ação não tem risco.",
+      ),
     concluidoEm: zod.string().nullish(),
     tarefasTotal: zod
       .number()
@@ -1685,6 +1802,13 @@ export const GetActionDetailResponse = zod.object({
               pergunta: zod.string(),
               resposta: zod.string(),
               pilarSlug: zod.string().nullish(),
+              respostaId: zod
+                .string()
+                .nullish()
+                .describe(
+                  "Live reference to the diagnostic answer; may be null after a new diagnostic replaces it. The pergunta\/resposta pair is the durable snapshot.",
+                ),
+              perguntaId: zod.string().nullish(),
             }),
           )
           .nullish(),
@@ -1714,6 +1838,37 @@ export const GetActionDetailResponse = zod.object({
         parentTarefaId: zod.string().nullish(),
         titulo: zod.string(),
         descricao: zod.string().nullish(),
+        respostaOrigemId: zod
+          .string()
+          .nullish()
+          .describe(
+            "Diagnostic answer that originated this tarefa (live FK; may be null after a new diagnostic). The snapshot below survives.",
+          ),
+        origemPergunta: zod
+          .string()
+          .nullish()
+          .describe("Durable snapshot of the originating diagnostic question."),
+        origemResposta: zod
+          .string()
+          .nullish()
+          .describe("Durable snapshot of the originating diagnostic answer."),
+        dependeDeTarefaId: zod
+          .string()
+          .nullish()
+          .describe(
+            "Phase this tarefa depends on (estrutural chaining). Null = no lock.",
+          ),
+        dependeDeTitulo: zod
+          .string()
+          .nullish()
+          .describe(
+            "Title of the phase this tarefa depends on, resolved for display.",
+          ),
+        bloqueada: zod
+          .boolean()
+          .describe(
+            "True when the dependency phase is not yet 'concluida'. The server rejects moving a blocked tarefa to fazendo\/concluida (409).",
+          ),
         responsavelNome: zod.string().nullish(),
         responsavelEmail: zod.string().nullish(),
         dataInicio: zod.string().nullish(),
@@ -1754,6 +1909,128 @@ export const GetActionDetailResponse = zod.object({
       createdAt: zod.string(),
     }),
   ),
+});
+
+/**
+ * @summary Replace the full set of responsáveis assigned to an action
+ */
+export const SetActionResponsaveisParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SetActionResponsaveisBody = zod.object({
+  responsaveis: zod
+    .array(
+      zod.object({
+        email: zod.string(),
+        nome: zod.string().nullish(),
+      }),
+    )
+    .describe(
+      "Conjunto completo de responsáveis (substitui o atual). E-mails fora da equipe da clínica são rejeitados.",
+    ),
+});
+
+export const SetActionResponsaveisResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  titulo: zod.string(),
+  descricao: zod.string().nullish(),
+  responsavelNome: zod.string().nullish(),
+  dataInicio: zod.string().nullish(),
+  prazo: zod.string().nullish(),
+  prioridade: zod
+    .union([
+      zod.literal("alta"),
+      zod.literal("media"),
+      zod.literal("baixa"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  pilarSlug: zod.string().nullish(),
+  evidencias: zod.string().nullish(),
+  coluna: zod.enum(["backlog", "todo", "doing", "review", "done"]),
+  ordem: zod.number(),
+  riscoOrigemId: zod.string().nullish(),
+  camada: zod
+    .union([
+      zod.literal("pontual"),
+      zod.literal("consolidada"),
+      zod.literal("estrutural"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Generation layer derived server-side from the pillar's diagnostic score. Null for manual\/ICS actions.",
+    ),
+  responsaveis: zod
+    .array(
+      zod.object({
+        email: zod.string(),
+        nome: zod.string().nullish(),
+      }),
+    )
+    .describe(
+      "Responsáveis atribuídos à ação (N:N por e-mail). Vazio quando ainda não atribuída.",
+    ),
+  riscoSeveridade: zod
+    .number()
+    .nullish()
+    .describe(
+      "Severidade (P×I) do risco vinculado, resolvida com checagem cross-clinic. Null quando a ação não tem risco. Alimenta a borda de severidade e o selo SEV do mini-card.",
+    ),
+  riscoProbabilidade: zod
+    .number()
+    .nullish()
+    .describe(
+      "Probabilidade (1–5) do risco vinculado. Null quando a ação não tem risco.",
+    ),
+  riscoImpacto: zod
+    .number()
+    .nullish()
+    .describe(
+      "Impacto (1–5) do risco vinculado. Null quando a ação não tem risco.",
+    ),
+  concluidoEm: zod.string().nullish(),
+  tarefasTotal: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of top-level tarefas (parentTarefaId IS NULL) for this action.",
+    ),
+  tarefasConcluidas: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of completed top-level tarefas. Action progress = tarefasConcluidas \/ tarefasTotal.",
+    ),
+  origemDiagnostico: zod
+    .union([
+      zod.object({
+        pilarSlug: zod.string(),
+        pilarNome: zod.string(),
+        score: zod
+          .number()
+          .describe(
+            "The pillar's score (0–5 scale) in the latest concluded diagnostic.",
+          ),
+        meta: zod
+          .number()
+          .describe(
+            "The pillar's target (meta) score; defaults to 4 when not stored.",
+          ),
+        abaixoDaMeta: zod
+          .boolean()
+          .describe("True when the pillar score is below its meta."),
+      }),
+      zod.null(),
+    ])
+    .optional()
+    .describe(
+      "Diagnostic origin of this action — how its pillar performed in the clinic's latest concluded diagnostic. Computed live; null when the clinic has no concluded diagnostic or the pillar has no score.",
+    ),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
 });
 
 /**
@@ -1956,6 +2233,37 @@ export const UpdateTarefaResponse = zod.object({
   parentTarefaId: zod.string().nullish(),
   titulo: zod.string(),
   descricao: zod.string().nullish(),
+  respostaOrigemId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Diagnostic answer that originated this tarefa (live FK; may be null after a new diagnostic). The snapshot below survives.",
+    ),
+  origemPergunta: zod
+    .string()
+    .nullish()
+    .describe("Durable snapshot of the originating diagnostic question."),
+  origemResposta: zod
+    .string()
+    .nullish()
+    .describe("Durable snapshot of the originating diagnostic answer."),
+  dependeDeTarefaId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Phase this tarefa depends on (estrutural chaining). Null = no lock.",
+    ),
+  dependeDeTitulo: zod
+    .string()
+    .nullish()
+    .describe(
+      "Title of the phase this tarefa depends on, resolved for display.",
+    ),
+  bloqueada: zod
+    .boolean()
+    .describe(
+      "True when the dependency phase is not yet 'concluida'. The server rejects moving a blocked tarefa to fazendo\/concluida (409).",
+    ),
   responsavelNome: zod.string().nullish(),
   responsavelEmail: zod.string().nullish(),
   dataInicio: zod.string().nullish(),
@@ -2023,6 +2331,13 @@ export const ListRisksResponseItem = zod.object({
         pergunta: zod.string(),
         resposta: zod.string(),
         pilarSlug: zod.string().nullish(),
+        respostaId: zod
+          .string()
+          .nullish()
+          .describe(
+            "Live reference to the diagnostic answer; may be null after a new diagnostic replaces it. The pergunta\/resposta pair is the durable snapshot.",
+          ),
+        perguntaId: zod.string().nullish(),
       }),
     )
     .nullish(),
@@ -2110,6 +2425,13 @@ export const UpdateRiskResponse = zod.object({
         pergunta: zod.string(),
         resposta: zod.string(),
         pilarSlug: zod.string().nullish(),
+        respostaId: zod
+          .string()
+          .nullish()
+          .describe(
+            "Live reference to the diagnostic answer; may be null after a new diagnostic replaces it. The pergunta\/resposta pair is the durable snapshot.",
+          ),
+        perguntaId: zod.string().nullish(),
       }),
     )
     .nullish(),
@@ -2308,12 +2630,60 @@ export const PreviewRisksFromDiagnosticResponse = zod.object({
           pergunta: zod.string(),
           resposta: zod.string(),
           pilarSlug: zod.string().nullish(),
+          respostaId: zod
+            .string()
+            .nullish()
+            .describe(
+              "Live reference to the diagnostic answer; may be null after a new diagnostic replaces it. The pergunta\/resposta pair is the durable snapshot.",
+            ),
+          perguntaId: zod.string().nullish(),
         }),
       ),
       tarefasSugeridas: zod
         .array(zod.string())
         .describe(
           "Tarefas de execução sugeridas pela IA para a ação derivada deste risco (somente títulos).",
+        ),
+      camada: zod
+        .enum(["pontual", "consolidada", "estrutural"])
+        .describe(
+          "Generation layer derived server-side from the pillar's diagnostic score (>3.5 pontual, 2.5–3.5 consolidada, <2.5 estrutural).",
+        ),
+      pilarScore: zod
+        .number()
+        .nullish()
+        .describe(
+          "The pillar's score in the latest concluded diagnostic, used to derive `camada`. Null when unknown.",
+        ),
+      subtarefas: zod
+        .array(
+          zod.object({
+            titulo: zod.string(),
+            respostaOrigemId: zod.string().nullish(),
+            origemPergunta: zod.string().nullish(),
+            origemResposta: zod.string().nullish(),
+          }),
+        )
+        .describe(
+          "Per-answer subtasks (consolidada raw material), each carrying its diagnostic origin.",
+        ),
+      fases: zod
+        .array(
+          zod.object({
+            titulo: zod.string(),
+            descricao: zod.string().nullish(),
+            subtarefas: zod.array(
+              zod.object({
+                titulo: zod.string(),
+                respostaOrigemId: zod.string().nullish(),
+                origemPergunta: zod.string().nullish(),
+                origemResposta: zod.string().nullish(),
+              }),
+            ),
+          }),
+        )
+        .describe(
+          "Sequenced phases (estrutural raw material), each grouping origin-bearing subtasks.",
         ),
     }),
   ),
@@ -2342,6 +2712,13 @@ export const CommitRisksFromDiagnosticBody = zod.object({
             pergunta: zod.string(),
             resposta: zod.string(),
             pilarSlug: zod.string().nullish(),
+            respostaId: zod
+              .string()
+              .nullish()
+              .describe(
+                "Live reference to the diagnostic answer; may be null after a new diagnostic replaces it. The pergunta\/resposta pair is the durable snapshot.",
+              ),
+            perguntaId: zod.string().nullish(),
           }),
         )
         .nullish(),
@@ -2350,6 +2727,38 @@ export const CommitRisksFromDiagnosticBody = zod.object({
         .nullish()
         .describe(
           "Títulos de tarefas a criar na ação gerada (quando criarCard=true). Editável pelo usuário antes do commit.",
+        ),
+      subtarefas: zod
+        .array(
+          zod.object({
+            titulo: zod.string(),
+            respostaOrigemId: zod.string().nullish(),
+            origemPergunta: zod.string().nullish(),
+            origemResposta: zod.string().nullish(),
+          }),
+        )
+        .nullish()
+        .describe(
+          "Per-answer subtasks carried back from preview (consolidada). respostaOrigemId is re-validated server-side at commit.",
+        ),
+      fases: zod
+        .array(
+          zod.object({
+            titulo: zod.string(),
+            descricao: zod.string().nullish(),
+            subtarefas: zod.array(
+              zod.object({
+                titulo: zod.string(),
+                respostaOrigemId: zod.string().nullish(),
+                origemPergunta: zod.string().nullish(),
+                origemResposta: zod.string().nullish(),
+              }),
+            ),
+          }),
+        )
+        .nullish()
+        .describe(
+          "Sequenced phases carried back from preview (estrutural). respostaOrigemId is re-validated server-side at commit.",
         ),
       criarCard: zod.boolean(),
     }),
@@ -2396,6 +2805,13 @@ export const CommitRisksFromDiagnosticResponse = zod.object({
             pergunta: zod.string(),
             resposta: zod.string(),
             pilarSlug: zod.string().nullish(),
+            respostaId: zod
+              .string()
+              .nullish()
+              .describe(
+                "Live reference to the diagnostic answer; may be null after a new diagnostic replaces it. The pergunta\/resposta pair is the durable snapshot.",
+              ),
+            perguntaId: zod.string().nullish(),
           }),
         )
         .nullish(),

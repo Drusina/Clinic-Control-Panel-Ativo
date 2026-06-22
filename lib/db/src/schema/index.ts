@@ -9,6 +9,7 @@ export * from "./diagnostics";
 export * from "./actions";
 export * from "./acao_checklist";
 export * from "./acao_tarefas";
+export * from "./acao_responsaveis";
 export * from "./acao_evidencias";
 export * from "./acao_notas";
 export * from "./risks";

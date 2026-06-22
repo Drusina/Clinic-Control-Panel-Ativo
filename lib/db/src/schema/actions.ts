@@ -17,6 +17,9 @@ export const actionsTable = pgTable("acoes", {
   prioridade: text("prioridade"),
   pilarSlug: text("pilar_slug"),
   evidencias: text("evidencias"),
+  // Camada de geração derivada do score médio do pilar (fonte da verdade no
+  // servidor): pontual | consolidada | estrutural. NULL para ações manuais/ICS.
+  camada: text("camada"),
   coluna: text("coluna").notNull().default("backlog"),
   ordem: integer("ordem").notNull().default(0),
   riscoOrigemId: uuid("risco_origem_id").references(() => risksTable.id, {

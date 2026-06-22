@@ -8,6 +8,11 @@ export type PerguntaFonte = {
   pergunta: string;
   resposta: string;
   pilarSlug: string | null;
+  // Referências vivas (opcionais) usadas apenas no momento da geração para
+  // ligar subtarefas à resposta específica. O par pergunta/resposta acima é o
+  // snapshot durável; estes IDs podem deixar de existir após novo diagnóstico.
+  respostaId?: string | null;
+  perguntaId?: string | null;
 };
 
 export const risksTable = pgTable("riscos", {

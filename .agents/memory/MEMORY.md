@@ -11,3 +11,5 @@
 - [Orval body/param naming](orval-body-naming.md) — generated zod/hook names come from operationId, not the schema $ref name; grep generated output before importing.
 - [Suggested tarefas best-effort](suggested-tarefas-design.md) — action/risk creation may persist ZERO tarefas by design; non-empty fallback lives only in suggest endpoint, never force-injected at write boundaries.
 - [Portal dashboard tests](portal-dashboard-tests.md) — Visão Geral contract (4 testid blocks) must survive rewrites; extend the api-client-react vi.mock when adding hooks; keep recharts out of jsdom (no concluded diagnostic).
+- [Risk-generation hand-written types](risk-generation-handwritten-types.md) — generate-risks-button.tsx uses raw fetch + local types (NOT Orval) for preview/commit; mirror contract changes by hand, typecheck won't catch drift.
+- [Plano de Ação camada/multi-responsável](plano-acao-camada-multiresp.md) — camada derived server-side from scoresPilares; acao_responsaveis join table; standalone Kanban filter must union responsaveis[] + legacy responsavelNome.

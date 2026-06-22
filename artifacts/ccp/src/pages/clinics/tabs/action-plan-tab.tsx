@@ -15,7 +15,10 @@ import ActionDetail from "@/components/acao/action-detail";
 import SuggestedTarefasEditor from "@/components/acao/suggested-tarefas-editor";
 import OrigemDiagnosticoBadge from "@/components/acao/origem-diagnostico-badge";
 import RegenerateTarefasButton from "@/components/acao/regenerate-tarefas-button";
+import { CamadaBadge, SeverityBadge, severityMeta } from "@/components/acao/camada-badge";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -237,8 +240,22 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
               {col.title} <span className="ml-1 text-xs opacity-70">({actions?.filter(a => a.coluna === col.id).length || 0})</span>
             </h4>
             <div className="flex flex-col gap-3 flex-1">
-              {actions?.filter((a) => a.coluna === col.id).map((action) => (
-                <div key={action.id} className="bg-card border rounded-md p-3 shadow-sm group hover:shadow-md transition-shadow">
+              {actions?.filter((a) => a.coluna === col.id).map((action) => {
+                const topBorder = action.riscoSeveridade != null
+                  ? severityMeta(action.riscoSeveridade).border
+                  : null;
+                const respList = action.responsaveis ?? [];
+                const fallbackResp = respList.length === 0 && action.responsavelNome
+                  ? [{ email: "", nome: action.responsavelNome }]
+                  : respList;
+                const total = action.tarefasTotal ?? 0;
+                const done = action.tarefasConcluidas ?? 0;
+                const pct = total > 0 ? (done / total) * 100 : 0;
+                const unidade = action.camada === "estrutural" ? "fases" : "tarefas";
+                return (
+                <div key={action.id} className="bg-card border rounded-md shadow-sm group hover:shadow-md transition-shadow overflow-hidden" data-testid={`acao-card-${action.id}`}>
+                  {topBorder && <div className={cn("h-1", topBorder)} />}
+                  <div className="p-3">
                   <div className="flex justify-between items-start mb-2">
                     <Badge variant={getPriorityColor(action.prioridade || 'baixa') as any} className="text-[10px] px-1.5 py-0">
                       {action.prioridade || 'baixa'}
@@ -267,6 +284,14 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
+                  <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                    <SeverityBadge
+                      severidade={action.riscoSeveridade}
+                      probabilidade={action.riscoProbabilidade}
+                      impacto={action.riscoImpacto}
+                    />
+                    <CamadaBadge camada={action.camada} />
+                  </div>
                   <button
                     type="button"
                     onClick={() => setDetailAction(action)}
@@ -274,23 +299,43 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                   >
                     {action.titulo}
                   </button>
+                  {total > 0 && (
+                    <div className="mb-2">
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1">
+                        <ListChecks className="h-3 w-3" /> {done}/{total} {unidade}
+                      </div>
+                      <Progress value={pct} className="h-1.5" />
+                    </div>
+                  )}
                   <div className="flex flex-col gap-1.5 mt-3 text-xs text-muted-foreground">
                     {action.prazo && (
                       <div className="flex items-center gap-1.5">
                         <Calendar className="h-3 w-3" /> {new Date(action.prazo).toLocaleDateString('pt-BR')}
                       </div>
                     )}
-                    {action.responsavelNome && (
+                    {fallbackResp.length > 0 && (
                       <div className="flex items-center gap-1.5 truncate">
-                        <User className="h-3 w-3 shrink-0" /> <span className="truncate">{action.responsavelNome}</span>
-                      </div>
-                    )}
-                    {(action.tarefasTotal ?? 0) > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <ListChecks className="h-3 w-3 shrink-0" />
-                        <span>
-                          {action.tarefasConcluidas ?? 0}/{action.tarefasTotal} tarefas
-                        </span>
+                        {fallbackResp.length === 1 ? (
+                          <>
+                            <User className="h-3 w-3 shrink-0" />{" "}
+                            <span className="truncate">{fallbackResp[0].nome ?? fallbackResp[0].email}</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex -space-x-1.5">
+                              {fallbackResp.slice(0, 3).map((r, i) => (
+                                <div
+                                  key={r.email || `resp-${i}`}
+                                  className="h-5 w-5 rounded-full bg-primary/10 ring-1 ring-card flex items-center justify-center text-[9px] font-semibold text-primary flex-shrink-0"
+                                  title={r.nome ?? r.email}
+                                >
+                                  {(r.nome ?? r.email).charAt(0).toUpperCase()}
+                                </div>
+                              ))}
+                            </div>
+                            <span className="truncate">{fallbackResp.length} responsáveis</span>
+                          </>
+                        )}
                       </div>
                     )}
                     {action.origemDiagnostico && (
@@ -315,8 +360,10 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
                       </button>
                     )}
                   </div>
+                  </div>
                 </div>
-              ))}
+                );
+              })}
               {actions?.filter((a) => a.coluna === col.id).length === 0 && (
                 <div className="text-xs text-center text-muted-foreground/50 py-4 border-2 border-dashed border-muted-foreground/20 rounded-md">
                   Vazio

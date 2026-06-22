@@ -13,6 +13,7 @@ import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { actionsTable } from "./actions";
+import { respostasTable } from "./respostas";
 
 /**
  * Tarefas que decompõem uma Ação do Plano de Ação (Fase 3).
@@ -39,8 +40,24 @@ export const acaoTarefasTable = pgTable(
       (): AnyPgColumn => acaoTarefasTable.id,
       { onDelete: "cascade" },
     ),
+    // Dependência de fase (camada estrutural): esta tarefa só pode ser
+    // iniciada/concluída quando a tarefa apontada estiver "concluida". Auto-FK,
+    // top-level apenas. NULL = sem cadeado. Enforçado no servidor (409).
+    dependeDeTarefaId: uuid("depende_de_tarefa_id").references(
+      (): AnyPgColumn => acaoTarefasTable.id,
+      { onDelete: "set null" },
+    ),
     titulo: text("titulo").notNull(),
     descricao: text("descricao"),
+    // Rastreabilidade Diagnóstico → Ação: resposta do diagnóstico que originou
+    // esta tarefa. FK preserva referência viva; o snapshot textual sobrevive a
+    // um novo diagnóstico (a FK vira NULL, o texto permanece — "↳ origem").
+    respostaOrigemId: uuid("resposta_origem_id").references(
+      () => respostasTable.id,
+      { onDelete: "set null" },
+    ),
+    origemPergunta: text("origem_pergunta"),
+    origemResposta: text("origem_resposta"),
     responsavelNome: text("responsavel_nome"),
     // E-mail do responsável (escolhido entre os usuários da clínica). Guardado
     // diretamente para resolver notificações sem depender de match por nome.

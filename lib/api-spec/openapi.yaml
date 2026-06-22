@@ -1151,6 +1151,35 @@ paths:
         "404":
           description: Not found
 
+  /actions/{id}/responsaveis:
+    put:
+      operationId: setActionResponsaveis
+      tags: [actions]
+      summary: Replace the full set of responsáveis assigned to an action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetActionResponsaveisBody"
+      responses:
+        "200":
+          description: Updated action with its new responsáveis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Action"
+        "400":
+          description: A responsável e-mail does not belong to the clinic's team
+        "404":
+          description: Not found
+
   /actions/{id}/checklist:
     post:
       operationId: addChecklistItem
@@ -3671,6 +3700,24 @@ components:
           type: integer
         riscoOrigemId:
           type: ["string", "null"]
+        camada:
+          type: ["string", "null"]
+          enum: [pontual, consolidada, estrutural, null]
+          description: Generation layer derived server-side from the pillar's diagnostic score. Null for manual/ICS actions.
+        responsaveis:
+          type: array
+          description: Responsáveis atribuídos à ação (N:N por e-mail). Vazio quando ainda não atribuída.
+          items:
+            $ref: "#/components/schemas/ActionResponsavel"
+        riscoSeveridade:
+          type: ["integer", "null"]
+          description: Severidade (P×I) do risco vinculado, resolvida com checagem cross-clinic. Null quando a ação não tem risco. Alimenta a borda de severidade e o selo SEV do mini-card.
+        riscoProbabilidade:
+          type: ["integer", "null"]
+          description: Probabilidade (1–5) do risco vinculado. Null quando a ação não tem risco.
+        riscoImpacto:
+          type: ["integer", "null"]
+          description: Impacto (1–5) do risco vinculado. Null quando a ação não tem risco.
         concluidoEm:
           type: ["string", "null"]
         tarefasTotal:
@@ -3697,8 +3744,19 @@ components:
         - titulo
         - coluna
         - ordem
+        - responsaveis
         - createdAt
         - updatedAt
+
+    ActionResponsavel:
+      type: object
+      properties:
+        email:
+          type: string
+        nome:
+          type: ["string", "null"]
+      required:
+        - email
 
     OrigemDiagnostico:
       type: object
@@ -3861,6 +3919,24 @@ components:
           type: string
         descricao:
           type: ["string", "null"]
+        respostaOrigemId:
+          type: ["string", "null"]
+          description: Diagnostic answer that originated this tarefa (live FK; may be null after a new diagnostic). The snapshot below survives.
+        origemPergunta:
+          type: ["string", "null"]
+          description: Durable snapshot of the originating diagnostic question.
+        origemResposta:
+          type: ["string", "null"]
+          description: Durable snapshot of the originating diagnostic answer.
+        dependeDeTarefaId:
+          type: ["string", "null"]
+          description: Phase this tarefa depends on (estrutural chaining). Null = no lock.
+        dependeDeTitulo:
+          type: ["string", "null"]
+          description: Title of the phase this tarefa depends on, resolved for display.
+        bloqueada:
+          type: boolean
+          description: True when the dependency phase is not yet 'concluida'. The server rejects moving a blocked tarefa to fazendo/concluida (409).
         responsavelNome:
           type: ["string", "null"]
         responsavelEmail:
@@ -3891,6 +3967,7 @@ components:
         - titulo
         - status
         - ordem
+        - bloqueada
         - createdAt
         - updatedAt
 
@@ -4245,6 +4322,11 @@ components:
           type: string
         pilarSlug:
           type: ["string", "null"]
+        respostaId:
+          type: ["string", "null"]
+          description: Live reference to the diagnostic answer; may be null after a new diagnostic replaces it. The pergunta/resposta pair is the durable snapshot.
+        perguntaId:
+          type: ["string", "null"]
       required:
         - pergunta
         - resposta
@@ -4297,6 +4379,23 @@ components:
           description: Tarefas de execução sugeridas pela IA para a ação derivada deste risco (somente títulos).
           items:
             type: string
+        camada:
+          type: string
+          enum: [pontual, consolidada, estrutural]
+          description: Generation layer derived server-side from the pillar's diagnostic score (>3.5 pontual, 2.5–3.5 consolidada, <2.5 estrutural).
+        pilarScore:
+          type: ["number", "null"]
+          description: The pillar's score in the latest concluded diagnostic, used to derive `camada`. Null when unknown.
+        subtarefas:
+          type: array
+          description: Per-answer subtasks (consolidada raw material), each carrying its diagnostic origin.
+          items:
+            $ref: "#/components/schemas/GeneratedSubtarefa"
+        fases:
+          type: array
+          description: Sequenced phases (estrutural raw material), each grouping origin-bearing subtasks.
+          items:
+            $ref: "#/components/schemas/GeneratedFase"
       required:
         - pilarSlug
         - nome
@@ -4308,6 +4407,38 @@ components:
         - acoesMitigadoras
         - perguntasFonte
         - tarefasSugeridas
+        - camada
+        - subtarefas
+        - fases
+
+    GeneratedSubtarefa:
+      type: object
+      properties:
+        titulo:
+          type: string
+        respostaOrigemId:
+          type: ["string", "null"]
+        origemPergunta:
+          type: ["string", "null"]
+        origemResposta:
+          type: ["string", "null"]
+      required:
+        - titulo
+
+    GeneratedFase:
+      type: object
+      properties:
+        titulo:
+          type: string
+        descricao:
+          type: ["string", "null"]
+        subtarefas:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeneratedSubtarefa"
+      required:
+        - titulo
+        - subtarefas
 
     PreviewRisksResponse:
       type: object
@@ -4346,6 +4477,16 @@ components:
           description: Títulos de tarefas a criar na ação gerada (quando criarCard=true). Editável pelo usuário antes do commit.
           items:
             type: string
+        subtarefas:
+          type: ["array", "null"]
+          description: Per-answer subtasks carried back from preview (consolidada). respostaOrigemId is re-validated server-side at commit.
+          items:
+            $ref: "#/components/schemas/GeneratedSubtarefa"
+        fases:
+          type: ["array", "null"]
+          description: Sequenced phases carried back from preview (estrutural). respostaOrigemId is re-validated server-side at commit.
+          items:
+            $ref: "#/components/schemas/GeneratedFase"
         criarCard:
           type: boolean
       required:
@@ -4363,6 +4504,17 @@ components:
             $ref: "#/components/schemas/CommitGeneratedRiskItem"
       required:
         - risks
+
+    SetActionResponsaveisBody:
+      type: object
+      properties:
+        responsaveis:
+          type: array
+          description: Conjunto completo de responsáveis (substitui o atual). E-mails fora da equipe da clínica são rejeitados.
+          items:
+            $ref: "#/components/schemas/ActionResponsavel"
+      required:
+        - responsaveis
 
     CreateRiskBody:
       type: object

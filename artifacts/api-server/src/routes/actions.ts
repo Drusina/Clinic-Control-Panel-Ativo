@@ -10,6 +10,7 @@ import {
   acaoEvidenciasTable,
   acaoNotasTable,
   acaoTarefasTable,
+  acaoResponsaveisTable,
   teamTable,
 } from "@workspace/db";
 import { assertClinicAccess, type AuthenticatedRequest } from "../middleware/auth";
@@ -27,6 +28,8 @@ import {
   ListClinicTarefasQueryParams,
   SuggestActionTarefasBody,
   BatchCreateTarefasBody,
+  SetActionResponsaveisBody,
+  SetActionResponsaveisResponse,
 } from "@workspace/api-zod";
 import { getTemplateForPlan } from "../lib/ics-seed.js";
 import { createSuggestedTarefas, sanitizeTarefaTitles } from "../lib/tarefas.js";
@@ -53,6 +56,8 @@ function mapAction(
   a: typeof actionsTable.$inferSelect,
   progress?: { total: number; concluidas: number },
   origemDiagnostico: OrigemDiagnostico | null = null,
+  responsaveis: { email: string; nome: string | null }[] = [],
+  risco: { severidade: number; probabilidade: number; impacto: number } | null = null,
 ) {
   return {
     id: a.id,
@@ -68,6 +73,15 @@ function mapAction(
     coluna: a.coluna,
     ordem: a.ordem,
     riscoOrigemId: a.riscoOrigemId,
+    // Camada de geração (derivada do score do pilar no commit); null p/ ações
+    // manuais/ICS. Responsáveis vêm da tabela N:N (vazio quando não atribuída).
+    camada: a.camada ?? null,
+    responsaveis,
+    // Severidade do risco vinculado (resolvida com checagem cross-clinic); usada
+    // pelo mini-card para a borda de severidade e o selo SEV. Null p/ ações sem risco.
+    riscoSeveridade: risco?.severidade ?? null,
+    riscoProbabilidade: risco?.probabilidade ?? null,
+    riscoImpacto: risco?.impacto ?? null,
     concluidoEm: a.concluidoEm?.toISOString() ?? null,
     tarefasTotal: progress?.total ?? 0,
     tarefasConcluidas: progress?.concluidas ?? 0,
@@ -108,12 +122,84 @@ async function getProgressMap(
   return map;
 }
 
+/**
+ * Carrega os responsáveis (N:N) de um conjunto de ações em uma única query —
+ * evita N+1 na lista/Kanban. Retorna um Map keyed por acaoId (ações sem
+ * responsável simplesmente não aparecem; o `mapAction` usa [] como default).
+ */
+async function getResponsaveisMap(
+  acaoIds: string[],
+): Promise<Map<string, { email: string; nome: string | null }[]>> {
+  const map = new Map<string, { email: string; nome: string | null }[]>();
+  if (acaoIds.length === 0) return map;
+  const rows = await db
+    .select({
+      acaoId: acaoResponsaveisTable.acaoId,
+      email: acaoResponsaveisTable.email,
+      nome: acaoResponsaveisTable.nome,
+    })
+    .from(acaoResponsaveisTable)
+    .where(inArray(acaoResponsaveisTable.acaoId, acaoIds))
+    .orderBy(asc(acaoResponsaveisTable.createdAt));
+  for (const r of rows) {
+    const arr = map.get(r.acaoId) ?? [];
+    arr.push({ email: r.email, nome: r.nome });
+    map.set(r.acaoId, arr);
+  }
+  return map;
+}
+
+/**
+ * Resolve a severidade do risco vinculado (riscoOrigemId) de um conjunto de
+ * ações em uma única query — alimenta a borda de severidade e o selo SEV do
+ * mini-card sem N+1. A query é escopada ao clinicId (checagem cross-clinic:
+ * um risco de outra clínica nunca é anexado). Retorna um Map keyed por acaoId.
+ */
+async function getRiscoMap(
+  actions: { id: string; riscoOrigemId: string | null }[],
+  clinicId: string,
+): Promise<Map<string, { severidade: number; probabilidade: number; impacto: number }>> {
+  const map = new Map<string, { severidade: number; probabilidade: number; impacto: number }>();
+  const riscoIds = [
+    ...new Set(actions.map((a) => a.riscoOrigemId).filter((x): x is string => !!x)),
+  ];
+  if (riscoIds.length === 0) return map;
+  const rows = await db
+    .select({
+      id: risksTable.id,
+      severidade: risksTable.severidade,
+      probabilidade: risksTable.probabilidade,
+      impacto: risksTable.impacto,
+    })
+    .from(risksTable)
+    .where(and(inArray(risksTable.id, riscoIds), eq(risksTable.clinicId, clinicId)));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const a of actions) {
+    if (!a.riscoOrigemId) continue;
+    const r = byId.get(a.riscoOrigemId);
+    if (r) {
+      map.set(a.id, {
+        severidade: r.severidade,
+        probabilidade: r.probabilidade,
+        impacto: r.impacto,
+      });
+    }
+  }
+  return map;
+}
+
 type TarefaDTO = {
   id: string;
   acaoId: string;
   parentTarefaId: string | null;
   titulo: string;
   descricao: string | null;
+  respostaOrigemId: string | null;
+  origemPergunta: string | null;
+  origemResposta: string | null;
+  dependeDeTarefaId: string | null;
+  dependeDeTitulo: string | null;
+  bloqueada: boolean;
   responsavelNome: string | null;
   responsavelEmail: string | null;
   dataInicio: string | null;
@@ -126,16 +212,30 @@ type TarefaDTO = {
   subtarefas?: TarefaDTO[];
 };
 
+/**
+ * Mapeia uma tarefa para o DTO. `depById` (id → {titulo,status}) resolve o
+ * cadeado de dependência da camada estrutural: uma tarefa fica `bloqueada`
+ * enquanto a fase de que depende não estiver "concluida". Quando o lookup não é
+ * fornecido (respostas de item único sem dependência), assume não-bloqueada.
+ */
 function mapTarefa(
   t: typeof acaoTarefasTable.$inferSelect,
   subtarefas?: TarefaDTO[],
+  depById?: Map<string, { titulo: string; status: string }>,
 ): TarefaDTO {
+  const dep = t.dependeDeTarefaId ? depById?.get(t.dependeDeTarefaId) ?? null : null;
   return {
     id: t.id,
     acaoId: t.acaoId,
     parentTarefaId: t.parentTarefaId,
     titulo: t.titulo,
     descricao: t.descricao,
+    respostaOrigemId: t.respostaOrigemId,
+    origemPergunta: t.origemPergunta,
+    origemResposta: t.origemResposta,
+    dependeDeTarefaId: t.dependeDeTarefaId,
+    dependeDeTitulo: dep?.titulo ?? null,
+    bloqueada: dep ? dep.status !== "concluida" : false,
     responsavelNome: t.responsavelNome,
     responsavelEmail: t.responsavelEmail,
     dataInicio: t.dataInicio,
@@ -254,13 +354,22 @@ router.get("/clinics/:clinicId/actions", async (req, res): Promise<void> => {
     .where(and(...conditions))
     .orderBy(actionsTable.ordem);
 
-  const [progressMap, pilarScores] = await Promise.all([
-    getProgressMap(actions.map((a) => a.id)),
+  const acaoIds = actions.map((a) => a.id);
+  const [progressMap, pilarScores, responsaveisMap, riscoMap] = await Promise.all([
+    getProgressMap(acaoIds),
     loadPilarScores(clinicId),
+    getResponsaveisMap(acaoIds),
+    getRiscoMap(actions, clinicId),
   ]);
   res.json(
     actions.map((a) =>
-      mapAction(a, progressMap.get(a.id), buildOrigemDiagnostico(a.pilarSlug, pilarScores)),
+      mapAction(
+        a,
+        progressMap.get(a.id),
+        buildOrigemDiagnostico(a.pilarSlug, pilarScores),
+        responsaveisMap.get(a.id) ?? [],
+        riscoMap.get(a.id) ?? null,
+      ),
     ),
   );
 });
@@ -393,7 +502,88 @@ router.patch("/actions/:id", async (req, res): Promise<void> => {
   }
 
   const progressMap = await getProgressMap([action.id]);
-  res.json(UpdateActionResponse.parse(mapAction(action, progressMap.get(action.id))));
+  const responsaveis = (await getResponsaveisMap([action.id])).get(action.id) ?? [];
+  res.json(
+    UpdateActionResponse.parse(
+      mapAction(action, progressMap.get(action.id), null, responsaveis),
+    ),
+  );
+});
+
+/**
+ * Substitui o conjunto COMPLETO de responsáveis de uma ação (N:N por e-mail).
+ * Cada e-mail é validado contra a `equipe_interna` da própria clínica (escopo de
+ * clínica), deduplicado case-insensitive, e o legado `acoes.responsavel_nome` é
+ * sincronizado com o primeiro responsável para preservar o fallback de exibição
+ * e de notificação. Tudo em uma transação.
+ */
+router.put("/actions/:id/responsaveis", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = SetActionResponsaveisBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const action = await loadAction(id);
+  if (!action) {
+    res.status(404).json({ error: "Action not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, action.clinicId)) return;
+
+  // Dedup case-insensitive por e-mail, preservando a ordem informada.
+  const seen = new Set<string>();
+  const desired: { email: string; nome: string | null }[] = [];
+  for (const r of parsed.data.responsaveis) {
+    const email = r.email.trim();
+    if (!email) continue;
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    desired.push({ email, nome: r.nome?.trim() || null });
+  }
+  // Todo responsável precisa pertencer à equipe da própria clínica.
+  for (const r of desired) {
+    if (!(await isClinicTeamEmail(action.clinicId, r.email))) {
+      res.status(400).json({ error: `Responsável inválido para esta clínica: ${r.email}` });
+      return;
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(acaoResponsaveisTable).where(eq(acaoResponsaveisTable.acaoId, id));
+    if (desired.length > 0) {
+      await tx
+        .insert(acaoResponsaveisTable)
+        .values(desired.map((r) => ({ acaoId: id, email: r.email, nome: r.nome })));
+    }
+    // Mantém o legado em sincronia (fallback de exibição/notificação).
+    await tx
+      .update(actionsTable)
+      .set({
+        responsavelNome: desired[0]?.nome ?? desired[0]?.email ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(actionsTable.id, id));
+  });
+
+  const [updated] = await db
+    .select()
+    .from(actionsTable)
+    .where(eq(actionsTable.id, id))
+    .limit(1);
+  const progressMap = await getProgressMap([id]);
+  const pilarScores = await loadPilarScores(action.clinicId);
+  res.json(
+    SetActionResponsaveisResponse.parse(
+      mapAction(
+        updated,
+        progressMap.get(id),
+        buildOrigemDiagnostico(updated.pilarSlug, pilarScores),
+        desired,
+      ),
+    ),
+  );
 });
 
 
@@ -507,7 +697,11 @@ router.get("/actions/:id/detail", async (req, res): Promise<void> => {
     .orderBy(asc(acaoTarefasTable.ordem), asc(acaoTarefasTable.createdAt));
 
   const childrenByParent = new Map<string, typeof tarefaRows>();
+  // Lookup id → {titulo,status} para resolver o cadeado de dependência (camada
+  // estrutural): uma tarefa fica `bloqueada` enquanto sua fase-pai não concluir.
+  const depById = new Map<string, { titulo: string; status: string }>();
   for (const t of tarefaRows) {
+    depById.set(t.id, { titulo: t.titulo, status: t.status });
     if (t.parentTarefaId) {
       const arr = childrenByParent.get(t.parentTarefaId) ?? [];
       arr.push(t);
@@ -518,7 +712,8 @@ router.get("/actions/:id/detail", async (req, res): Promise<void> => {
   const tarefas = topLevel.map((t) =>
     mapTarefa(
       t,
-      (childrenByParent.get(t.id) ?? []).map((c) => mapTarefa(c)),
+      (childrenByParent.get(t.id) ?? []).map((c) => mapTarefa(c, undefined, depById)),
+      depById,
     ),
   );
   const progress = {
@@ -541,9 +736,22 @@ router.get("/actions/:id/detail", async (req, res): Promise<void> => {
 
   const pilarScores = await loadPilarScores(action.clinicId);
   const origemDiagnostico = buildOrigemDiagnostico(action.pilarSlug, pilarScores);
+  const responsaveis = (await getResponsaveisMap([id])).get(id) ?? [];
 
   res.json({
-    action: mapAction(action, progress, origemDiagnostico),
+    action: mapAction(
+      action,
+      progress,
+      origemDiagnostico,
+      responsaveis,
+      riscoVinculado
+        ? {
+            severidade: riscoVinculado.severidade,
+            probabilidade: riscoVinculado.probabilidade,
+            impacto: riscoVinculado.impacto,
+          }
+        : null,
+    ),
     riscoVinculado,
     checklist: checklist.map(mapChecklistItem),
     tarefas,
@@ -579,9 +787,10 @@ router.post("/actions/:id/checklist", async (req, res): Promise<void> => {
     .values({ acaoId: id, texto: parsed.data.texto, ordem: nextOrdem })
     .returning();
 
-  // Optionally notify the action's responsável about the new checklist item
-  // (best-effort: never fails the insert). See notifyResponsavelOfActionUpdate.
-  if (parsed.data.notificar && action.responsavelNome?.trim()) {
+  // Optionally notify the action's responsáveis about the new checklist item
+  // (best-effort: never fails the insert). Recipient resolution (N:N + legacy
+  // fallback) lives in notifyResponsavelOfActionUpdate.
+  if (parsed.data.notificar) {
     void notifyResponsavelOfActionUpdate("checklist", action, item.texto).catch((err) => {
       logger.error(
         { err, acaoId: id, clinicId: action.clinicId },
@@ -784,6 +993,33 @@ router.patch("/actions/:id/tarefas/:tarefaId", async (req, res): Promise<void> =
   }
 
   const d = parsed.data;
+
+  // Cadeado de dependência (camada estrutural): resolve a fase de que esta
+  // tarefa depende para (a) impedir a transição p/ "fazendo"/"concluida"
+  // enquanto a dependência não estiver concluída (409) e (b) preencher
+  // bloqueada/dependeDeTitulo no retorno.
+  let depById: Map<string, { titulo: string; status: string }> | undefined;
+  if (existing.dependeDeTarefaId) {
+    const [dep] = await db
+      .select({
+        id: acaoTarefasTable.id,
+        titulo: acaoTarefasTable.titulo,
+        status: acaoTarefasTable.status,
+      })
+      .from(acaoTarefasTable)
+      .where(eq(acaoTarefasTable.id, existing.dependeDeTarefaId))
+      .limit(1);
+    if (dep) {
+      depById = new Map([[dep.id, { titulo: dep.titulo, status: dep.status }]]);
+      if ((d.status === "fazendo" || d.status === "concluida") && dep.status !== "concluida") {
+        res.status(409).json({
+          error: `Esta etapa depende de "${dep.titulo}", que ainda não foi concluída.`,
+        });
+        return;
+      }
+    }
+  }
+
   const updates: Partial<typeof acaoTarefasTable.$inferInsert> = {};
   if (d.titulo != null) updates.titulo = d.titulo;
   if (d.descricao !== undefined) updates.descricao = d.descricao;
@@ -838,7 +1074,7 @@ router.patch("/actions/:id/tarefas/:tarefaId", async (req, res): Promise<void> =
     });
   }
 
-  res.json(mapTarefa(tarefa, tarefa.parentTarefaId ? undefined : []));
+  res.json(mapTarefa(tarefa, tarefa.parentTarefaId ? undefined : [], depById));
 });
 
 router.delete("/actions/:id/tarefas/:tarefaId", async (req, res): Promise<void> => {
@@ -1073,12 +1309,12 @@ router.post("/actions/:id/notas", async (req, res): Promise<void> => {
     .values({ acaoId: id, texto: parsed.data.texto, autor: parsed.data.autor ?? null })
     .returning();
 
-  // Optionally notify the action's responsável (best-effort: a notification
-  // failure must never fail the note insert). The responsável is identified by
-  // name on the action, so we resolve their email by matching the clinic's
-  // `equipe_interna` record case-insensitively by name. We respect the
-  // recipient's email preference; web push is always attempted when available.
-  if (parsed.data.notificar && action.responsavelNome?.trim()) {
+  // Optionally notify the action's responsáveis (best-effort: a notification
+  // failure must never fail the note insert). Recipients resolve from the N:N
+  // `acao_responsaveis` table, falling back to the legacy `responsavelNome` match
+  // — all clinic-scoped. We respect each recipient's email preference; web push
+  // is always attempted when available.
+  if (parsed.data.notificar) {
     void notifyResponsavelOfActionUpdate("nota", action, nota.texto).catch((err) => {
       logger.error(
         { err, acaoId: id, clinicId: action.clinicId },
@@ -1100,14 +1336,36 @@ router.post("/actions/:id/notas", async (req, res): Promise<void> => {
  * respects the recipient's `emailEnabled` preference; web push is always
  * attempted when a subscription exists.
  */
-export async function notifyResponsavelOfActionUpdate(
-  kind: "nota" | "checklist",
+/**
+ * Resolve os destinatários (e-mail + nome) de uma ação para notificação.
+ * Prioriza a tabela N:N `acao_responsaveis`; se vazia, recai no legado
+ * `acoes.responsavel_nome` casado por nome contra a `equipe_interna` da própria
+ * clínica. Sempre escopado por clínica. Deduplica por e-mail (case-insensitive).
+ */
+async function resolveActionRecipients(
   action: typeof actionsTable.$inferSelect,
-  texto: string,
-): Promise<void> {
-  const responsavelNome = action.responsavelNome?.trim();
-  if (!responsavelNome) return;
+): Promise<{ email: string; nome: string | null }[]> {
+  const rows = await db
+    .select({ email: acaoResponsaveisTable.email, nome: acaoResponsaveisTable.nome })
+    .from(acaoResponsaveisTable)
+    .where(eq(acaoResponsaveisTable.acaoId, action.id))
+    .orderBy(asc(acaoResponsaveisTable.createdAt));
 
+  const out: { email: string; nome: string | null }[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const email = r.email?.trim();
+    if (!email) continue;
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ email, nome: r.nome });
+  }
+  if (out.length > 0) return out;
+
+  // Fallback legado: casa o nome contra a equipe da clínica.
+  const responsavelNome = action.responsavelNome?.trim();
+  if (!responsavelNome) return [];
   const [member] = await db
     .select({ email: teamTable.email, nome: teamTable.nome })
     .from(teamTable)
@@ -1118,9 +1376,18 @@ export async function notifyResponsavelOfActionUpdate(
       ),
     )
     .limit(1);
-
   const recipient = member?.email?.trim();
-  if (!recipient) return;
+  if (!recipient) return [];
+  return [{ email: recipient, nome: member?.nome ?? responsavelNome }];
+}
+
+export async function notifyResponsavelOfActionUpdate(
+  kind: "nota" | "checklist",
+  action: typeof actionsTable.$inferSelect,
+  texto: string,
+): Promise<void> {
+  const recipients = await resolveActionRecipients(action);
+  if (recipients.length === 0) return;
 
   const [clinic] = await db
     .select({ nome: clinicsTable.nome })
@@ -1135,33 +1402,35 @@ export async function notifyResponsavelOfActionUpdate(
   const subject = isNota
     ? `[IONEX360] Nova nota na ação: ${action.titulo}`
     : `[IONEX360] Novo item de checklist na ação: ${action.titulo}`;
+  const appUrl = await resolveAppUrl();
 
-  // Web push — clinic-scoped resolution so a duplicate email across clinics can
-  // never receive another clinic's notification. Best-effort.
-  await sendPushToEmail(recipient, action.clinicId, {
-    title: pushTitle,
-    body: texto.length > 120 ? `${texto.slice(0, 117)}…` : texto,
-    url: acaoPath,
-    tag: `acao-${kind}-${action.id}`,
-  }).catch(() => ({ sent: 0, failed: 0 }));
+  for (const recipient of recipients) {
+    // Web push — clinic-scoped resolution so a duplicate email across clinics can
+    // never receive another clinic's notification. Best-effort, per recipient.
+    await sendPushToEmail(recipient.email, action.clinicId, {
+      title: pushTitle,
+      body: texto.length > 120 ? `${texto.slice(0, 117)}…` : texto,
+      url: acaoPath,
+      tag: `acao-${kind}-${action.id}`,
+    }).catch(() => ({ sent: 0, failed: 0 }));
 
-  const prefs = await getRecipientPrefs(recipient, action.clinicId);
-  if (prefs.emailEnabled) {
-    const appUrl = await resolveAppUrl();
-    const html = buildActionUpdateEmail({
-      kind,
-      clinicName,
-      acaoTitulo: action.titulo,
-      responsavelNome: member?.nome ?? responsavelNome,
-      texto,
-      appUrl,
-      acaoPath,
-    });
-    await sendEmail({
-      to: recipient,
-      subject,
-      html,
-    }).catch(() => false);
+    const prefs = await getRecipientPrefs(recipient.email, action.clinicId);
+    if (prefs.emailEnabled) {
+      const html = buildActionUpdateEmail({
+        kind,
+        clinicName,
+        acaoTitulo: action.titulo,
+        responsavelNome: recipient.nome ?? recipient.email,
+        texto,
+        appUrl,
+        acaoPath,
+      });
+      await sendEmail({
+        to: recipient.email,
+        subject,
+        html,
+      }).catch(() => false);
+    }
   }
 }
 

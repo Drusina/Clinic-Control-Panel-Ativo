@@ -22,6 +22,8 @@ import {
   CornerDownRight,
   ChevronRight,
   ChevronDown,
+  Lock,
+  Activity,
 } from "lucide-react";
 
 export type TeamOption = { nome: string; email: string };
@@ -108,9 +110,18 @@ function TarefaRow({
   };
 
   const respValue = tarefa.responsavelEmail ?? NONE;
+  const bloqueada = tarefa.bloqueada;
+  const temOrigem = !!(tarefa.origemPergunta || tarefa.origemResposta);
 
   return (
-    <div className={isSub ? "" : "rounded-lg border bg-background/40 p-2.5"}>
+    <div
+      className={
+        isSub
+          ? ""
+          : `rounded-lg border bg-background/40 p-2.5 ${bloqueada ? "border-amber-300 bg-amber-50/40" : ""}`
+      }
+      data-testid={`tarefa-row-${tarefa.id}`}
+    >
       <div className="flex items-start gap-2">
         {!isSub &&
           (subtarefas.length > 0 ? (
@@ -172,7 +183,11 @@ function TarefaRow({
               </SelectTrigger>
               <SelectContent>
                 {(Object.keys(STATUS_LABELS) as AcaoTarefaStatus[]).map((s) => (
-                  <SelectItem key={s} value={s}>
+                  <SelectItem
+                    key={s}
+                    value={s}
+                    disabled={bloqueada && s !== "a_fazer"}
+                  >
                     {STATUS_LABELS[s]}
                   </SelectItem>
                 ))}
@@ -209,6 +224,41 @@ function TarefaRow({
               title="Prazo"
             />
           </div>
+
+          {bloqueada && (
+            <div
+              className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-100/60 rounded-md px-2 py-1"
+              data-testid={`tarefa-bloqueada-${tarefa.id}`}
+            >
+              <Lock className="h-3 w-3 mt-0.5 flex-shrink-0" />
+              <span>
+                Bloqueada até concluir
+                {tarefa.dependeDeTitulo ? (
+                  <>
+                    : <span className="font-medium">{tarefa.dependeDeTitulo}</span>
+                  </>
+                ) : (
+                  " a fase anterior"
+                )}
+                .
+              </span>
+            </div>
+          )}
+
+          {temOrigem && (
+            <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground border-l-2 border-muted pl-2">
+              <Activity className="h-3 w-3 mt-0.5 flex-shrink-0 text-muted-foreground/70" />
+              <div className="min-w-0">
+                <span className="font-medium text-foreground/70">↳ origem: </span>
+                {tarefa.origemPergunta && (
+                  <span className="text-foreground/80">{tarefa.origemPergunta}</span>
+                )}
+                {tarefa.origemResposta && (
+                  <span> — “{tarefa.origemResposta}”</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {!isSub && expanded && subtarefas.length > 0 && (
             <div className="space-y-1.5 border-l pl-2 ml-0.5">

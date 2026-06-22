@@ -17,6 +17,7 @@ import {
 import { Loader2, Sparkles, Trash2, ListChecks, Plus, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { CamadaBadge } from "@/components/acao/camada-badge";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -60,6 +61,23 @@ export type PerguntaFonte = {
   pergunta: string;
   resposta: string;
   pilarSlug?: string | null;
+  respostaId?: string | null;
+  perguntaId?: string | null;
+};
+
+type Camada = "pontual" | "consolidada" | "estrutural";
+
+type GeneratedSubtarefa = {
+  titulo: string;
+  respostaOrigemId?: string | null;
+  origemPergunta?: string | null;
+  origemResposta?: string | null;
+};
+
+type GeneratedFase = {
+  titulo: string;
+  descricao?: string | null;
+  subtarefas: GeneratedSubtarefa[];
 };
 
 type GeneratedRiskPreview = {
@@ -73,6 +91,10 @@ type GeneratedRiskPreview = {
   acoesMitigadoras: string;
   perguntasFonte: PerguntaFonte[];
   tarefasSugeridas: string[];
+  camada: Camada;
+  pilarScore?: number | null;
+  subtarefas: GeneratedSubtarefa[];
+  fases: GeneratedFase[];
 };
 
 type PreviewRisksResult = {
@@ -90,6 +112,8 @@ type CommitRiskItem = {
   perguntasFonte: PerguntaFonte[];
   criarCard: boolean;
   tarefasSugeridas: string[];
+  subtarefas: GeneratedSubtarefa[];
+  fases: GeneratedFase[];
 };
 
 export type CommitRisksResult = {
@@ -319,6 +343,8 @@ export function GenerateRisksButton({
       perguntasFonte: r.perguntasFonte,
       criarCard: r.criarCard,
       tarefasSugeridas: r.tarefasSugeridas.map((t) => t.trim()).filter(Boolean),
+      subtarefas: r.subtarefas ?? [],
+      fases: r.fases ?? [],
     }));
     commitMut.mutate(items);
   };
@@ -456,6 +482,12 @@ export function GenerateRisksButton({
                       >
                         {PILARES.find((p) => p.slug === r.pilarSlug)?.nome.split(" ")[0] ??
                           r.pilarSlug}
+                      </span>
+                    )}
+                    <CamadaBadge camada={r.camada} />
+                    {r.pilarScore != null && (
+                      <span className="text-[10px] text-muted-foreground">
+                        score do pilar {r.pilarScore.toFixed(1)}/5
                       </span>
                     )}
                   </div>

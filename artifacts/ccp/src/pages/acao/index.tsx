@@ -8,12 +8,14 @@ import ActionDetail from "@/components/acao/action-detail";
 import SuggestedTarefasEditor from "@/components/acao/suggested-tarefas-editor";
 import OrigemDiagnosticoBadge from "@/components/acao/origem-diagnostico-badge";
 import RegenerateTarefasButton from "@/components/acao/regenerate-tarefas-button";
-import type { OrigemDiagnostico } from "@workspace/api-client-react";
+import { CamadaBadge, SeverityBadge, severityMeta } from "@/components/acao/camada-badge";
+import type { OrigemDiagnostico, ActionResponsavel } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Plus, ArrowLeft, Search, ChevronRight, Calendar, GripVertical, ShieldAlert, ListChecks } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Loader2, Plus, ArrowLeft, Search, ChevronRight, Calendar, GripVertical, ListChecks } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -96,6 +98,11 @@ type Action = {
   coluna: string;
   ordem: number;
   riscoOrigemId: string | null;
+  camada?: string | null;
+  responsaveis?: ActionResponsavel[];
+  riscoSeveridade?: number | null;
+  riscoProbabilidade?: number | null;
+  riscoImpacto?: number | null;
   concluidoEm: string | null;
   tarefasTotal?: number;
   tarefasConcluidas?: number;
@@ -169,14 +176,29 @@ function KanbanCard({ action, onOpenDetail }: { action: Action; onOpenDetail: (a
   const pilarNome = action.pilarSlug ? PILARES.find(p => p.slug === action.pilarSlug)?.nome : null;
   const pilarColorClass = action.pilarSlug ? (PILAR_COLORS[action.pilarSlug] ?? "bg-gray-100 text-gray-700") : null;
 
+  // Borda do topo: severidade do risco vinculado quando existe; senão, prioridade.
+  const topBorder = action.riscoSeveridade != null
+    ? severityMeta(action.riscoSeveridade).border
+    : prio.barColor;
+
+  const responsaveis = action.responsaveis ?? [];
+  const fallbackResp = responsaveis.length === 0 && action.responsavelNome
+    ? [{ email: "", nome: action.responsavelNome }]
+    : responsaveis;
+  const total = action.tarefasTotal ?? 0;
+  const done = action.tarefasConcluidas ?? 0;
+  const pct = total > 0 ? (done / total) * 100 : 0;
+  const unidade = action.camada === "estrutural" ? "fases" : "tarefas";
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className="bg-card border rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
       onClick={() => onOpenDetail(action)}
+      data-testid={`acao-card-${action.id}`}
     >
-      <div className={cn("h-1 rounded-t-lg", prio.barColor)} />
+      <div className={cn("h-1 rounded-t-lg", topBorder)} />
       <div className="p-3">
         <div className="flex items-start justify-between gap-2">
           <h5 className="font-medium text-sm leading-tight flex-1">{action.titulo}</h5>
@@ -189,9 +211,31 @@ function KanbanCard({ action, onOpenDetail }: { action: Action; onOpenDetail: (a
             <GripVertical className="h-3.5 w-3.5" />
           </button>
         </div>
+
+        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+          <SeverityBadge
+            severidade={action.riscoSeveridade}
+            probabilidade={action.riscoProbabilidade}
+            impacto={action.riscoImpacto}
+          />
+          <CamadaBadge camada={action.camada} />
+        </div>
+
         {action.descricao && (
-          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{action.descricao}</p>
+          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{action.descricao}</p>
         )}
+
+        {total > 0 && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+              <span className="flex items-center gap-1">
+                <ListChecks className="h-3 w-3" /> {done}/{total} {unidade}
+              </span>
+            </div>
+            <Progress value={pct} className="h-1.5" />
+          </div>
+        )}
+
         <div className="flex flex-col gap-1 mt-2 text-xs text-muted-foreground">
           {action.prazo && (
             <div className="flex items-center gap-1.5">
@@ -199,26 +243,31 @@ function KanbanCard({ action, onOpenDetail }: { action: Action; onOpenDetail: (a
               <span>{new Date(action.prazo + "T12:00:00").toLocaleDateString("pt-BR")}</span>
             </div>
           )}
-          {action.responsavelNome && (
+          {fallbackResp.length > 0 && (
             <div className="flex items-center gap-1.5">
-              <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-semibold text-primary flex-shrink-0">
-                {action.responsavelNome.charAt(0).toUpperCase()}
+              <div className="flex -space-x-1.5">
+                {fallbackResp.slice(0, 3).map((r, i) => (
+                  <div
+                    key={r.email || `resp-${i}`}
+                    className="h-5 w-5 rounded-full bg-primary/10 ring-1 ring-card flex items-center justify-center text-[9px] font-semibold text-primary flex-shrink-0"
+                    title={r.nome ?? r.email}
+                  >
+                    {(r.nome ?? r.email).charAt(0).toUpperCase()}
+                  </div>
+                ))}
               </div>
-              <span className="truncate">{action.responsavelNome}</span>
-            </div>
-          )}
-          {(action.tarefasTotal ?? 0) > 0 && (
-            <div className="flex items-center gap-1.5">
-              <ListChecks className="h-3 w-3 flex-shrink-0" />
-              <span>
-                {action.tarefasConcluidas ?? 0}/{action.tarefasTotal} tarefas
-              </span>
+              {fallbackResp.length === 1 ? (
+                <span className="truncate">{fallbackResp[0].nome ?? fallbackResp[0].email}</span>
+              ) : (
+                <span className="truncate">{fallbackResp.length} responsáveis</span>
+              )}
             </div>
           )}
           {action.origemDiagnostico && (
             <OrigemDiagnosticoBadge origem={action.origemDiagnostico} />
           )}
         </div>
+
         <div className="flex items-center gap-1.5 mt-2 flex-wrap">
           <Badge variant="outline" className={cn("text-[9px] px-1 py-0", prio.color)}>
             {prio.label}
@@ -226,11 +275,6 @@ function KanbanCard({ action, onOpenDetail }: { action: Action; onOpenDetail: (a
           {pilarNome && pilarColorClass && (
             <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-medium", pilarColorClass)}>
               {pilarNome.split(" ")[0]}
-            </span>
-          )}
-          {action.riscoOrigemId && (
-            <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded font-medium bg-red-100 text-red-700">
-              <ShieldAlert className="h-2.5 w-2.5" /> Risco
             </span>
           )}
         </div>
@@ -448,10 +492,20 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
     }
   };
 
-  const responsaveis = [...new Set(acoes.map(a => a.responsavelNome).filter(Boolean))] as string[];
+  // Nomes dos responsáveis de uma ação: prioriza o conjunto multi-responsável
+  // (responsaveis[]) e cai para o legado responsavelNome quando vazio.
+  const nomesResponsaveis = (a: Action): string[] => {
+    const nomes = (a.responsaveis ?? [])
+      .map(r => r.nome ?? r.email)
+      .filter((n): n is string => !!n);
+    if (nomes.length > 0) return nomes;
+    return a.responsavelNome ? [a.responsavelNome] : [];
+  };
+
+  const responsaveis = [...new Set(acoes.flatMap(nomesResponsaveis))] as string[];
 
   const filteredAcoes = acoes.filter(a => {
-    if (filterResponsavel && a.responsavelNome !== filterResponsavel) return false;
+    if (filterResponsavel && !nomesResponsaveis(a).includes(filterResponsavel)) return false;
     if (filterPrioridade !== "all" && a.prioridade !== filterPrioridade) return false;
     if (filterPilar !== "all" && a.pilarSlug !== filterPilar) return false;
     return true;
@@ -459,6 +513,9 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
 
   const activeAction = activeId ? acoes.find(a => a.id === activeId) : null;
   const activePrio = PRIORITY_CONFIG[activeAction?.prioridade ?? "baixa"] ?? PRIORITY_CONFIG.baixa;
+  const activeTopBorder = activeAction?.riscoSeveridade != null
+    ? severityMeta(activeAction.riscoSeveridade).border
+    : activePrio.barColor;
 
   return (
     <div className="space-y-6">
@@ -556,7 +613,7 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
             {activeAction ? (
               <div className="rotate-2 shadow-xl opacity-95">
                 <div className="bg-card border rounded-lg w-60 overflow-hidden">
-                  <div className={cn("h-1", activePrio.barColor)} />
+                  <div className={cn("h-1", activeTopBorder)} />
                   <div className="p-3">
                     <h5 className="font-medium text-sm">{activeAction.titulo}</h5>
                   </div>

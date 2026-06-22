@@ -11,7 +11,9 @@ import {
   useDeleteActionNota,
   useListTeam,
   getListTeamQueryKey,
+  useSetActionResponsaveis,
 } from "@workspace/api-client-react";
+import type { ActionResponsavel } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,10 +34,20 @@ import {
   Paperclip,
   MessageSquare,
   Pencil,
+  Workflow,
+  UserPlus,
+  ChevronDown,
 } from "lucide-react";
 import { getStoredToken } from "@/hooks/use-auth";
 import TarefaList, { type TeamOption } from "./tarefa-list";
 import { formatScore } from "./origem-diagnostico-badge";
+import { CamadaBadge, CAMADA_CONFIG, SeverityBadge } from "./camada-badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -106,6 +118,7 @@ export default function ActionDetail({
   const unlinkEvidencia = useUnlinkActionEvidencia();
   const addNota = useAddActionNota();
   const deleteNota = useDeleteActionNota();
+  const setResponsaveis = useSetActionResponsaveis();
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetActionDetailQueryKey(actionId) });
@@ -128,6 +141,44 @@ export default function ActionDetail({
         .map((m) => ({ nome: m.nome, email: m.email })),
     [teamRaw],
   );
+
+  // Equipe atribuível ao responsável: ativos (com acesso à plataforma) podem ser
+  // selecionados; inativos aparecem desabilitados com convite à ativação.
+  const assignableTeam = useMemo(
+    () =>
+      teamRaw
+        .filter((m): m is typeof m & { email: string } => !!m.email)
+        .map((m) => ({
+          email: m.email,
+          nome: m.nome,
+          ativo: m.temAcessoPlataforma,
+        })),
+    [teamRaw],
+  );
+
+  const responsaveis = action?.responsaveis ?? [];
+  const assignedEmails = useMemo(
+    () => new Set(responsaveis.map((r) => r.email.toLowerCase())),
+    [responsaveis],
+  );
+
+  const applyResponsaveis = (next: ActionResponsavel[]) => {
+    setResponsaveis.mutate(
+      { id: actionId, data: { responsaveis: next } },
+      { onSuccess: invalidateAll },
+    );
+  };
+
+  const addResponsavel = (email: string, nome: string | null) => {
+    if (assignedEmails.has(email.toLowerCase())) return;
+    applyResponsaveis([...responsaveis, { email, nome }]);
+  };
+
+  const removeResponsavel = (email: string) => {
+    applyResponsaveis(
+      responsaveis.filter((r) => r.email.toLowerCase() !== email.toLowerCase()),
+    );
+  };
 
   const linkedIds = useMemo(
     () => new Set(evidencias.map((e) => e.evidenciaId)),
@@ -207,20 +258,90 @@ export default function ActionDetail({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Responsável</label>
-            <div className="mt-1 flex items-center gap-2">
-              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary flex-shrink-0">
-                {initials(action.responsavelNome)}
-              </div>
-              <span className="text-sm">{action.responsavelNome || "Não atribuído"}</span>
-            </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Responsáveis</label>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            {responsaveis.length === 0 && (
+              <span className="text-sm text-muted-foreground">Não atribuído</span>
+            )}
+            {responsaveis.map((r) => (
+              <span
+                key={r.email}
+                className="group inline-flex items-center gap-1.5 rounded-full bg-primary/10 pl-1 pr-2 py-0.5 text-xs"
+                data-testid={`responsavel-chip-${r.email}`}
+              >
+                <span className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-semibold text-primary">
+                  {initials(r.nome ?? r.email)}
+                </span>
+                <span className="max-w-[140px] truncate">{r.nome ?? r.email}</span>
+                <button
+                  onClick={() => removeResponsavel(r.email)}
+                  disabled={setResponsaveis.isPending}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label={`Remover ${r.nome ?? r.email}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  disabled={setResponsaveis.isPending}
+                >
+                  <UserPlus className="h-3.5 w-3.5" /> Atribuir
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-60">
+                {assignableTeam.length === 0 && (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    Nenhum membro na equipe.
+                  </div>
+                )}
+                {assignableTeam.map((m) => {
+                  const atribuido = assignedEmails.has(m.email.toLowerCase());
+                  return (
+                    <DropdownMenuItem
+                      key={m.email}
+                      disabled={!m.ativo || atribuido}
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        if (m.ativo && !atribuido) addResponsavel(m.email, m.nome);
+                      }}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-semibold text-primary flex-shrink-0">
+                          {initials(m.nome ?? m.email)}
+                        </span>
+                        <span className="truncate">{m.nome ?? m.email}</span>
+                      </span>
+                      {atribuido ? (
+                        <span className="text-[10px] text-muted-foreground">atribuído</span>
+                      ) : !m.ativo ? (
+                        <span className="text-[10px] text-amber-600">convidar</span>
+                      ) : null}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Pilar</label>
-            <p className="mt-1 text-sm py-1.5 px-2.5 rounded-md bg-muted/50">{pilarNome}</p>
-          </div>
+          {assignableTeam.some((m) => !m.ativo) && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Membros sem acesso à plataforma aparecem como “convidar” — ative o acesso na aba
+              Usuários para poder atribuí-los.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Pilar</label>
+          <p className="mt-1 text-sm py-1.5 px-2.5 rounded-md bg-muted/50">{pilarNome}</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -244,71 +365,115 @@ export default function ActionDetail({
           </div>
         </div>
 
-        {action.origemDiagnostico ? (
-          <div className="rounded-lg border bg-muted/40 p-3">
-            <div className="flex items-center gap-1.5 text-sm font-medium">
-              <Activity className="h-4 w-4 text-muted-foreground" /> Origem no diagnóstico
+        {(action.origemDiagnostico || action.pilarSlug || risco || action.camada) && (
+          <div className="rounded-lg border bg-muted/30 p-3" data-testid="acao-cadeia">
+            <div className="flex items-center gap-1.5 text-sm font-semibold">
+              <Workflow className="h-4 w-4 text-muted-foreground" /> Por que esta ação existe
             </div>
-            <p className="mt-1 text-sm">{action.origemDiagnostico.pilarNome}</p>
-            <p className="text-xs text-muted-foreground">
-              Score do pilar:{" "}
-              <span
-                className={
-                  action.origemDiagnostico.abaixoDaMeta
-                    ? "text-amber-600 font-medium"
-                    : "text-foreground font-medium"
-                }
-              >
-                {formatScore(action.origemDiagnostico.score)}/5
-              </span>{" "}
-              · meta {formatScore(action.origemDiagnostico.meta)}/5
-              {action.origemDiagnostico.abaixoDaMeta ? " — abaixo da meta" : ""}
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Diagnóstico → Risco → Ação: a rastreabilidade que originou este card.
             </p>
-          </div>
-        ) : action.pilarSlug ? (
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <div className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-              <Activity className="h-4 w-4" /> Origem no diagnóstico
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Sem diagnóstico concluído para exibir a pontuação deste pilar.
-            </p>
-          </div>
-        ) : null}
 
-        {risco && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-            <div className="flex items-center gap-1.5 text-red-700 font-medium text-sm">
-              <AlertTriangle className="h-4 w-4" /> Risco Vinculado
-            </div>
-            <p className="mt-1 text-sm text-red-700">{risco.nome}</p>
-            <p className="text-xs text-red-600">
-              Score: {risco.severidade} (P{risco.probabilidade} × I{risco.impacto})
-            </p>
-            {risco.perguntasFonte && risco.perguntasFonte.length > 0 && (
-              <div className="mt-3 rounded-md border border-red-200/70 bg-white/70 p-3">
-                <div className="text-xs font-semibold text-red-800">
-                  Respostas do diagnóstico que originaram este risco e a ação
-                </div>
-                <p className="mt-0.5 text-[11px] text-red-700/80">
-                  Use estas respostas da clínica para discutir com o gestor e a equipe antes de
-                  aprovar a ação.
-                </p>
-                <ul className="mt-2 space-y-2">
-                  {risco.perguntasFonte.map((pf, idx) => (
-                    <li key={idx} className="border-l-2 border-red-300 pl-3 py-0.5">
-                      <div className="text-xs font-medium leading-snug text-foreground">
-                        {pf.pergunta}
-                      </div>
-                      <div className="mt-0.5 text-xs">
-                        <span className="font-semibold text-foreground/70">Resposta: </span>
-                        <span className="text-muted-foreground">{pf.resposta}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+            <div className="mt-3 space-y-0">
+              {/* Etapa 1 — Diagnóstico */}
+              <div className="relative pl-7 pb-3">
+                <span className="absolute left-2 top-6 bottom-0 w-px bg-border" />
+                <span className="absolute left-0 top-0.5 h-5 w-5 rounded-full bg-muted flex items-center justify-center">
+                  <Activity className="h-3 w-3 text-muted-foreground" />
+                </span>
+                <div className="text-xs font-medium">Diagnóstico</div>
+                {action.origemDiagnostico ? (
+                  <p className="text-xs text-muted-foreground">
+                    {action.origemDiagnostico.pilarNome} — pontuação{" "}
+                    <span
+                      className={
+                        action.origemDiagnostico.abaixoDaMeta
+                          ? "text-amber-600 font-medium"
+                          : "text-foreground font-medium"
+                      }
+                    >
+                      {formatScore(action.origemDiagnostico.score)}/5
+                    </span>{" "}
+                    · meta {formatScore(action.origemDiagnostico.meta)}/5
+                    {action.origemDiagnostico.abaixoDaMeta ? " — abaixo da meta" : ""}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {pilarNome !== "—"
+                      ? `Pilar ${pilarNome} — sem diagnóstico concluído para exibir a pontuação.`
+                      : "Sem pilar de diagnóstico associado."}
+                  </p>
+                )}
               </div>
-            )}
+
+              {/* Etapa 2 — Risco */}
+              <div className="relative pl-7 pb-3">
+                <span className="absolute left-2 top-6 bottom-0 w-px bg-border" />
+                <span className="absolute left-0 top-0.5 h-5 w-5 rounded-full bg-red-100 flex items-center justify-center">
+                  <AlertTriangle className="h-3 w-3 text-red-600" />
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium">Risco identificado</span>
+                  {risco && (
+                    <SeverityBadge
+                      severidade={risco.severidade}
+                      probabilidade={risco.probabilidade}
+                      impacto={risco.impacto}
+                    />
+                  )}
+                </div>
+                {risco ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">{risco.nome}</p>
+                    {risco.perguntasFonte && risco.perguntasFonte.length > 0 && (
+                      <div className="mt-2 rounded-md border border-red-200/70 bg-red-50/60 p-2.5">
+                        <div className="text-[11px] font-semibold text-red-800">
+                          Respostas do diagnóstico que originaram este risco
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-red-700/80">
+                          Use-as para discutir com o gestor e a equipe antes de aprovar a ação.
+                        </p>
+                        <ul className="mt-2 space-y-2">
+                          {risco.perguntasFonte.map((pf, idx) => (
+                            <li key={idx} className="border-l-2 border-red-300 pl-3 py-0.5">
+                              <div className="text-xs font-medium leading-snug text-foreground">
+                                {pf.pergunta}
+                              </div>
+                              <div className="mt-0.5 text-xs">
+                                <span className="font-semibold text-foreground/70">
+                                  Resposta:{" "}
+                                </span>
+                                <span className="text-muted-foreground">{pf.resposta}</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Ação sem risco vinculado (criada manualmente ou diretamente do pilar).
+                  </p>
+                )}
+              </div>
+
+              {/* Etapa 3 — Ação (camada) */}
+              <div className="relative pl-7">
+                <span className="absolute left-0 top-0.5 h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Workflow className="h-3 w-3 text-primary" />
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium">Ação gerada</span>
+                  <CamadaBadge camada={action.camada} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {action.camada && CAMADA_CONFIG[action.camada]
+                    ? CAMADA_CONFIG[action.camada].descricao
+                    : "Ação criada manualmente, sem camada de geração automática."}
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>

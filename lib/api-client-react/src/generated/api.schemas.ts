@@ -782,6 +782,26 @@ export const ActionColuna = {
   done: "done",
 } as const;
 
+/**
+ * Generation layer derived server-side from the pillar's diagnostic score. Null for manual/ICS actions.
+ * @nullable
+ */
+export type ActionCamada =
+  | (typeof ActionCamada)[keyof typeof ActionCamada]
+  | null;
+
+export const ActionCamada = {
+  pontual: "pontual",
+  consolidada: "consolidada",
+  estrutural: "estrutural",
+} as const;
+
+export interface ActionResponsavel {
+  email: string;
+  /** @nullable */
+  nome?: string | null;
+}
+
 export interface OrigemDiagnostico {
   pilarSlug: string;
   pilarNome: string;
@@ -815,6 +835,28 @@ export interface Action {
   ordem: number;
   /** @nullable */
   riscoOrigemId?: string | null;
+  /**
+   * Generation layer derived server-side from the pillar's diagnostic score. Null for manual/ICS actions.
+   * @nullable
+   */
+  camada?: ActionCamada;
+  /** Responsáveis atribuídos à ação (N:N por e-mail). Vazio quando ainda não atribuída. */
+  responsaveis: ActionResponsavel[];
+  /**
+   * Severidade (P×I) do risco vinculado, resolvida com checagem cross-clinic. Null quando a ação não tem risco. Alimenta a borda de severidade e o selo SEV do mini-card.
+   * @nullable
+   */
+  riscoSeveridade?: number | null;
+  /**
+   * Probabilidade (1–5) do risco vinculado. Null quando a ação não tem risco.
+   * @nullable
+   */
+  riscoProbabilidade?: number | null;
+  /**
+   * Impacto (1–5) do risco vinculado. Null quando a ação não tem risco.
+   * @nullable
+   */
+  riscoImpacto?: number | null;
   /** @nullable */
   concluidoEm?: string | null;
   /** Number of top-level tarefas (parentTarefaId IS NULL) for this action. */
@@ -832,6 +874,13 @@ export interface PerguntaFonte {
   resposta: string;
   /** @nullable */
   pilarSlug?: string | null;
+  /**
+   * Live reference to the diagnostic answer; may be null after a new diagnostic replaces it. The pergunta/resposta pair is the durable snapshot.
+   * @nullable
+   */
+  respostaId?: string | null;
+  /** @nullable */
+  perguntaId?: string | null;
 }
 
 export interface ActionLinkedRisk {
@@ -894,6 +943,33 @@ export interface AcaoTarefa {
   titulo: string;
   /** @nullable */
   descricao?: string | null;
+  /**
+   * Diagnostic answer that originated this tarefa (live FK; may be null after a new diagnostic). The snapshot below survives.
+   * @nullable
+   */
+  respostaOrigemId?: string | null;
+  /**
+   * Durable snapshot of the originating diagnostic question.
+   * @nullable
+   */
+  origemPergunta?: string | null;
+  /**
+   * Durable snapshot of the originating diagnostic answer.
+   * @nullable
+   */
+  origemResposta?: string | null;
+  /**
+   * Phase this tarefa depends on (estrutural chaining). Null = no lock.
+   * @nullable
+   */
+  dependeDeTarefaId?: string | null;
+  /**
+   * Title of the phase this tarefa depends on, resolved for display.
+   * @nullable
+   */
+  dependeDeTitulo?: string | null;
+  /** True when the dependency phase is not yet 'concluida'. The server rejects moving a blocked tarefa to fazendo/concluida (409). */
+  bloqueada: boolean;
   /** @nullable */
   responsavelNome?: string | null;
   /** @nullable */
@@ -1256,6 +1332,35 @@ export const GeneratedRiskPreviewNivel = {
   alto: "alto",
 } as const;
 
+/**
+ * Generation layer derived server-side from the pillar's diagnostic score (>3.5 pontual, 2.5–3.5 consolidada, <2.5 estrutural).
+ */
+export type GeneratedRiskPreviewCamada =
+  (typeof GeneratedRiskPreviewCamada)[keyof typeof GeneratedRiskPreviewCamada];
+
+export const GeneratedRiskPreviewCamada = {
+  pontual: "pontual",
+  consolidada: "consolidada",
+  estrutural: "estrutural",
+} as const;
+
+export interface GeneratedSubtarefa {
+  titulo: string;
+  /** @nullable */
+  respostaOrigemId?: string | null;
+  /** @nullable */
+  origemPergunta?: string | null;
+  /** @nullable */
+  origemResposta?: string | null;
+}
+
+export interface GeneratedFase {
+  titulo: string;
+  /** @nullable */
+  descricao?: string | null;
+  subtarefas: GeneratedSubtarefa[];
+}
+
 export interface GeneratedRiskPreview {
   pilarSlug: string;
   nome: string;
@@ -1268,6 +1373,17 @@ export interface GeneratedRiskPreview {
   perguntasFonte: PerguntaFonte[];
   /** Tarefas de execução sugeridas pela IA para a ação derivada deste risco (somente títulos). */
   tarefasSugeridas: string[];
+  /** Generation layer derived server-side from the pillar's diagnostic score (>3.5 pontual, 2.5–3.5 consolidada, <2.5 estrutural). */
+  camada: GeneratedRiskPreviewCamada;
+  /**
+   * The pillar's score in the latest concluded diagnostic, used to derive `camada`. Null when unknown.
+   * @nullable
+   */
+  pilarScore?: number | null;
+  /** Per-answer subtasks (consolidada raw material), each carrying its diagnostic origin. */
+  subtarefas: GeneratedSubtarefa[];
+  /** Sequenced phases (estrutural raw material), each grouping origin-bearing subtasks. */
+  fases: GeneratedFase[];
 }
 
 export interface PreviewRisksResponse {
@@ -1292,11 +1408,26 @@ export interface CommitGeneratedRiskItem {
    * @nullable
    */
   tarefasSugeridas?: string[] | null;
+  /**
+   * Per-answer subtasks carried back from preview (consolidada). respostaOrigemId is re-validated server-side at commit.
+   * @nullable
+   */
+  subtarefas?: GeneratedSubtarefa[] | null;
+  /**
+   * Sequenced phases carried back from preview (estrutural). respostaOrigemId is re-validated server-side at commit.
+   * @nullable
+   */
+  fases?: GeneratedFase[] | null;
   criarCard: boolean;
 }
 
 export interface CommitGeneratedRisksBody {
   risks: CommitGeneratedRiskItem[];
+}
+
+export interface SetActionResponsaveisBody {
+  /** Conjunto completo de responsáveis (substitui o atual). E-mails fora da equipe da clínica são rejeitados. */
+  responsaveis: ActionResponsavel[];
 }
 
 export interface CreateRiskBody {

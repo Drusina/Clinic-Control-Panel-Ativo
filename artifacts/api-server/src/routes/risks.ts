@@ -1,6 +1,13 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, desc, sql } from "drizzle-orm";
-import { db, risksTable, clinicsTable, diagnosticsTable, actionsTable } from "@workspace/db";
+import {
+  db,
+  risksTable,
+  clinicsTable,
+  diagnosticsTable,
+  actionsTable,
+  respostasTable,
+} from "@workspace/db";
 import { assertClinicAccess, type AuthenticatedRequest } from "../middleware/auth";
 import {
   CreateRiskBody,
@@ -13,8 +20,15 @@ import {
   collectWeakAnswers,
   generateRisksFromWeakAnswers,
   severidadeToNivel,
+  camadaForScore,
 } from "../lib/risk-generator.js";
-import { createSuggestedTarefas, sanitizeTarefaTitles } from "../lib/tarefas.js";
+import {
+  sanitizeTarefaTitles,
+  createPlanoTarefas,
+  type PlanoSubtarefa,
+  type PlanoFase,
+} from "../lib/tarefas.js";
+import { loadPilarScores } from "../lib/origem-diagnostico.js";
 import type { PerguntaFonte } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -249,20 +263,30 @@ router.post(
       return;
     }
 
+    // A camada é derivada SEMPRE do score do pilar (servidor), nunca da IA/cliente.
+    const scores = await loadPilarScores(ctx.clinicId);
+
     res.json({
       message: `${generated.length} risco(s) gerado(s) para revisão.`,
-      risks: generated.map((g) => ({
-        pilarSlug: g.pilarSlug,
-        nome: g.nome,
-        descricao: g.descricao,
-        probabilidade: g.probabilidade,
-        impacto: g.impacto,
-        severidade: g.severidade,
-        nivel: g.nivel,
-        acoesMitigadoras: g.acoesMitigadoras,
-        perguntasFonte: g.perguntasFonte,
-        tarefasSugeridas: g.tarefasSugeridas,
-      })),
+      risks: generated.map((g) => {
+        const pilarScore = scores.get(g.pilarSlug)?.score ?? null;
+        return {
+          pilarSlug: g.pilarSlug,
+          nome: g.nome,
+          descricao: g.descricao,
+          probabilidade: g.probabilidade,
+          impacto: g.impacto,
+          severidade: g.severidade,
+          nivel: g.nivel,
+          acoesMitigadoras: g.acoesMitigadoras,
+          perguntasFonte: g.perguntasFonte,
+          tarefasSugeridas: g.tarefasSugeridas,
+          camada: camadaForScore(pilarScore),
+          pilarScore,
+          subtarefas: g.subtarefas,
+          fases: g.fases,
+        };
+      }),
     });
   },
 );
@@ -289,6 +313,31 @@ router.post(
       return;
     }
 
+    // A camada é recomputada no servidor a partir do score do pilar; os IDs de
+    // resposta vindos do cliente são re-validados contra ESTE diagnóstico (um ID
+    // forjado ou de outro diagnóstico vira null, preservando o snapshot textual).
+    const [scores, validRespostas] = await Promise.all([
+      loadPilarScores(clinicId),
+      db
+        .select({ id: respostasTable.id })
+        .from(respostasTable)
+        .where(eq(respostasTable.diagnosticoId, diagnosticId)),
+    ]);
+    const validRespostaIds = new Set(validRespostas.map((r) => r.id));
+    const cleanOrigem = (id: string | null | undefined): string | null =>
+      id && validRespostaIds.has(id) ? id : null;
+    const mapSubtarefa = (s: {
+      titulo: string;
+      respostaOrigemId?: string | null;
+      origemPergunta?: string | null;
+      origemResposta?: string | null;
+    }): PlanoSubtarefa => ({
+      titulo: s.titulo,
+      respostaOrigemId: cleanOrigem(s.respostaOrigemId),
+      origemPergunta: s.origemPergunta ?? null,
+      origemResposta: s.origemResposta ?? null,
+    });
+
     const items = parsed.data.risks
       .map((r) => {
         const nome = r.nome.trim();
@@ -296,11 +345,20 @@ router.post(
         const probabilidade = Math.min(5, Math.max(1, Math.round(r.probabilidade)));
         const impacto = Math.min(5, Math.max(1, Math.round(r.impacto)));
         const severidade = probabilidade * impacto;
+        const pilarSlug = r.pilarSlug ?? null;
         const perguntasFonte = (r.perguntasFonte ?? []).map((pf) => ({
           pergunta: pf.pergunta,
           resposta: pf.resposta,
           pilarSlug: pf.pilarSlug ?? null,
+          respostaId: cleanOrigem(pf.respostaId),
+          perguntaId: pf.perguntaId ?? null,
         })) as PerguntaFonte[];
+        const subtarefas: PlanoSubtarefa[] = (r.subtarefas ?? []).map(mapSubtarefa);
+        const fases: PlanoFase[] = (r.fases ?? []).map((f) => ({
+          titulo: f.titulo,
+          descricao: f.descricao ?? null,
+          subtarefas: (f.subtarefas ?? []).map(mapSubtarefa),
+        }));
         return {
           nome,
           descricao: r.descricao?.trim() || null,
@@ -308,11 +366,14 @@ router.post(
           impacto,
           severidade,
           nivel: severidadeToNivel(severidade),
-          pilarSlug: r.pilarSlug ?? null,
+          pilarSlug,
           acoesMitigadoras: r.acoesMitigadoras?.trim() || null,
           perguntasFonte,
           criarCard: r.criarCard,
           tarefasSugeridas: sanitizeTarefaTitles(r.tarefasSugeridas),
+          camada: camadaForScore(pilarSlug ? scores.get(pilarSlug)?.score ?? null : null),
+          subtarefas,
+          fases,
         };
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
@@ -388,7 +449,7 @@ router.post(
         const insertedActions = await tx
           .insert(actionsTable)
           .values(
-            cardItems.map(({ risk }) => ({
+            cardItems.map(({ risk, item }) => ({
               clinicId,
               titulo: risk.nome,
               descricao: risk.acoesMitigadoras ?? risk.descricao ?? null,
@@ -398,13 +459,20 @@ router.post(
               coluna: "backlog",
               ordem: nextOrdem++,
               riscoOrigemId: risk.id,
+              camada: item.camada,
             })),
           )
           .returning();
 
-        // INSERT...RETURNING preserva a ordem de cardItems → mesma posição.
+        // INSERT...RETURNING preserva a ordem de cardItems → mesma posição. As
+        // tarefas são montadas conforme a camada (pontual/consolidada/estrutural).
         for (let i = 0; i < insertedActions.length; i++) {
-          await createSuggestedTarefas(tx, insertedActions[i].id, cardItems[i].item.tarefasSugeridas);
+          const item = cardItems[i].item;
+          await createPlanoTarefas(tx, insertedActions[i].id, item.camada, {
+            tarefasSugeridas: item.tarefasSugeridas,
+            subtarefas: item.subtarefas,
+            fases: item.fases,
+          });
         }
       }
 

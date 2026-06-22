@@ -95,6 +95,7 @@ import type {
   RegenerateTarefasResponse,
   ResetPerguntasToSeed200,
   Risk,
+  SetActionResponsaveisBody,
   SistemaUso,
   SocietaryDoc,
   Socio,
@@ -4729,6 +4730,94 @@ export function useGetActionDetail<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Replace the full set of responsáveis assigned to an action
+ */
+export const getSetActionResponsaveisUrl = (id: string) => {
+  return `/api/actions/${id}/responsaveis`;
+};
+
+export const setActionResponsaveis = async (
+  id: string,
+  setActionResponsaveisBody: SetActionResponsaveisBody,
+  options?: RequestInit,
+): Promise<Action> => {
+  return customFetch<Action>(getSetActionResponsaveisUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setActionResponsaveisBody),
+  });
+};
+
+export const getSetActionResponsaveisMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setActionResponsaveis>>,
+    TError,
+    { id: string; data: BodyType<SetActionResponsaveisBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setActionResponsaveis>>,
+  TError,
+  { id: string; data: BodyType<SetActionResponsaveisBody> },
+  TContext
+> => {
+  const mutationKey = ["setActionResponsaveis"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setActionResponsaveis>>,
+    { id: string; data: BodyType<SetActionResponsaveisBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setActionResponsaveis(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetActionResponsaveisMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setActionResponsaveis>>
+>;
+export type SetActionResponsaveisMutationBody =
+  BodyType<SetActionResponsaveisBody>;
+export type SetActionResponsaveisMutationError = ErrorType<void>;
+
+/**
+ * @summary Replace the full set of responsáveis assigned to an action
+ */
+export const useSetActionResponsaveis = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setActionResponsaveis>>,
+    TError,
+    { id: string; data: BodyType<SetActionResponsaveisBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setActionResponsaveis>>,
+  TError,
+  { id: string; data: BodyType<SetActionResponsaveisBody> },
+  TContext
+> => {
+  return useMutation(getSetActionResponsaveisMutationOptions(options));
+};
 
 /**
  * @summary Add a checklist item to an action
