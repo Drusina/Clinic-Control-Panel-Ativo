@@ -261,7 +261,18 @@ export default function ActionDetail({
         <div>
           <label className="text-xs font-medium text-muted-foreground">Responsáveis</label>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            {responsaveis.length === 0 && (
+            {responsaveis.length === 0 && action.responsavelNome && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-muted pl-1 pr-2 py-0.5 text-xs"
+                data-testid="responsavel-legacy"
+              >
+                <span className="h-5 w-5 rounded-full bg-muted-foreground/20 flex items-center justify-center text-[9px] font-semibold text-muted-foreground">
+                  {initials(action.responsavelNome)}
+                </span>
+                <span className="max-w-[140px] truncate">{action.responsavelNome}</span>
+              </span>
+            )}
+            {responsaveis.length === 0 && !action.responsavelNome && (
               <span className="text-sm text-muted-foreground">Não atribuído</span>
             )}
             {responsaveis.map((r) => (
