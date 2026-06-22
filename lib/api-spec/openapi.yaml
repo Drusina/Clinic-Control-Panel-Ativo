@@ -3738,6 +3738,10 @@ components:
           type: integer
         nivel:
           type: ["string", "null"]
+        perguntasFonte:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/PerguntaFonte"
       required:
         - id
         - nome

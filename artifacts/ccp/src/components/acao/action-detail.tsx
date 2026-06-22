@@ -285,6 +285,30 @@ export default function ActionDetail({
             <p className="text-xs text-red-600">
               Score: {risco.severidade} (P{risco.probabilidade} × I{risco.impacto})
             </p>
+            {risco.perguntasFonte && risco.perguntasFonte.length > 0 && (
+              <div className="mt-3 rounded-md border border-red-200/70 bg-white/70 p-3">
+                <div className="text-xs font-semibold text-red-800">
+                  Respostas do diagnóstico que originaram este risco e a ação
+                </div>
+                <p className="mt-0.5 text-[11px] text-red-700/80">
+                  Use estas respostas da clínica para discutir com o gestor e a equipe antes de
+                  aprovar a ação.
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {risco.perguntasFonte.map((pf, idx) => (
+                    <li key={idx} className="border-l-2 border-red-300 pl-3 py-0.5">
+                      <div className="text-xs font-medium leading-snug text-foreground">
+                        {pf.pergunta}
+                      </div>
+                      <div className="mt-0.5 text-xs">
+                        <span className="font-semibold text-foreground/70">Resposta: </span>
+                        <span className="text-muted-foreground">{pf.resposta}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </div>

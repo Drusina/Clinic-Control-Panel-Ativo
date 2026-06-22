@@ -1679,6 +1679,15 @@ export const GetActionDetailResponse = zod.object({
         impacto: zod.number(),
         severidade: zod.number(),
         nivel: zod.string().nullish(),
+        perguntasFonte: zod
+          .array(
+            zod.object({
+              pergunta: zod.string(),
+              resposta: zod.string(),
+              pilarSlug: zod.string().nullish(),
+            }),
+          )
+          .nullish(),
       }),
       zod.null(),
     ])

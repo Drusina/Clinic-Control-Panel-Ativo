@@ -827,6 +827,13 @@ export interface Action {
   updatedAt: string;
 }
 
+export interface PerguntaFonte {
+  pergunta: string;
+  resposta: string;
+  /** @nullable */
+  pilarSlug?: string | null;
+}
+
 export interface ActionLinkedRisk {
   id: string;
   nome: string;
@@ -835,6 +842,8 @@ export interface ActionLinkedRisk {
   severidade: number;
   /** @nullable */
   nivel?: string | null;
+  /** @nullable */
+  perguntasFonte?: PerguntaFonte[] | null;
 }
 
 export interface ActionChecklistItem {
@@ -1202,13 +1211,6 @@ export const RiskNivel = {
   medio: "medio",
   alto: "alto",
 } as const;
-
-export interface PerguntaFonte {
-  pergunta: string;
-  resposta: string;
-  /** @nullable */
-  pilarSlug?: string | null;
-}
 
 export interface Risk {
   id: string;

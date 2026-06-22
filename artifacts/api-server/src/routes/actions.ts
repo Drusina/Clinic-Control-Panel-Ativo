@@ -473,7 +473,12 @@ router.get("/actions/:id/detail", async (req, res): Promise<void> => {
     const [risk] = await db
       .select()
       .from(risksTable)
-      .where(eq(risksTable.id, action.riscoOrigemId))
+      .where(
+        and(
+          eq(risksTable.id, action.riscoOrigemId),
+          eq(risksTable.clinicId, action.clinicId),
+        ),
+      )
       .limit(1);
     if (risk) {
       riscoVinculado = {
@@ -483,6 +488,7 @@ router.get("/actions/:id/detail", async (req, res): Promise<void> => {
         impacto: risk.impacto,
         severidade: risk.severidade,
         nivel: risk.nivel,
+        perguntasFonte: risk.perguntasFonte ?? null,
       };
     }
   }
