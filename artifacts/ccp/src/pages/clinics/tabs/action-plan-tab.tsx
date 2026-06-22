@@ -14,6 +14,7 @@ import AgendaModule from "@/components/agenda/agenda-module";
 import ActionDetail from "@/components/acao/action-detail";
 import SuggestedTarefasEditor from "@/components/acao/suggested-tarefas-editor";
 import OrigemDiagnosticoBadge from "@/components/acao/origem-diagnostico-badge";
+import RegenerateTarefasButton from "@/components/acao/regenerate-tarefas-button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -216,9 +217,17 @@ export default function ActionPlanTab({ clinicId }: { clinicId: string }) {
           <h3 className="text-lg font-medium">Plano de Ação</h3>
           <p className="text-sm text-muted-foreground">Gerencie as tarefas de implantação e acompanhamento.</p>
         </div>
-        <Button onClick={() => openDialog()}>
-          <Plus className="mr-2 h-4 w-4" /> Nova Ação
-        </Button>
+        <div className="flex items-center gap-2">
+          <RegenerateTarefasButton
+            clinicId={clinicId}
+            onSuccess={() =>
+              queryClient.invalidateQueries({ queryKey: getListActionsQueryKey(clinicId) })
+            }
+          />
+          <Button onClick={() => openDialog()}>
+            <Plus className="mr-2 h-4 w-4" /> Nova Ação
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto pb-4">

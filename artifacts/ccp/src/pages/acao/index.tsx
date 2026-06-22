@@ -7,6 +7,7 @@ import { ClinicSelectorList } from "@/components/clinic-selector-list";
 import ActionDetail from "@/components/acao/action-detail";
 import SuggestedTarefasEditor from "@/components/acao/suggested-tarefas-editor";
 import OrigemDiagnosticoBadge from "@/components/acao/origem-diagnostico-badge";
+import RegenerateTarefasButton from "@/components/acao/regenerate-tarefas-button";
 import type { OrigemDiagnostico } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -473,9 +474,17 @@ export default function AcaoPage({ embedded = false }: { embedded?: boolean }) {
             </div>
           </div>
         )}
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-2" /> Nova Ação
-        </Button>
+        <div className="flex items-center gap-2">
+          <RegenerateTarefasButton
+            clinicId={clinicId}
+            onSuccess={() =>
+              queryClient.invalidateQueries({ queryKey: ["acoes", clinicId] })
+            }
+          />
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-2" /> Nova Ação
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
