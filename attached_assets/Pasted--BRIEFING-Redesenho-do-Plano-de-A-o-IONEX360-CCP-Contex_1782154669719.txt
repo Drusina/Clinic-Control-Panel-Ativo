@@ -1,0 +1,186 @@
+# BRIEFING — Redesenho do Plano de Ação (IONEX360 / CCP)
+
+## Contexto do sistema
+O CCP tem o fluxo: Diagnóstico 360° (93 perguntas em 8 pilares, escala 1–5 ou Sim/Não) → score por pilar → Mapa de Riscos (cada risco com Probabilidade × Impacto = Severidade) → Plano de Ação (Kanban de cards).
+
+O vínculo **resposta do diagnóstico → risco** JÁ EXISTE e está persistido: o detalhe de cada risco no Mapa de Riscos já exibe "Respostas do diagnóstico que originaram este risco". O objetivo deste trabalho é PROPAGAR esse dado até o card do Plano de Ação e suas subtarefas, melhorar o design dos cards e introduzir 3 camadas de geração de ação.
+
+## Objetivo
+1. Cards mais maduros e com design melhor.
+2. Tornar visível a rastreabilidade: cada card deve mostrar "por que esta ação existe" (diagnóstico → risco → ação).
+3. Gerar ações em 3 camadas conforme o score do pilar.
+
+## Regras de geração (decididas com o cliente)
+- **Coluna inicial:** toda ação gerada nasce em **Backlog**. A passagem para "A Fazer" é SEMPRE manual, feita pelo gestor na reunião de validação. Nunca automática.
+- **Prazo:** nasce **vazio** (`prazo = null`). Definido manualmente na reunião.
+- **Responsável:** nasce **vazio** (`responsaveis = []`). Atribuído na reunião. Campo é **array** (1 ou mais responsáveis). O seletor só lista usuários com **acesso ativo**; usuários sem acesso aparecem desabilitados com opção "convidar". (Hoje só 1 usuário tem acesso ativo — o admin.)
+
+## Lógica das 3 camadas (decisão pelo score médio do pilar)
+- **Score > 3,5 → Camada 1 (Pontual):** 1 resposta crítica isolada → 1 ação direta.
+- **Score 2,5–3,5 → Camada 2 (Consolidada):** cluster de respostas fracas correlacionadas → 1 ação robusta com subtarefas. Cada subtarefa recebe `resposta_origem_id` apontando para a pergunta específica (exibir "↳ origem" em cada subtarefa).
+- **Score < 2,5 → Camada 3 (Estrutural):** pilar crítico → 1 card-mãe com fases sequenciadas e dependências (cadeados). As ações específicas viram fases/subtarefas do card-mãe.
+
+## Campos a adicionar/expor no card
+- Mini-card (Kanban): selo de **severidade** (SEV + P×I), **borda colorida no topo = severidade** (vermelho ≥15, amarelo 7–14, verde ≤6), linha de **origem** resumida, **barra de progresso** visual de tarefas, etiqueta de **camada** (📌 Pontual / 🔗 Consolidada / 🏛 Estrutural).
+- Detalhe: bloco **"Por que esta ação existe"** com a cadeia 🩺 Diagnóstico → ⚠️ Risco → ✅ Ação, lista das respostas de origem (texto da pergunta + nota), o risco vinculado com severidade, e o tipo de ação justificado.
+
+> Observação: os textos de perguntas/respostas nos mockups abaixo são ilustrativos. Na implementação, puxar os dados reais de `respostas_origem` já vinculadas ao risco. Ícones emoji são placeholders — usar o design system do app (ex.: Lucide).
+
+---
+
+## MOCKUP 1 — Camadas Estrutural (card-mãe) + Pontual + bloco "Por que existe"
+
+```html
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Mockup 1</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif}
+body{background:#f1f5f9;color:#0f172a;padding:20px}.wrap{max-width:600px;margin:0 auto}
+h1.page{font-size:21px;font-weight:800;margin-bottom:3px}.sub{color:#64748b;font-size:12.5px;margin-bottom:16px}
+.section{font-size:12px;font-weight:800;color:#6366f1;text-transform:uppercase;letter-spacing:.6px;margin:22px 0 10px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.bar{height:5px;width:100%}.bar.crit{background:#dc2626}.bar.med{background:#f59e0b}.bar.low{background:#16a34a}
+.body{padding:13px 14px}.toprow{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.sev{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;color:#b45309;background:#fef3c7;padding:3px 9px;border-radius:7px}.sev.crit{color:#b91c1c;background:#fee2e2}
+.pilar-tag{font-size:10.5px;font-weight:600;color:#475569;background:#f1f5f9;padding:3px 9px;border-radius:7px}
+.title{font-size:15px;font-weight:700;line-height:1.3;margin-bottom:9px}
+.origin{display:flex;gap:7px;align-items:flex-start;font-size:11.5px;color:#475569;background:#f8fafc;border-left:3px solid #6366f1;padding:7px 9px;border-radius:0 7px 7px 0;margin-bottom:10px}.origin .ic{color:#6366f1;font-weight:800}
+.metarow{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:4px 9px;border-radius:7px;border:1px dashed #cbd5e1;color:#64748b;background:#f8fafc}.chip b{color:#334155}
+.prog{margin-bottom:10px}.track{height:7px;background:#e2e8f0;border-radius:999px;overflow:hidden}.fill{height:100%;background:#3b82f6}.prog .lbl{font-size:10.5px;color:#64748b;margin-top:4px}
+.tags{display:flex;gap:6px;flex-wrap:wrap}.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+.t-alta{color:#b91c1c;background:#fee2e2}.t-pont{color:#0369a1;background:#e0f2fe}.t-cons{color:#0f766e;background:#ccfbf1}.t-estrut{color:#5b21b6;background:#ede9fe}.t-pil{color:#475569;background:#f1f5f9}
+.mae{border:2px solid #8b5cf6;background:linear-gradient(180deg,#faf5ff,#fff)}.maehd{display:flex;align-items:center;gap:8px;margin-bottom:5px}.maeic{font-size:18px}
+.meta{font-size:11px;color:#7c3aed;font-weight:600;margin-bottom:11px}
+.phase{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;background:#fff;border:1px solid #ede9fe;margin-bottom:7px}
+.phnum{width:20px;height:20px;border-radius:6px;background:#8b5cf6;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.phase.lock{opacity:.72}.phase.lock .phnum{background:#cbd5e1}.phtxt b{display:block;font-size:11.5px}.phtxt span{color:#64748b;font-size:10.5px}.lockic{margin-left:auto;font-size:10.5px;color:#94a3b8;white-space:nowrap}
+.detail{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;box-shadow:0 4px 16px rgba(0,0,0,.08)}.detail .dt{font-size:17px;font-weight:800;margin-bottom:14px}
+.why{border:1px solid #e0e7ff;border-radius:12px;overflow:hidden;background:#fafaff}.why .wh{background:#eef2ff;padding:9px 13px;font-size:11px;font-weight:800;color:#4338ca}
+.flow{display:flex;align-items:center;justify-content:space-between;padding:14px 13px;gap:6px}.fstep{flex:1;text-align:center}.fstep .ic{font-size:18px}.fstep .nm{font-size:10px;font-weight:700;color:#334155;margin-top:2px}.farr{color:#a5b4fc;font-weight:800;font-size:14px}
+.qbox{padding:0 13px 13px}.qlabel{font-size:10.5px;font-weight:700;color:#64748b;margin-bottom:7px;text-transform:uppercase}
+.q{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:11.5px}
+.qscore{font-size:10.5px;font-weight:800;color:#b91c1c;background:#fee2e2;padding:2px 8px;border-radius:6px;white-space:nowrap}
+.riskline{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #fecaca;border-radius:8px;padding:9px 11px;margin:0 13px 13px;font-size:11.5px}
+.riskline .rsev{margin-left:auto;font-size:10.5px;font-weight:800;color:#b91c1c;background:#fee2e2;padding:2px 8px;border-radius:6px;white-space:nowrap}
+.typeline{margin:0 13px 14px;font-size:11.5px;color:#475569}
+</style></head><body><div class="wrap">
+<h1 class="page">Plano de Ação — redesenho</h1><div class="sub">Severidade · origem do diagnóstico · progresso · camada de geração</div>
+<div class="section">① Card-mãe estrutural (pilar < 2,5)</div>
+<div class="card mae"><div class="bar crit"></div><div class="body">
+<div class="maehd"><span class="maeic">🏛</span><div class="title" style="margin:0">Estruturar a função de Marketing e Captação</div></div>
+<div class="meta">Pilar Marketing 1,7/5 · 4 riscos vinculados · SEV máx 25</div>
+<div class="origin"><span class="ic">▸</span><div><b>Origem:</b> 9 respostas críticas no pilar Vendas/Marketing (média 1,7/5 → ação estrutural)</div></div>
+<div class="phase"><span class="phnum">1</span><div class="phtxt"><b>Fundação</b><span>Definir responsável pela área + metas de captação</span></div></div>
+<div class="phase lock"><span class="phnum">2</span><div class="phtxt"><b>Mensuração</b><span>Tracking de origem, CAC / LTV</span></div><span class="lockic">🔒 depende F1</span></div>
+<div class="phase lock"><span class="phnum">3</span><div class="phtxt"><b>Relacionamento</b><span>CRM + fidelização</span></div><span class="lockic">🔒 depende F2</span></div>
+<div class="phase lock"><span class="phnum">4</span><div class="phtxt"><b>Presença digital</b><span>SEO, NPS e reputação online</span></div><span class="lockic">🔒 depende F1</span></div>
+<div class="tags" style="margin-top:10px"><span class="pill t-alta">Alta</span><span class="pill t-estrut">🏛 Estrutural</span><span class="pill t-pil">Marketing</span></div>
+</div></div>
+<div class="section">② Mini-card pontual (Backlog, prazo/responsável vazios)</div>
+<div class="card"><div class="bar med"></div><div class="body">
+<div class="toprow"><span class="sev">🛡 SEV 16 · P4×I4</span><span class="pilar-tag">Tecnologia 4,0/5</span></div>
+<div class="title">Tomada de decisão sem inteligência de dados</div>
+<div class="origin"><span class="ic">▸</span><div><b>Origem:</b> 1 resposta crítica — "não usa BI para decisões"</div></div>
+<div class="metarow"><span class="chip">📅 <b>Prazo:</b> a definir</span><span class="chip">👤 <b>Responsável:</b> a definir</span><span class="chip">📋 Backlog</span></div>
+<div class="prog"><div class="track"><div class="fill" style="width:0%"></div></div><div class="lbl">0 / 6 tarefas</div></div>
+<div class="tags"><span class="pill t-alta">Alta</span><span class="pill t-pont">📌 Pontual</span><span class="pill t-pil">Tecnologia</span></div>
+</div></div>
+<div class="section">③ Detalhe — "Por que esta ação existe"</div>
+<div class="detail"><div class="dt">Tomada de decisão sem inteligência de dados</div>
+<div class="why"><div class="wh">🧭 POR QUE ESTA AÇÃO EXISTE</div>
+<div class="flow"><div class="fstep"><div class="ic">🩺</div><div class="nm">DIAGNÓSTICO</div></div><div class="farr">→</div><div class="fstep"><div class="ic">⚠️</div><div class="nm">RISCO</div></div><div class="farr">→</div><div class="fstep"><div class="ic">✅</div><div class="nm">AÇÃO</div></div></div>
+<div class="qbox"><div class="qlabel">Respostas que acenderam o alerta</div>
+<div class="q"><span>"A clínica usa BI para apoiar decisões?"</span><span class="qscore">1 / 5</span></div>
+<div class="q"><span>"Os indicadores são monitorados regularmente?"</span><span class="qscore">2 / 5</span></div>
+<div class="q"><span>"Há dashboards por área da clínica?"</span><span class="qscore">Não</span></div></div>
+<div class="riskline"><span>⚠️ Risco gerado: <b>Tomada de decisão sem inteligência de dados</b></span><span class="rsev">SEV 16 · P4×I4</span></div>
+<div class="typeline"><b>Tipo de ação:</b> 📌 Pontual — pilar Tecnologia forte (4,0/5).</div></div></div>
+</div></body></html>
+```
+
+## MOCKUP 2 — Camada Consolidada (subtarefas com origem rastreável)
+
+```html
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Mockup 2</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif}
+body{background:#f1f5f9;color:#0f172a;padding:20px}.wrap{max-width:600px;margin:0 auto}
+h1.page{font-size:21px;font-weight:800;margin-bottom:3px}.sub{color:#64748b;font-size:12.5px;margin-bottom:16px}
+.section{font-size:12px;font-weight:800;color:#0f766e;text-transform:uppercase;letter-spacing:.6px;margin:22px 0 10px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.bar{height:5px;width:100%}.bar.crit{background:#dc2626}.body{padding:13px 14px}
+.toprow{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.sev{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;color:#b91c1c;background:#fee2e2;padding:3px 9px;border-radius:7px}
+.pilar-tag{font-size:10.5px;font-weight:600;color:#475569;background:#f1f5f9;padding:3px 9px;border-radius:7px}
+.consbadge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:#0f766e;background:#ccfbf1;padding:3px 9px;border-radius:7px;margin-bottom:9px}
+.title{font-size:15px;font-weight:700;line-height:1.3;margin-bottom:9px}
+.origin{display:flex;gap:7px;align-items:flex-start;font-size:11.5px;color:#475569;background:#f8fafc;border-left:3px solid #14b8a6;padding:7px 9px;border-radius:0 7px 7px 0;margin-bottom:10px}.origin .ic{color:#14b8a6;font-weight:800}
+.prog{margin-bottom:10px}.track{height:7px;background:#e2e8f0;border-radius:999px;overflow:hidden}.fill{height:100%;background:#3b82f6}.prog .lbl{font-size:10.5px;color:#64748b;margin-top:4px}
+.metarow{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:4px 9px;border-radius:7px;border:1px dashed #cbd5e1;color:#64748b;background:#f8fafc}.chip b{color:#334155}
+.tags{display:flex;gap:6px;flex-wrap:wrap}.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+.t-alta{color:#b91c1c;background:#fee2e2}.t-cons{color:#0f766e;background:#ccfbf1}.t-pil{color:#475569;background:#f1f5f9}
+.detail{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.detail .dt{font-size:17px;font-weight:800;margin-bottom:4px}.detail .dtsub{font-size:11.5px;color:#64748b;margin-bottom:14px}
+.why{border:1px solid #ccfbf1;border-radius:12px;overflow:hidden;background:#f0fdfa;margin-bottom:16px}.why .wh{background:#ccfbf1;padding:9px 13px;font-size:11px;font-weight:800;color:#0f766e}
+.qbox{padding:11px 13px 13px}.qlabel{font-size:10.5px;font-weight:700;color:#64748b;margin-bottom:7px;text-transform:uppercase}
+.q{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:11.5px}
+.qscore{font-size:10.5px;font-weight:800;color:#b91c1c;background:#fee2e2;padding:2px 8px;border-radius:6px;white-space:nowrap}.qscore.no{color:#b45309;background:#fef3c7}
+.tasklabel{font-size:11px;font-weight:800;color:#334155;margin-bottom:9px;text-transform:uppercase}
+.task{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;margin-bottom:7px;font-size:12px}
+.tcheck{width:17px;height:17px;border-radius:5px;border:2px solid #cbd5e1;flex-shrink:0;margin-top:1px}
+.task .tx b{display:block;font-size:12px}.task .tx span{color:#94a3b8;font-size:10.5px}
+.link{display:inline-block;font-size:10px;font-weight:700;color:#0f766e;background:#ccfbf1;padding:1px 7px;border-radius:5px;margin-top:4px}
+</style></head><body><div class="wrap">
+<h1 class="page">Camada 2 — Ação Consolidada</h1><div class="sub">Pilar 2,5–3,5: respostas relacionadas viram <b>uma</b> ação com subtarefas rastreáveis</div>
+<div class="section">Mini-card no Kanban</div>
+<div class="card"><div class="bar crit"></div><div class="body">
+<div class="toprow"><span class="sev">🛡 SEV 25 · P5×I5</span><span class="pilar-tag">Contábil 3,4/5</span></div>
+<div class="consbadge">🔗 Consolida 3 respostas do diagnóstico</div>
+<div class="title">Vulnerabilidade fiscal e contábil por falta de especialização</div>
+<div class="origin"><span class="ic">▸</span><div><b>Origem:</b> cluster de respostas contábeis fracas (pilar 3,4/5 → consolidada, não 3 cards soltos)</div></div>
+<div class="prog"><div class="track"><div class="fill" style="width:0%"></div></div><div class="lbl">0 / 6 tarefas</div></div>
+<div class="metarow"><span class="chip">📅 <b>Prazo:</b> a definir</span><span class="chip">👤 <b>Responsável:</b> a definir</span><span class="chip">📋 Backlog</span></div>
+<div class="tags"><span class="pill t-alta">Alta</span><span class="pill t-cons">🔗 Consolidada</span><span class="pill t-pil">Contábil</span></div>
+</div></div>
+<div class="section">Detalhe — origem agrupada + subtarefas vinculadas</div>
+<div class="detail"><div class="dt">Vulnerabilidade fiscal e contábil por falta de especialização</div>
+<div class="dtsub">🔗 Ação consolidada · pilar Contábil 3,4/5 · severidade 25 (P5×I5)</div>
+<div class="why"><div class="wh">🧭 POR QUE ESTA AÇÃO EXISTE — 3 respostas agrupadas</div>
+<div class="qbox"><div class="qlabel">Respostas que acenderam o alerta</div>
+<div class="q"><span>"A clínica conta com contador especializado em saúde?"</span><span class="qscore no">Não</span></div>
+<div class="q"><span>"A clínica realiza auditoria contábil periódica?"</span><span class="qscore">1 / 5</span></div>
+<div class="q"><span>"Houve autuação fiscal nos últimos 24 meses?"</span><span class="qscore no">Sim</span></div></div></div>
+<div class="tasklabel">Subtarefas (cada uma trata uma das respostas)</div>
+<div class="task"><span class="tcheck"></span><div class="tx"><b>Contratar assessoria contábil especializada em saúde</b><span>Resolve a lacuna de especialização</span><span class="link">↳ origem: "contador especializado = Não"</span></div></div>
+<div class="task"><span class="tcheck"></span><div class="tx"><b>Implantar rotina de auditoria contábil semestral</b><span>Eleva o controle preventivo</span><span class="link">↳ origem: "auditoria periódica = 1/5"</span></div></div>
+<div class="task"><span class="tcheck"></span><div class="tx"><b>Revisar enquadramento tributário e regularizar pendências</b><span>Endereça a autuação recente</span><span class="link">↳ origem: "autuação fiscal = Sim"</span></div></div>
+</div></div></body></html>
+```
+
+## MOCKUP 3 — Seletor de atribuição (reunião, responsável múltiplo, só ativos)
+
+```html
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Mockup 3</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif}
+body{background:#f1f5f9;color:#0f172a;padding:20px}.wrap{max-width:600px;margin:0 auto}
+h1.page{font-size:21px;font-weight:800;margin-bottom:3px}.sub{color:#64748b;font-size:12.5px;margin-bottom:16px}
+.assign{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.at{font-size:15px;font-weight:800;margin-bottom:4px}.asub{font-size:11.5px;color:#64748b;margin-bottom:14px}
+.field{margin-bottom:14px}.flabel{font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;display:block}
+.selectbox{border:1px solid #cbd5e1;border-radius:9px;padding:9px 11px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center}
+.chips-selected{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.uchip{display:inline-flex;align-items:center;gap:6px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:999px;padding:3px 9px 3px 4px;font-size:11px;font-weight:600}
+.uav{width:18px;height:18px;border-radius:50%;background:#6366f1;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:800}
+.dropdown{border:1px solid #e2e8f0;border-radius:10px;margin-top:8px;overflow:hidden}
+.dh{font-size:10px;font-weight:700;color:#64748b;background:#f8fafc;padding:6px 11px;text-transform:uppercase;border-bottom:1px solid #f1f5f9}
+.urow{display:flex;align-items:center;gap:9px;padding:8px 11px;font-size:12px;border-bottom:1px solid #f8fafc}.urow:last-child{border-bottom:none}
+.urow .av{width:24px;height:24px;border-radius:50%;background:#cbd5e1;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}.urow.active .av{background:#16a34a}
+.urow .nm{font-weight:600}.urow .rl{color:#94a3b8;font-size:10.5px}
+.urow .badge{margin-left:auto;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:6px}.badge.on{color:#15803d;background:#dcfce7}.badge.off{background:#f1f5f9;color:#94a3b8}.urow.dis{opacity:.55}
+.note{font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin-top:10px}
+</style></head><body><div class="wrap">
+<h1 class="page">Atribuição na reunião</h1><div class="sub">Prazo e responsável definidos pelo gestor · responsável múltiplo · só usuários ativos</div>
+<div class="assign"><div class="at">Atribuir responsável & prazo</div><div class="asub">Permite 1 ou mais responsáveis</div>
+<div class="field"><span class="flabel">PRAZO</span><div class="selectbox"><span style="color:#94a3b8">dd/m
