@@ -1,6 +1,6 @@
 # Overview
 
-This project is a pnpm workspace monorepo using TypeScript, designed to function as a Super Admin CRM called "CCP IONEX". Its primary purpose is to manage clinics, encompassing functionalities from initial registration and detailed financial/contract management to operational oversight, risk assessment, and action planning. The system aims to streamline clinic administration, enhance decision-making through AI-driven insights, and improve communication via integrated notification systems. Key capabilities include a comprehensive clinic management system with status tracking, user management, document handling, a 150-question diagnostic wizard with AI analysis, delegation tools, a risk matrix, and a Kanban board for action plans. The project also integrates PWA features, email, WhatsApp, and web push notifications to ensure robust communication and user engagement.
+CCP IONEX is a pnpm-workspace TypeScript monorepo — a Super Admin CRM for managing clinics. It covers clinic registration, financial/contract management, operational oversight, risk assessment, and action planning. Core capabilities: clinic management with status tracking, user management, document handling, a 150-question diagnostic wizard with AI analysis, delegation tools, a risk matrix, and a Kanban action-plan board. It includes PWA features and email, WhatsApp, and web-push notifications.
 
 # User Preferences
 
@@ -8,109 +8,91 @@ I prefer iterative development with clear communication on significant changes. 
 
 # System Architecture
 
-The project is structured as a pnpm workspace monorepo, utilizing Node.js 24 and TypeScript 5.9. The backend is built with Express 5, using PostgreSQL and Drizzle ORM for database interactions, with Zod for validation. API codegen is handled by Orval from an OpenAPI specification, and `esbuild` is used for CJS bundling.
+## Stack
+- pnpm workspace monorepo, Node.js 24, TypeScript 5.9.
+- Backend (`artifacts/api-server`): Express 5, PostgreSQL + Drizzle ORM, Zod (`zod/v4`) + `drizzle-zod` validation. Contract-first — OpenAPI spec (`lib/api-spec/openapi.yaml`) + Orval codegen (`pnpm --filter @workspace/api-spec run codegen`); esbuild for CJS bundling; pino logging.
+- Frontend (`artifacts/ccp`): React + Vite + wouter. Portuguese UI.
 
-**UI/UX Decisions:**
-- **Clinics List:** Features KPI cards and a sortable table with filters.
-- **Clinic Forms:** Implements BrasilAPI CNPJ lookup for auto-filling data.
-- **Clinic Detail:** Organized into 11 tabs covering various aspects like 'Cadastro', 'Financeiro & Contrato', 'Status', 'Usuários', and operational modules.
-- **Diagnostic Wizard:** A full-screen, autosaving interface for a 150-question diagnostic, presenting results with a radar chart and AI insights.
-- **Operational Modules:**
-    - **Delegação:** A two-level delegation table for 8 pillars with status management. Lives as the "Delegação & Respostas" tab INSIDE the "Diagnóstico 360°" module (`pages/clinics/tabs/diagnostico-section.tsx`), URL-driven via `?aba=delegacao`; it is no longer a standalone card in the "Operação" section. Legacy entry points (`/portal/delegacao/:id`, `/portal/clinica/:id/delegacao`) redirect to `/portal/clinica/:id/diagnostico?aba=delegacao`.
-    - **Mapa de Riscos:** A 5x5 CSS grid risk matrix with color-coding and ranked lists.
-    - **Kanban Board:** A drag-and-drop Kanban board with 5 columns for action plans, featuring priority indicators and filtering. Clicking a card opens a rich **"Detalhes"** view (shared component `artifacts/ccp/src/components/acao/action-detail.tsx`, used by both the standalone Kanban `pages/acao/index.tsx` and the embedded `pages/clinics/tabs/action-plan-tab.tsx`). It shows Descrição, Responsável (avatar initials), Pilar, editable Data de Início + Prazo (PATCH `/actions/:id`), a red "Risco Vinculado" card with `Score: {severidade} (P{prob} × I{impacto})` (resolved server-side from `risco_origem_id`), an interactive Checklist with progress + add/toggle/remove, "Evidências Vinculadas" (link real `evidencias` records via dropdown / unlink), and timestamped "Notas do Coordenador". The lightweight "Editar Ação" modal stays reachable via the "Editar Ação" button inside Detalhes. New tables: `acao_checklist_itens`, `acao_evidencias` (join, unique `(acaoId,evidenciaId)`), `acao_notas`; `acoes.data_inicio` added. Endpoints in `routes/actions.ts`: `GET /actions/:id/detail`, checklist `POST`/`PATCH`/`DELETE`, evidencias `GET`/`POST`/`DELETE`, notas `GET`/`POST`/`DELETE` — all guarded by `assertClinicAccess`.
-    - **Agenda (Task #258, jun/2026):** A per-clinic calendar of `compromissos` (reunião/tarefa/marco) with month/week/list views and full CRUD via the shared `AgendaModule` (`artifacts/ccp/src/components/agenda/agenda-module.tsx`). Surfaced as the "Agenda" tab in the super-admin clinic detail, the `agenda` section of the portal `painel-clinica`, and a portal hub card. A compromisso can optionally link to a Trilha `etapaKey` and/or an action-plan `acaoId` (Agenda NEVER mutates Trilha progresso/etapa). The action-plan card has an "Agendar" affordance (prefills `acaoId`) and a next-appointment indicator. Reached only via the clinic-scoped portal path `/portal/clinica/:clinicId/agenda` — there is no bare `/agenda` route.
-    - **Trilha de Implementação (Task #264, jun/2026):** A fixed 15-stage clinic-journey stepper (`artifacts/ccp/src/components/trilha/trilha-stepper.tsx`). Progression is now **automatic** — `reconcileTrilha(clinicId)` (`artifacts/api-server/src/lib/trilha.ts`) concludes the 11 data-detectable (`manual:false`) stages with NO confirm click (actor `"Sistema (automático)"`) and reopens any whose live signal lapsed. It is the single source of truth: runs on every GET (via `loadTrilha`) and at boot (`backfillTrilha` per clinic), idempotent. The 4 manual marcos (avaliacao, montagem_painel, treinamento, acompanhamento) still need an explicit consultant PATCH, and human overrides `bloqueado`/`nao_aplicavel` win over the signal (reconcile skips them; only a PATCH back to `pendente` clears them). The **LGPD** stage completes ONLY when all 6 termos are formalized (`lgpd_termos` rows with `slug ∈ TEMPLATE_SLUGS` AND `status ∈ ('assinado','anexado')`); until then the UI shows an "Aguardando: X de 6 termos formalizados." line. `clinics.etapa`/`progresso` are derived from the rows, recomputed in the same tx. The UI hides Concluir/Em-andamento for auto stages and only offers Bloquear / Não se aplica / Editar (+ "Remover marcação" to clear an override).
-- **PWA:** Configured with `vite-plugin-pwa` for manifest, icons, and a Workbox service worker for caching.
-- **Notification Preferences:** UI component `NotificationPreferencesModal` for managing email and WhatsApp toggles.
+## UI/UX
+- **Clinics list:** KPI cards + sortable/filterable table. Super-admin only (`SuperAdminGuard`).
+- **Clinic forms:** BrasilAPI CNPJ lookup auto-fills data.
+- **Clinic detail:** 11 tabs (Cadastro, Financeiro & Contrato, Status, Usuários, and the operational modules below).
+- **Diagnostic wizard:** Full-screen, autosaving 150-question diagnostic; results shown with a radar chart + AI insights.
+- **Operational modules:**
+    - **Delegação & Respostas:** Two-level delegation table for 8 pillars with status management. Lives as a tab inside the "Diagnóstico 360°" module (`pages/clinics/tabs/diagnostico-section.tsx`), URL-driven via `?aba=delegacao`. Legacy entry points redirect to `/portal/clinica/:id/diagnostico?aba=delegacao`.
+    - **Mapa de Riscos:** 5x5 CSS-grid risk matrix, color-coded, with ranked lists.
+    - **Kanban (Plano de Ação):** Drag-and-drop board (5 columns) with priority indicators and filtering. Cards open a rich **Detalhes** view (shared component `components/acao/action-detail.tsx`, used by both the standalone Kanban `pages/acao/index.tsx` and the embedded `pages/clinics/tabs/action-plan-tab.tsx`): Descrição, Responsável, Pilar, editable Data de Início + Prazo, a red **"Risco Vinculado"** card showing `Score: {severidade} (P{prob} × I{impacto})` plus the diagnostic source answers (`perguntasFonte`) that originated the risk, an interactive Checklist with progress, linked Evidências, and timestamped Notas do Coordenador. The risk and its source answers are resolved server-side and scoped to the action's own clinic (cross-clinic guard). Related tables: `acao_checklist_itens`, `acao_evidencias` (unique `(acaoId,evidenciaId)`), `acao_notas`; `acoes.data_inicio`. Endpoints in `routes/actions.ts` (`GET /actions/:id/detail`, checklist/evidencias/notas CRUD) all guarded by `assertClinicAccess`.
+    - **Agenda:** Per-clinic calendar of `compromissos` (reunião/tarefa/marco) with month/week/list views and full CRUD via the shared `components/agenda/agenda-module.tsx`. Surfaced in the super-admin clinic detail, the portal `painel-clinica`, and a portal hub card. A compromisso can optionally link to a Trilha `etapaKey` and/or an action `acaoId` (Agenda NEVER mutates Trilha progresso/etapa). The action card has an "Agendar" affordance and a next-appointment indicator. Reached only via the clinic-scoped path `/portal/clinica/:clinicId/agenda`.
+    - **Trilha de Implementação:** Fixed 15-stage clinic-journey stepper (`components/trilha/trilha-stepper.tsx`). Progression is automatic — `reconcileTrilha(clinicId)` (`api-server/src/lib/trilha.ts`) concludes the 11 data-detectable (`manual:false`) stages with no confirm click (actor `"Sistema (automático)"`) and reopens any whose live signal lapsed. It is the single source of truth: runs on every GET (via `loadTrilha`) and at boot (`backfillTrilha`), idempotent. The 4 manual marcos (avaliacao, montagem_painel, treinamento, acompanhamento) still need an explicit consultant PATCH, and human overrides `bloqueado`/`nao_aplicavel` win over the signal (only a PATCH back to `pendente` clears them). The **LGPD** stage completes only when all 6 termos are formalized (`lgpd_termos` rows with `slug ∈ TEMPLATE_SLUGS` AND `status ∈ ('assinado','anexado')`). `clinics.etapa`/`progresso` are derived from the rows, recomputed in the same tx.
+- **PWA:** `vite-plugin-pwa` (manifest, icons, Workbox service worker for caching).
+- **Notification preferences:** `NotificationPreferencesModal` for email/WhatsApp toggles.
 
-**Technical Implementations:**
-- **Database Schema:** New tables include `clinic_status_history`, `socios`, `perguntas`, `respostas`, `delegacoes`, and `push_subscriptions`.
-- **API Endpoints:** Comprehensive RESTful API endpoints for managing clinics, status updates, QSA partners, user invites, document uploads, diagnostic questions/answers, delegation, risks, and push notifications.
-- **Object Storage:** Utilizes Replit App Storage (GCS-backed) for document storage, with specific routes for serving and managing files.
-- **AI Integration:** Uses `@anthropic-ai/sdk` with `claude-opus-4-5` for generating structured JSON insights based on diagnostic scores.
-- **Score Calculation:** Implements a weighted average system for diagnostic pillar and global scores based on question types.
+## Backend implementation
+- **Schema highlights:** `clinic_status_history`, `socios`, `perguntas`, `respostas`, `delegacoes`, `push_subscriptions`, plus the action/agenda/trilha tables above. Risks carry a `perguntas_fonte` JSONB snapshot (textual pergunta+resposta, no FK).
+- **API:** RESTful endpoints for clinics, status updates, QSA partners, user invites, document uploads, diagnostic questions/answers, delegation, risks, and push notifications.
+- **Object storage:** Replit App Storage (GCS-backed) for documents. Private objects are served as attachment with `nosniff` via short-lived, path-bound signed URLs; inline preview is opt-in and gated to a PDF/raster allowlist (no HTML/SVG) to avoid stored XSS.
+- **AI:** `@anthropic-ai/sdk` (`claude-opus-4-5`) generates structured JSON insights from diagnostic scores.
+- **Score calculation:** Weighted-average system for pillar and global diagnostic scores by question type.
 - **Notifications:**
-    - **Email:** Branded dark-theme HTML templates for various notifications (invite, delegation, document expiry) using Resend.
-    - **WhatsApp:** Helper for pre-approved template messages via Meta Cloud API, with graceful fallback to email.
-    - **Web Push:** Uses `web-push` npm package, VAPID keys stored in the DB, and a unified service worker for browser push notifications.
-- **Perfil "Respondente de Diagnóstico" (Task #220, mai/2026):** 4ª opção no diálogo "Convidar Usuário" (`usuarios-tab.tsx`). Backend grava `equipe_interna.funcao="respondente_diagnostico"` e **força** `tem_acesso_plataforma=false` em todas as rotas de escrita (`POST /clinics/:id/invite-user`, `POST /clinics/:id/team`, `PATCH /team/:id`, `POST /clinics/:id/team/bulk-invite` — mesmo se o frontend mandar `true`). NUNCA gera senha provisória nem grava em `team_credentials`; em consequência `/auth/entrar`, `/auth/esqueci-senha` e `/auth/redefinir-senha` devolvem o erro genérico de credencial inválida por consulta a `team_credentials` falhar (sem caminho especial — comportamento emerge naturalmente). O link real de respondente é o token `diagnostic_respondent` (escopo delegação+pilar, existente em `routes/respondent.ts`). Cadastro e botão "Reenviar link" reaproveitam o helper `dispatchRespondentInvitesForEmail(clinicId, email, nome, req)` em `team.ts` que varre TODAS as delegações abertas em `(clinic_id, lower(responsavel_email))`, regenera `invite_code` de cada uma e envia um e-mail por delegação via `buildRespondentInviteEmail` (template já existente). Status armazenado em `equipe_interna.invite_status`: `"sent"` (≥1 e-mail enviado), `"no_delegations"` (cadastrado mas sem delegação para envio — 422 no resend), `"pending"` (Resend falhou em todas — 502, mesma política do `dispatchPlatformInvite`). Se um usuário existente é rebaixado para respondente via PATCH, o acesso atual é revogado (limpa `inviteStatus`, `inviteCodeHash`, push subscriptions) — mas `team_credentials` global (por e-mail) NÃO é deletado, preservando acesso em outras clínicas. Bulk-invite pula respondentes com status `"skipped_respondente"`. UI: respondentes ficam numa seção própria abaixo de "Usuários da Plataforma", com badge de status (Link enviado / Sem delegação / Falha no envio) e botões "Reenviar link" + "Remover".
-- **Authentication & Multi-clinic Access (Task #136 + #216):** Two roles: `super_admin` (acesso global, opera o produto, login em `/admin/login` com `SUPER_ADMIN_SECRET`) e `team_member` (gestor de uma ou mais clínicas, identificado por e-mail em `equipe_interna.tem_acesso_plataforma=true`).
-    - **Login com senha (task #216, mai/2026):** team_members entram via **`/entrar`** (e-mail + senha). A senha mora **por identidade (e-mail)**, não por linha de `equipe_interna`, na tabela `team_credentials` (`lib/db/src/schema/team_credentials.ts`): `email_normalized` (unique, lowercase), `senha_hash` (bcrypt cost 12), `senha_provisoria` (boolean), `reset_token_hash`/`reset_token_expires_at`, `failed_attempts`/`locked_until`. **Continuidade de credencial:** quando o gestor habilita "Acesso à plataforma" pela 1ª vez (ou via `POST /clinics/:id/invite-user`) e o e-mail **não tem credencial**, o backend gera uma **senha provisória de 12 chars legíveis** via `generateProvisionalPassword()` (`artifacts/api-server/src/lib/credentials.ts`), grava o hash em `team_credentials` e envia `buildAcessoCriadoEmail`. Quando o e-mail **já tem credencial** (mesmo usuário ganhou acesso a outra clínica), o backend **NÃO rotaciona a senha** — apenas envia `buildAcessoHabilitadoEmail` avisando que a nova clínica aparecerá no seletor após login. A única operação que rotaciona credencial explicitamente é o botão **"Reenviar acesso"** (`POST /clinics/:id/team/:teamMemberId/resend-invite`), que chama `dispatchPlatformInvite(..., { rotate: true })`. Tanto `invite-user` quanto `resend-invite` retornam **502** se o e-mail falhar (a credencial só é persistida após confirmação de envio do Resend — evita lockout operacional). No primeiro login o frontend força **`/trocar-senha`** (guard global `ProvisionalPasswordGate` em `App.tsx` baseado em `/auth/me.senhaProvisoria`). "Esqueci minha senha" (`/esqueci-senha`) envia link tokenizado de 1h via `buildResetSenhaEmail` que abre `/redefinir-senha?token=...`. Endpoints (em `routes/auth.ts`, mesmo throttle de 10 req/15min por IP do super-admin login): `POST /auth/entrar`, `POST /auth/trocar-senha` (requireAuth), `POST /auth/esqueci-senha` (sempre 204), `POST /auth/redefinir-senha`, `POST /auth/criar-senha-inicial` (requireAuth, usado pelo fluxo de migração do convite legado). Lockout: 8 falhas consecutivas → 15min de bloqueio na própria linha de `team_credentials`. Helper `hasPlatformAccess(email)` é checado em todo login bem-sucedido — revogar `tem_acesso_plataforma` derruba logins futuros. **Login a cada visita (task #241, jun/2026):** o token bearer (chave `ccp_admin_token`) mora em **`sessionStorage`** (não mais `localStorage`) — em `use-auth.ts` `getStoredToken/storeToken/clearToken`. Consequência: um *refresh* na mesma aba mantém a sessão, mas abrir o site "do zero" (nova aba/janela, redigitar o endereço num contexto novo ou reabrir o PWA instalado) sempre cai na tela de login. `storeToken/clearToken` removem defensivamente qualquer cópia legada em `localStorage`, e há uma purga única em nível de módulo no boot (`localStorage.removeItem(AUTH_TOKEN_KEY)`) para limpar tokens de builds antigos. Todos os guards de visitante **não autenticado** e os botões de "Sair" de team_member redirecionam para **`/entrar`** (login do gestor, que tem o link "Entrar como super-admin") — não mais `/admin/login`. Permanecem em `/admin/login`: a definição da rota, o allow-list do `ProvisionalPasswordGate`, o link super-admin em `/entrar` e o logout pós-rotação da chave de assinatura em `/admin/configuracoes`.
-    - **Convite legado (`/convite?code=...`)**: continua válido até expirar. O backend agora marca `senhaProvisoria=true`/`precisaCriarSenha=true` na resposta quando o e-mail ainda não tem credencial, e o frontend redireciona direto para `/trocar-senha` (form sem `senhaAtual`). Pode ser desativado em massa via env `LEGACY_INVITE_EMAIL=true` no `dispatchPlatformInvite` (em `routes/team.ts`) — quando true, volta a mandar link mágico. Default: novo fluxo.
-    - **Fluxo super-admin (`/admin/login`) NÃO mudou** — continua com `SUPER_ADMIN_SECRET`.
-    - O JWT do team_member é v:2 com `{role:'team_member', sub:email, email, nome, v:2}` — sem `clinicId` fixo. Backend tem três middlewares em `middleware/auth.ts`:
-    - `requireSuperAdmin` (rotas globais: dashboard, criação/listagem/desativação de clínicas, ICS templates, jobs, server-config),
-    - `requireClinicAccess` (rotas escopadas com `/clinics/:clinicId/...`; faz lookup case-insensitive em `equipe_interna` por email + clinic_id),
-    - `requireAuth` + `assertClinicAccess(req, res, clinicId)` inline para rotas com `:id`/`:diagnosticId`/`:teamId` que precisam carregar o registro do banco antes de checar a clínica (actions/risks/faturas/delegacoes/processos/evidencias/documentos PATCH/DELETE, team/diagnostics/perguntas/ai).
-    - Endpoint `GET /api/me/clinics` devolve cards das clínicas acessíveis (super_admin → todas; team_member → filtradas).
-    - Frontend: `useMyClinics`, `ClinicAccessGuard` (redireciona para `/me/clinicas` se não autorizado), página `/me/clinicas` (0/1/2+ clínicas), seletor de clínica no header quando o gestor tem 2+ clínicas (persistido em `sessionStorage` chave `ccp_active_clinic_id` — escolha explícita por sessão de navegador; `setActiveClinicId` ainda faz `localStorage.removeItem` defensivo para limpar builds antigos. Gestores 2+ sem clínica selecionada caem no chooser `/me/clinicas`; clínica única auto-resolve em todos os resolvers).
-    - **Telas de "selecionar clínica" do portal** (Delegação, Riscos, Plano de Ação, Processos, Evidências, Documentos, Kickoff, Relatórios, Diagnóstico) usam o hook compartilhado `useClinicsForCurrentUser` em `artifacts/ccp/src/hooks/use-clinics-for-current-user.ts` — super_admin → `GET /api/clinics`, team_member → `GET /api/me/clinics`. **NÃO usar o `useListClinics` gerado pelo Orval em telas acessíveis ao gestor** (esse endpoint é super-admin-only e bypass-armadilha). `useListClinics` continua válido apenas para `pages/clinics/index.tsx` (sob `SuperAdminGuard`). **Guard rail automático (task #195):** `artifacts/ccp/scripts/check-forbidden-imports.mjs` roda como primeira etapa do `pnpm --filter @workspace/ccp run typecheck` e quebra o build se `useListClinics` for importado/chamado fora do allow-list (`src/pages/clinics/index.tsx`). Para adicionar nova exceção legítima, edite o array `allow` desse script e envolva a tela com `SuperAdminGuard`.
-    - Gotcha importante (express): `router.use(mw, subRouter)` instala `mw` como camada global — `requireClinicAccess` faz `next()` quando o URL não contém `/clinics/<uuid>` para não bloquear rotas super-admin que vêm depois; quem decide é a camada seguinte.
-  Push: `SuperAdminGuard` protects sensitive routes, and API endpoints require `requireAuth` middleware, deriving subscriber identity from JWT `sub` claims for push notifications. Push em v:2 resolve o `equipe_interna.id` por email no helper `resolveActiveTeamMember()` em `routes/push.ts`. The HS256 signing key is auto-bootstrapped on first boot: `initTokenSigningSecret()` (em `artifacts/api-server/src/lib/token-secret.ts`) prefere `TOKEN_SIGNING_SECRET` apenas quando definido **e diferente** de `SUPER_ADMIN_SECRET`; caso contrário lê `server_config.token_signing_secret`; se ausente, gera 48 bytes aleatórios (base64), persiste com `INSERT ... ON CONFLICT DO NOTHING` (seguro p/ múltiplos replicas), relê o valor canônico e cacheia em memória. A inicialização ocorre **antes** de `app.listen()` e **falha o processo** se der erro, garantindo que nenhuma requisição chegue ao servidor com auth quebrado. Para rotacionar: `DELETE FROM server_config WHERE key='token_signing_secret'` e reinicie.
-- **Scheduled Jobs:** A daily cron job implemented via `setInterval` checks for expiring documents and sends digest emails/push notifications. A `*/15`-minute `compromisso-reminder` job (`artifacts/api-server/src/lib/reminder-check.ts` → `runReminderCheck()`) fires Agenda reminders: it atomically claims due rows (`UPDATE ... SET lembrete_enviado_em=now() WHERE due AND null RETURNING *` — prevents duplicate sends across replicas), then per row sends a `buildReminderEmail` email + `sendPushToEmail(email, clinicId)` web push + a `notificacoes` insert, each in its own try/catch. WhatsApp reminders (Task #259, jun/2026) are sent via the pre-approved `lembrete_compromisso` Meta Cloud template (`sendReminderWhatsApp` in `lib/whatsapp.ts`, body params: titulo, quando, clinicName) — best-effort, only when `isWhatsAppConfigured()`, the recipient opted in (`whatsappEnabled` pref), and they have a phone on their clinic-scoped `equipe_interna` record (resolved by email + clinicId so a duplicate email across clinics never gets another clinic's number). All deep links use the clinic-scoped `/portal/clinica/:clinicId/agenda` path.
+    - **Email:** branded dark-theme HTML templates via Resend.
+    - **WhatsApp:** pre-approved Meta Cloud API template messages, with graceful fallback to email.
+    - **Web push:** `web-push` package, VAPID keys in the DB, a unified service worker. Push identity is derived from the JWT `sub` claim; `resolveActiveTeamMember()` resolves the `equipe_interna` row by email. Recipients are resolved by email **and** clinicId so a duplicate email across clinics never receives another clinic's notification.
+    - **Scheduled jobs:** a daily document-expiry digest, and a `*/15`-min `compromisso-reminder` job (`lib/reminder-check.ts`) that atomically claims due rows (`UPDATE ... SET lembrete_enviado_em=now() WHERE due AND null RETURNING *`, preventing duplicate sends across replicas) then sends an email + web push + (when configured and opted-in) WhatsApp reminder, each best-effort. All deep links are clinic-scoped (`/portal/clinica/:clinicId/agenda`).
+
+## Authentication & multi-clinic access
+Two roles:
+- **super_admin** — global access; operates the product; logs in at `/admin/login` with `SUPER_ADMIN_SECRET` (this flow is unchanged).
+- **team_member** — manager of one or more clinics, identified by email in `equipe_interna.tem_acesso_plataforma=true`; logs in at `/entrar` (email + password).
+
+- **Passwords** live per identity (email) in `team_credentials` (bcrypt cost 12), NOT per `equipe_interna` row: `email_normalized` (unique, lowercase), `senha_hash`, `senha_provisoria`, reset token + expiry, `failed_attempts`/`locked_until` (8 consecutive fails → 15-min lockout). When a manager first gets platform access and the email has no credential, the backend generates a 12-char provisional password (`generateProvisionalPassword()`), stores its hash, and emails it; if the email already has a credential (access granted to another clinic), it does NOT rotate — it only emails a heads-up. The only explicit rotation is the "Reenviar acesso" button. `invite-user` and `resend-invite` return **502** if the email fails (the credential is persisted only after Resend confirms, avoiding lockout). First login forces `/trocar-senha` (global `ProvisionalPasswordGate` based on `/auth/me.senhaProvisoria`). "Esqueci minha senha" sends a 1h tokenized reset link. Auth endpoints in `routes/auth.ts` share the super-admin login throttle (10 req/15min per IP).
+- **Token:** team_member JWT is v:2 `{role:'team_member', sub:email, email, nome, v:2}` (no fixed clinicId). The bearer token (`ccp_admin_token`) lives in **sessionStorage** — a same-tab refresh keeps the session, but opening the site fresh (new tab/window, reopened PWA) always lands on login. Unauthenticated guards and team_member logout redirect to `/entrar` (which links to super-admin login). `hasPlatformAccess(email)` is re-checked on every successful login, so revoking `tem_acesso_plataforma` blocks future logins.
+- **Middlewares** (`middleware/auth.ts`): `requireSuperAdmin` (global routes), `requireClinicAccess` (`/clinics/:clinicId/...`, case-insensitive lookup in `equipe_interna` by email + clinic_id), and `requireAuth` + inline `assertClinicAccess(req, res, clinicId)` for `:id`-style routes that must load the record before checking the clinic. Express gotcha: `requireClinicAccess` calls `next()` when the URL has no `/clinics/<uuid>` so it doesn't block super-admin routes mounted after it.
+- **Clinic resolution:** `GET /api/me/clinics` returns accessible clinic cards (super_admin → all; team_member → filtered). Frontend uses `useMyClinics`, `ClinicAccessGuard` (redirects to `/me/clinicas`), a `/me/clinicas` chooser, and a header clinic selector when a manager has 2+ clinics (active clinic persisted in sessionStorage `ccp_active_clinic_id`; single clinic auto-resolves). Portal "select clinic" screens use the shared `useClinicsForCurrentUser` hook (super_admin → `GET /api/clinics`; team_member → `GET /api/me/clinics`) — **never** the super-admin-only Orval `useListClinics`, enforced by `scripts/check-forbidden-imports.mjs` (allow-listed only for `pages/clinics/index.tsx`, which is under `SuperAdminGuard`).
+- **Respondente de Diagnóstico:** a 4th option in "Convidar Usuário" that forces `tem_acesso_plataforma=false` on all write routes (even if the frontend sends `true`); it never generates a platform password or `team_credentials` row. The real access is the scoped `diagnostic_respondent` token (delegation + pillar, in `routes/respondent.ts`). Signup and "Reenviar link" reuse `dispatchRespondentInvitesForEmail(clinicId, email, ...)` which scans all open delegations for the email, regenerates each `invite_code`, and sends one email per delegation. Status in `equipe_interna.invite_status` (`sent` / `no_delegations` / `pending`). Demoting an existing user to respondent revokes current access but preserves the global `team_credentials` (access in other clinics).
+- **Token signing key:** HS256 key auto-bootstrapped before `app.listen()` by `initTokenSigningSecret()` (`lib/token-secret.ts`) — prefers `TOKEN_SIGNING_SECRET` only when set AND different from `SUPER_ADMIN_SECRET`; otherwise reads `server_config.token_signing_secret`, generating + persisting a random 48-byte value (`INSERT ... ON CONFLICT DO NOTHING`, replica-safe) if absent. Init fails the process on error so no request reaches the server with broken auth. Rotate via `DELETE FROM server_config WHERE key='token_signing_secret'` + restart.
 
 # External Dependencies
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js**: 24
-- **TypeScript**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL
-- **ORM**: Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval
-- **Build tool**: esbuild
-- **AI Service**: Anthropic AI (`@anthropic-ai/sdk`) for Claude (claude-opus-4-5)
-- **Email Service**: Resend (chave + remetente + reply-to gerenciados em `/admin/configuracoes` — DB-backed via `server_config`, com fallback para env vars `RESEND_API_KEY`, `RESEND_FROM_ADDRESS`, `REPLY_TO_ADDRESS`, `APP_URL`)
-- **WhatsApp API**: Meta Cloud API (via `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`)
-- **Web Push Notifications**: `web-push` npm package
-- **UI Libraries**: `@dnd-kit/core` for drag-and-drop
-- **PWA Plugin**: `vite-plugin-pwa` (Workbox)
-- **External Data Source**: BrasilAPI for CNPJ lookup
-- **Logging**: pino for server-side logging
+- **Monorepo tool:** pnpm workspaces
+- **Runtime / language:** Node.js 24, TypeScript 5.9
+- **API framework:** Express 5
+- **Database / ORM:** PostgreSQL, Drizzle ORM
+- **Validation:** Zod (`zod/v4`), `drizzle-zod`
+- **API codegen:** Orval
+- **Build tool:** esbuild
+- **AI service:** Anthropic AI (`@anthropic-ai/sdk`, `claude-opus-4-5`)
+- **Email service:** Resend (config in `/admin/configuracoes`, DB-backed via `server_config` with env fallbacks — see below)
+- **WhatsApp API:** Meta Cloud API (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`)
+- **Web push:** `web-push` npm package
+- **UI libraries:** `@dnd-kit/core` (drag-and-drop)
+- **PWA plugin:** `vite-plugin-pwa` (Workbox)
+- **External data source:** BrasilAPI (CNPJ lookup)
+- **Logging:** pino
 
-# Configuração de E-mail (Resend + clinionex.com.br)
+# Email configuration (Resend + clinionex.com.br)
 
-O sistema envia e-mails transacionais via Resend (convites, delegações, alertas de expiração, confirmação de assinaturas Autentique, ativação de push). Toda a configuração é gerenciada em **`/admin/configuracoes`** → card **"E-mail Oficial — Resend"** e gravada em `server_config` (DB), com fallback para variáveis de ambiente.
+Transactional emails (invites, delegations, expiry alerts, signature confirmations, push activation) go through Resend. Configuration is managed in **`/admin/configuracoes`** → card **"E-mail Oficial — Resend"** and stored in `server_config` (DB), with env-var fallback.
 
-## Chaves configuráveis (table `server_config`)
+## Configurable keys (`server_config`)
 
-| Chave                  | Sensível | Fallback env             | Exemplo                                       |
-|------------------------|----------|--------------------------|-----------------------------------------------|
-| `resend_api_key`       | ✓        | `RESEND_API_KEY` → integração Replit | `re_xxx...`                         |
-| `resend_from_address`  |          | `RESEND_FROM_ADDRESS`    | `IONEX360 <noreply@clinionex.com.br>`         |
-| `reply_to_address`     |          | `REPLY_TO_ADDRESS`       | `gestor@blusolution.com.br`                   |
-| `app_url`              |          | `APP_URL`                | `https://app.clinionex.com.br`                |
+| Key                    | Sensitive | Env fallback             | Example                                       |
+|------------------------|-----------|--------------------------|-----------------------------------------------|
+| `resend_api_key`       | ✓         | `RESEND_API_KEY` → Replit integration | `re_xxx...`                      |
+| `resend_from_address`  |           | `RESEND_FROM_ADDRESS`    | `IONEX360 <noreply@clinionex.com.br>`         |
+| `reply_to_address`     |           | `REPLY_TO_ADDRESS`       | `gestor@blusolution.com.br`                   |
+| `app_url`              |           | `APP_URL`                | `https://app.clinionex.com.br`                |
 
-`sendEmail()` / `sendEmailDetailed()` (em `artifacts/api-server/src/lib/email.ts`) leem todas as chaves via `getConfig()` em runtime; o `reply_to_address` é mapeado para o campo `reply_to` do payload Resend. `resolveAppUrl(req?)` retorna, em ordem: (1) valor configurado em DB, (2) env `APP_URL`, (3) `req.protocol://req.host` quando há request, (4) default `https://app.clinionex.com.br`.
+`sendEmail()` / `sendEmailDetailed()` (`lib/email.ts`) read these via `getConfig()` at runtime; `reply_to_address` maps to the Resend `reply_to` field. `resolveAppUrl(req?)` returns, in order: DB value → env `APP_URL` → `req.protocol://req.host` → default `https://app.clinionex.com.br` (this fallback order also avoids Host-header poisoning in production).
 
-### Resolução da `resend_api_key` (precedência)
+**`resend_api_key` precedence:** (1) DB value (manual operator override), (2) env `RESEND_API_KEY`, (3) Replit Resend integration (default today, auto-rotated; fetched via `lib/replit-connectors.ts` with a 60s cache). When the key comes from the integration, the config card shows a green "via integração Replit" badge and hides "Alterar". `resend_from_address` is never pulled from the integration (the Replit account email is rarely a verified domain) — the operator sets it, or it falls back to the `onboarding@resend.dev` sandbox.
 
-1. Valor salvo no banco (`server_config.resend_api_key`) — operador sobrescreve manualmente
-2. Variável de ambiente `RESEND_API_KEY` — útil para overrides em deploy
-3. Integração Replit Resend — fonte padrão hoje (gerencia rotação automática); fetched via `artifacts/api-server/src/lib/replit-connectors.ts` com cache de 60s
+## Domain verification (Hostinger DNS)
 
-Quando a chave vem da integração, o card no painel `/admin/configuracoes` mostra o selo verde "via integração Replit" e o botão "Alterar" fica oculto — para sobrescrever, é preciso primeiro remover/desautorizar a integração no painel do Replit ou definir `RESEND_API_KEY` no env. **Importante**: o `resend_from_address` NÃO é puxado da integração (o e-mail da conta Replit raramente é um endereço de domínio verificado no Resend); ele continua sendo definido pelo operador no painel ou cai no sandbox `onboarding@resend.dev` quando vazio.
+1. https://resend.com/domains → "Add Domain" → `clinionex.com.br` (Brazil/SA region).
+2. Add the records Resend shows in Hostinger DNS: **SPF** TXT at `@` (`v=spf1 include:_spf.resend.com ~all`), **DKIM** CNAME at `resend._domainkey` (exact value from Resend), optional **DMARC** TXT at `_dmarc`, optional **MX** for bounces.
+3. Wait for "Verified", then save `noreply@clinionex.com.br` as the From address.
 
-## Verificação do domínio na Hostinger (DNS)
+## Status & test endpoints (super-admin, `routes/server-config.ts`)
 
-1. Acesse https://resend.com/domains → "Add Domain" → `clinionex.com.br` (região Brasil/SA).
-2. No painel DNS da Hostinger, adicione os registros mostrados pelo Resend:
-   - **SPF** — TXT em `@`: `v=spf1 include:_spf.resend.com ~all`
-   - **DKIM** — CNAME em `resend._domainkey`: valor exato fornecido pelo Resend
-   - **DMARC** (opcional, recomendado) — TXT em `_dmarc`: `v=DMARC1; p=none; rua=mailto:gestor@blusolution.com.br`
-   - **MX** (opcional, somente se for receber bounces): conforme instruções do Resend
-3. Aguarde a verificação (5min–algumas horas). Quando aparecer "Verified" no Resend, salve `noreply@clinionex.com.br` em **Endereço remetente (From)** no painel.
-
-## Status do domínio (Resend)
-
-`GET /api/admin/resend/domain-status` (super-admin) e `POST /api/admin/resend/verify-domain` (super-admin) — definidos em `routes/server-config.ts`. Usados pelo `ResendDomainStatusCard` em `/admin/configuracoes` para mostrar um badge **"Domínio verificado"** (verde) ou **"Domínio aguardando DNS / não iniciado"** (amarelo) com botão **"Reverificar agora"**. O endpoint resolve o `domain_id` em três níveis: (1) env `RESEND_DOMAIN_ID`, (2) match por host de `resend_from_address` na lista `GET /domains`, (3) primeiro domínio da conta. Cache em memória de 30s no `domain-status` para evitar rate-limit. A chave da Resend usada é a mesma resolvida por `getResendApiKey()` (db > env > integração).
-
-## Endpoint de teste
-
-`POST /api/admin/test-email` (super-admin) — também acessível como `POST /api/admin/config/integrations/test-email` (alias usado pelo card de teste no painel).
-
-- **Body**: `{ "to": "destino@exemplo.com" }`
-- **Response**: `{ ok, error?, status?, from, replyTo, to }` (status = HTTP do Resend quando aplicável)
-- A UI (card "Enviar e-mail de teste") mostra um badge de status "Resend conectado" / "Resend não configurado" no topo do card e desabilita o botão de envio enquanto a `resend_api_key` não estiver salva.
+- `GET /api/admin/resend/domain-status` + `POST /api/admin/resend/verify-domain` — power the `ResendDomainStatusCard` badge ("Domínio verificado" / "aguardando DNS"). Domain id resolves via env `RESEND_DOMAIN_ID` → host match on `resend_from_address` → first account domain. 30s in-memory cache.
+- `POST /api/admin/test-email` (alias `POST /api/admin/config/integrations/test-email`) — body `{ "to": "..." }`, returns `{ ok, error?, status?, from, replyTo, to }`. The test card disables sending until `resend_api_key` is configured.
