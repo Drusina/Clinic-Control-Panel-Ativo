@@ -25,6 +25,15 @@ import { resolveQuestionOwner } from "@/lib/scope/resolveQuestionOwner";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+class ApiError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`API error: ${status}`);
+    this.status = status;
+    this.name = "ApiError";
+  }
+}
+
 async function apiFetch(path: string, opts?: RequestInit) {
   const token = getStoredToken();
   const res = await fetch(`${BASE}/api${path}`, {
@@ -35,7 +44,7 @@ async function apiFetch(path: string, opts?: RequestInit) {
       ...(opts?.headers ?? {}),
     },
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status);
   return res.json();
 }
 
@@ -238,6 +247,9 @@ export default function DiagnosticoWizard() {
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>({});
   const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [hasUnsaved, setHasUnsaved] = useState(false);
   const [selectedQs, setSelectedQs] = useState<Set<string>>(new Set());
   const [delegateModal, setDelegateModal] = useState<
     | { perguntaIds: string[]; pilarSlug: string; pilarNome: string }
@@ -337,7 +349,10 @@ export default function DiagnosticoWizard() {
     for (const r of respostasData) {
       map[r.perguntaId] = r.valor;
     }
-    setLocalAnswers(map);
+    // Preserva edições locais ainda não gravadas por cima dos dados do servidor,
+    // para que um refetch não sobrescreva respostas pendentes.
+    setLocalAnswers({ ...map, ...pendingAnswers.current });
+    if (respostasData.length > 0) setLastSavedAt((prev) => prev ?? Date.now());
   }, [respostasData]);
 
   useEffect(() => {
@@ -346,26 +361,56 @@ export default function DiagnosticoWizard() {
     }
   }, [pilarDeepLink]);
 
+  // Aviso antes de sair/recarregar com respostas ainda não gravadas.
+  useEffect(() => {
+    if (!hasUnsaved && !saveError) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsaved, saveError]);
+
   const batchSave = useCallback(
-    async (answers: Record<string, string>) => {
+    async (answers: Record<string, string>): Promise<boolean> => {
       const respostas = Object.entries(answers).map(([perguntaId, valor]) => ({ perguntaId, valor }));
-      if (respostas.length === 0) return;
+      if (respostas.length === 0) return true;
       setIsBatchSaving(true);
       try {
         await apiFetch(`/diagnostics/${diagnosticoId}/respostas/batch`, {
           method: "POST",
           body: JSON.stringify({ respostas }),
         });
+        // Limpa do buffer apenas as respostas efetivamente enviadas cujo valor
+        // não mudou durante o envio — preserva edições mais novas (evita
+        // "Salvo" falso e perda silenciosa em saves concorrentes).
+        for (const { perguntaId, valor } of respostas) {
+          if (pendingAnswers.current[perguntaId] === valor) {
+            delete pendingAnswers.current[perguntaId];
+          }
+        }
+        setHasUnsaved(Object.keys(pendingAnswers.current).length > 0);
         setSaveError(false);
-        pendingAnswers.current = {};
+        setSessionExpired(false);
+        setLastSavedAt(Date.now());
         qc.invalidateQueries({ queryKey: ["respostas", diagnosticoId] });
-      } catch {
+        return true;
+      } catch (err) {
+        const status = err instanceof ApiError ? err.status : 0;
+        const expired = status === 401 || status === 403;
         setSaveError(true);
+        setSessionExpired(expired);
         toast({
           variant: "destructive",
-          title: "Falha ao salvar respostas",
-          description: "Verifique sua conexão e tente novamente.",
+          title: expired
+            ? "Sessão expirada — respostas NÃO salvas"
+            : "Falha ao salvar respostas",
+          description: expired
+            ? "Você foi desconectado. Faça login novamente para continuar salvando."
+            : "Verifique sua conexão e tente novamente.",
         });
+        return false;
       } finally {
         setIsBatchSaving(false);
       }
@@ -377,6 +422,7 @@ export default function DiagnosticoWizard() {
     (perguntaId: string, valor: string) => {
       setLocalAnswers((prev) => ({ ...prev, [perguntaId]: valor }));
       pendingAnswers.current[perguntaId] = valor;
+      setHasUnsaved(true);
 
       if (autoSaveTimers.current[perguntaId]) {
         clearTimeout(autoSaveTimers.current[perguntaId]);
@@ -414,6 +460,32 @@ export default function DiagnosticoWizard() {
     },
   });
 
+  // Garante que toda resposta pendente seja gravada ANTES de calcular o
+  // resultado (que lê as respostas do servidor). Se o salvamento falhar,
+  // aborta o cálculo para não gerar resultado com dados incompletos.
+  const handleCalculate = useCallback(async () => {
+    // Flush atômico: novas edições podem chegar durante o await; só calcula
+    // quando o buffer de pendentes estiver realmente vazio.
+    let guard = 0;
+    while (true) {
+      Object.values(autoSaveTimers.current).forEach((t) => clearTimeout(t));
+      autoSaveTimers.current = {};
+      const snapshot = { ...pendingAnswers.current };
+      if (Object.keys(snapshot).length === 0) break;
+      if (guard++ > 10) {
+        toast({
+          variant: "destructive",
+          title: "Ainda há respostas sendo salvas",
+          description: "Aguarde o salvamento concluir e tente calcular novamente.",
+        });
+        return;
+      }
+      const ok = await batchSave(snapshot);
+      if (!ok) return;
+    }
+    calculateScoresMut.mutate();
+  }, [batchSave, calculateScoresMut, toast]);
+
   if (loadingQuestions || loadingRespostas) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -439,7 +511,59 @@ export default function DiagnosticoWizard() {
   const answered = allQuestions.filter((p) => localAnswers[p.id] !== undefined).length;
   const progress = total > 0 ? Math.round((answered / total) * 100) : 0;
   const allAnswered = answered === total && total > 0;
-  const isSaving = isBatchSaving;
+
+  const saveState: "saving" | "error" | "dirty" | "saved" | "idle" = isBatchSaving
+    ? "saving"
+    : saveError
+    ? "error"
+    : hasUnsaved
+    ? "dirty"
+    : lastSavedAt
+    ? "saved"
+    : "idle";
+
+  const saveStatusEl =
+    saveState === "saving" ? (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" /> Salvando…
+      </span>
+    ) : saveState === "error" ? (
+      <span className="flex items-center gap-1 text-xs font-semibold text-red-600">
+        <AlertTriangle className="h-3 w-3" /> {sessionExpired ? "Sessão expirada" : "Não salvo"}
+      </span>
+    ) : saveState === "dirty" ? (
+      <span className="flex items-center gap-1 text-xs text-amber-600">
+        <span className="h-2 w-2 rounded-full bg-amber-500" /> Não salvo…
+      </span>
+    ) : saveState === "saved" ? (
+      <span className="flex items-center gap-1 text-xs font-medium text-green-600">
+        <CheckCircle2 className="h-3 w-3" /> Salvo
+      </span>
+    ) : null;
+
+  const saveErrorBanner = saveError ? (
+    <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-start gap-2">
+      {sessionExpired ? (
+        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+      ) : (
+        <WifiOff className="h-4 w-4 mt-0.5 shrink-0" />
+      )}
+      <span>
+        {sessionExpired ? (
+          <>
+            <strong>Sessão expirada — suas respostas não foram salvas.</strong> Você foi
+            desconectado. Faça login novamente em uma nova aba e refaça as respostas por lá para
+            não perdê-las.
+          </>
+        ) : (
+          <>
+            <strong>Falha ao salvar</strong> — Verifique sua conexão. O sistema tenta de novo a
+            cada nova resposta.
+          </>
+        )}
+      </span>
+    </div>
+  ) : null;
 
   if (selectedPilar) {
     const pilarQuestions = allQuestions.filter((p) => p.pilarSlug === selectedPilar);
@@ -452,14 +576,7 @@ export default function DiagnosticoWizard() {
 
     return (
       <div className="flex flex-col gap-4 max-w-3xl mx-auto">
-        {saveError && (
-          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-start gap-2">
-            <WifiOff className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>
-              <strong>Falha ao salvar</strong> — Verifique sua conexão e continue respondendo.
-            </span>
-          </div>
-        )}
+        {saveErrorBanner}
 
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={() => navigatePilar(null)}>
@@ -475,12 +592,7 @@ export default function DiagnosticoWizard() {
               </p>
             </div>
           </div>
-          {isSaving && (
-            <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Salvando...
-            </div>
-          )}
+          {saveStatusEl && <div className="ml-auto">{saveStatusEl}</div>}
         </div>
 
         <div className="space-y-1">
@@ -651,7 +763,7 @@ export default function DiagnosticoWizard() {
           ) : (
             <Button
               size="sm"
-              onClick={() => calculateScoresMut.mutate()}
+              onClick={handleCalculate}
               disabled={calculateScoresMut.isPending || answered === 0}
               className="bg-violet-600 hover:bg-violet-700 text-white"
             >
@@ -670,14 +782,7 @@ export default function DiagnosticoWizard() {
 
   return (
     <div className="flex flex-col gap-6 max-w-4xl mx-auto">
-      {saveError && (
-        <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-start gap-2">
-          <WifiOff className="h-4 w-4 mt-0.5 shrink-0" />
-          <span>
-            <strong>Falha ao salvar</strong> — Verifique sua conexão e tente novamente.
-          </span>
-        </div>
-      )}
+      {saveErrorBanner}
 
       <div className="flex items-start justify-between">
         <div>
@@ -687,15 +792,10 @@ export default function DiagnosticoWizard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isSaving && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Salvando...
-            </span>
-          )}
+          {saveStatusEl}
           {answered > 0 && (
             <Button
-              onClick={() => calculateScoresMut.mutate()}
+              onClick={handleCalculate}
               disabled={calculateScoresMut.isPending}
               variant={allAnswered ? "default" : "outline"}
               size="sm"
