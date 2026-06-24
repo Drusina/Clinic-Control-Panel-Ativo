@@ -146,7 +146,26 @@ router.patch("/risks/:id", async (req, res): Promise<void> => {
     updates.statusJustificativa = null;
   }
 
-  const [risk] = await db.update(risksTable).set(updates).where(eq(risksTable.id, id)).returning();
+  const risk = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(risksTable)
+      .set(updates)
+      .where(eq(risksTable.id, id))
+      .returning();
+
+    // Um risco "Não aceito" não deve ocupar o backlog do Plano de Ação:
+    // remove os cards derivados deste risco que ainda estão na coluna `backlog`
+    // (tarefas/subtarefas e itens-filhos saem em cascata). Idempotente — no-op
+    // se não houver card no backlog. Cards já movidos para outras colunas
+    // (trabalho em andamento/concluído) são preservados de propósito.
+    if (finalStatus === "nao_aceito") {
+      await tx
+        .delete(actionsTable)
+        .where(and(eq(actionsTable.riscoOrigemId, id), eq(actionsTable.coluna, "backlog")));
+    }
+
+    return updated;
+  });
 
   res.json(UpdateRiskResponse.parse(mapRisk(risk)));
 });

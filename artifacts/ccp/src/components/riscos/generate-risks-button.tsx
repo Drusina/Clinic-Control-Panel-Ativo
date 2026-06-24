@@ -238,7 +238,9 @@ export function GenerateRisksButton({
         result.risks.map((r) => ({
           ...r,
           tarefasSugeridas: r.tarefasSugeridas ?? [],
-          criarCard: r.nivel === "alto",
+          // Nada é aceito por padrão: o usuário precisa marcar explicitamente
+          // cada risco que deve virar card + tarefas no Plano de Ação.
+          criarCard: false,
         })),
       );
       setReviewOpen(true);
@@ -574,9 +576,13 @@ export function GenerateRisksButton({
                     />
                     <span className="text-sm flex items-center gap-1">
                       <ListChecks className="h-3.5 w-3.5 text-indigo-600" />
-                      Criar card no Plano de Ação
+                      Aceitar e criar card no Plano de Ação
                     </span>
                   </label>
+                  <p className="-mt-1 ml-6 text-xs text-muted-foreground">
+                    Sem marcar, o risco entra apenas no Mapa de Riscos e não gera tarefa no Plano de
+                    Ação.
+                  </p>
 
                   {r.criarCard && (
                     <div className="rounded-md border border-dashed bg-muted/30 p-3 space-y-2">
