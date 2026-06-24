@@ -4,9 +4,21 @@ import { db, diagnosticsTable, perguntasTable, respostasTable } from "@workspace
 import type { PerguntaFonte } from "@workspace/db";
 import { calcAnswerValue } from "./score-calculator";
 import { sanitizeTarefaTitles } from "./tarefas.js";
+import { logger } from "./logger.js";
 
-/** Hard timeout for the risk-generation AI call so a hung request never blocks preview. */
-const RISK_AI_TIMEOUT_MS = 45_000;
+/**
+ * Per-pillar AI call settings. Generation is split per pillar (small outputs),
+ * streamed, and run with bounded concurrency, so a per-attempt timeout with a
+ * single retry surfaces real failures quickly without the old ~2-min wait (the
+ * previous single all-pillars call routinely exceeded its 45s timeout → 502).
+ * RISK_AI_TOTAL_DEADLINE_MS is a hard wall-clock cap on the whole generation: a
+ * shared AbortSignal aborts every in-flight/pending call so a degraded provider
+ * can never push the total wait past this bound (it stays under the old ~137s).
+ */
+const RISK_AI_TIMEOUT_MS = 60_000;
+const RISK_AI_MAX_RETRIES = 1;
+const RISK_PILAR_CONCURRENCY = 4;
+const RISK_AI_TOTAL_DEADLINE_MS = 100_000;
 
 export const PILAR_NOMES: Record<string, string> = {
   estrategia: "Estratégia e Governança",
@@ -221,8 +233,12 @@ function fallbackFases(subtarefas: GeneratedSubtarefa[], pilarNome: string): Gen
 }
 
 /**
- * Ask the AI to synthesise thematic risks from the weak answers, grouped by pillar,
- * and map each risk back to its source questions for traceability.
+ * Synthesise thematic risks from the weak answers, mapping each risk back to its
+ * source questions for traceability. Generation is split PER PILLAR — one streamed
+ * Anthropic call per pillar (each ≤3 risks), run with bounded concurrency. Smaller
+ * per-pillar payloads finish well within the timeout (the previous single
+ * all-pillars call routinely exceeded it → "Request timed out" / 502), and a slow
+ * or failing pillar no longer takes down the whole generation.
  */
 export async function generateRisksFromWeakAnswers(
   weak: WeakAnswer[],
@@ -236,23 +252,74 @@ export async function generateRisksFromWeakAnswers(
 
   const byPilar = new Map<string, WeakAnswer[]>();
   for (const w of weak) {
+    if (!VALID_PILARES.has(w.pilarSlug)) continue;
     if (!byPilar.has(w.pilarSlug)) byPilar.set(w.pilarSlug, []);
     byPilar.get(w.pilarSlug)!.push(w);
   }
 
-  const listFormatted = [...byPilar.entries()]
-    .map(([slug, answers]) => {
-      const header = `PILAR ${slug} (${PILAR_NOMES[slug] ?? slug}):`;
-      const lines = answers
-        .map((a) => `  [${a.index}] ${a.pergunta} → resposta: ${a.resposta}`)
-        .join("\n");
-      return `${header}\n${lines}`;
-    })
-    .join("\n\n");
+  const client = new Anthropic({ apiKey });
+  const pilares = [...byPilar.entries()];
+  const settled: GeneratedRisk[][] = pilares.map(() => []);
+  const errors: unknown[] = [];
 
-  const prompt = `Você é um consultor especialista em gestão de riscos de clínicas de saúde da metodologia IONEX360. Abaixo estão os pontos fracos identificados no diagnóstico 360° de uma clínica, agrupados por pilar. Cada item tem um índice entre colchetes.
+  // Hard wall-clock cap on the whole generation: one shared AbortSignal aborts
+  // every in-flight and not-yet-started call once the deadline fires, so a
+  // degraded provider can never push the total wait past RISK_AI_TOTAL_DEADLINE_MS.
+  const ac = new AbortController();
+  const deadline = setTimeout(() => ac.abort(), RISK_AI_TOTAL_DEADLINE_MS);
 
-PONTOS FRACOS POR PILAR:
+  // Bounded concurrency: process the pillars in parallel, but never more than
+  // RISK_PILAR_CONCURRENCY simultaneous Anthropic calls (keeps us under rate limits).
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = cursor++;
+      if (i >= pilares.length) break;
+      const [slug, answers] = pilares[i];
+      try {
+        settled[i] = await generateRisksForPilar(client, slug, answers, ac.signal);
+      } catch (err) {
+        errors.push(err);
+        logger.warn({ err, pilarSlug: slug }, "risk generation failed for pilar");
+      }
+    }
+  }
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(RISK_PILAR_CONCURRENCY, pilares.length) }, () => worker()),
+    );
+  } finally {
+    clearTimeout(deadline);
+  }
+
+  const result = settled.flat();
+
+  // Surface a failure only when nothing came back AND at least one pillar errored,
+  // so the user is told to retry instead of seeing a misleading "no risks" message.
+  // If some pillars succeeded, we return their risks (partial resilience).
+  if (result.length === 0 && errors.length > 0) {
+    const first = errors[0];
+    throw new Error(first instanceof Error ? first.message : "Falha na geração de riscos");
+  }
+
+  return result;
+}
+
+/** Build the per-pillar prompt: same JSON contract as before, scoped to one pillar. */
+function buildPilarPrompt(slug: string, answers: WeakAnswer[]): string {
+  const pilarNome = PILAR_NOMES[slug] ?? slug;
+  const listFormatted = answers
+    .map((a) => `  [${a.index}] ${a.pergunta} → resposta: ${a.resposta}`)
+    .join("\n");
+  // Use this pillar's own (possibly non-contiguous) indices in the examples so the
+  // model doesn't copy literal placeholders that aren't in this pillar's list.
+  const exA = answers[0].index;
+  const exB = answers[1]?.index ?? exA;
+  const exampleIndices = JSON.stringify(exB === exA ? [exA] : [exA, exB]);
+
+  return `Você é um consultor especialista em gestão de riscos de clínicas de saúde da metodologia IONEX360. Abaixo estão os pontos fracos identificados no diagnóstico 360° de uma clínica, todos do pilar ${slug} (${pilarNome}). Cada item tem um índice entre colchetes.
+
+PONTOS FRACOS DO PILAR ${slug} (${pilarNome}):
 ${listFormatted}
 
 Sua tarefa: agrupar os pontos fracos relacionados em RISCOS TEMÁTICOS profissionais. Para cada risco, escreva nome, descrição, probabilidade e impacto (escala 1-5 cada), ações mitigadoras, e liste os índices das perguntas que originaram aquele risco. Para cada risco gere TRÊS materiais de plano (a camada final é escolhida pelo sistema): tarefas simples, subtarefas rastreáveis e fases de projeto.
@@ -261,22 +328,22 @@ Responda EXCLUSIVAMENTE com um JSON válido neste formato (sem markdown, sem tex
 {
   "riscos": [
     {
-      "pilarSlug": "slug_do_pilar",
+      "pilarSlug": "${slug}",
       "nome": "Nome temático do risco (ex.: Fragilidade no controle de fluxo de caixa)",
       "descricao": "Descrição clara do risco e suas consequências para a clínica em 2-3 frases",
       "probabilidade": 4,
       "impacto": 5,
       "acoesMitigadoras": "Ações concretas para mitigar o risco em 1-2 frases",
-      "perguntaIndices": [0, 3],
+      "perguntaIndices": ${exampleIndices},
       "tarefasSugeridas": ["Tarefa concreta 1", "Tarefa concreta 2", "Tarefa concreta 3"],
       "subtarefas": [
-        { "titulo": "Subtarefa acionável", "perguntaIndice": 0 }
+        { "titulo": "Subtarefa acionável", "perguntaIndice": ${exA} }
       ],
       "fases": [
         {
           "titulo": "Fase 1 — Diagnóstico e priorização",
           "descricao": "O que esta fase entrega",
-          "subtarefas": [ { "titulo": "Passo concreto da fase", "perguntaIndice": 3 } ]
+          "subtarefas": [ { "titulo": "Passo concreto da fase", "perguntaIndice": ${exB} } ]
         }
       ]
     }
@@ -284,31 +351,55 @@ Responda EXCLUSIVAMENTE com um JSON válido neste formato (sem markdown, sem tex
 }
 
 Regras:
-- Crie no máximo 3 riscos por pilar; agrupe pontos fracos relacionados em um mesmo risco.
-- pilarSlug deve ser exatamente o slug indicado no pilar de origem das perguntas.
+- Crie no máximo 3 riscos; agrupe pontos fracos relacionados em um mesmo risco.
+- pilarSlug deve ser exatamente "${slug}".
 - perguntaIndices deve conter apenas índices que aparecem na lista acima, e cada risco deve referenciar pelo menos um índice.
 - probabilidade e impacto são inteiros de 1 a 5. Quanto mais pontos fracos e mais graves, maiores os valores.
 - tarefasSugeridas: 3 a 5 tarefas curtas e acionáveis (apenas o título, no infinitivo, ex.: "Implantar planilha de fluxo de caixa"). Sem responsável, datas ou prazos.
 - subtarefas: liste tarefas acionáveis e, para cada uma, "perguntaIndice" = o índice do ponto fraco que a originou (use apenas índices da lista acima). Estas são tarefas rastreáveis até o diagnóstico.
 - fases: estruture o trabalho em 2 a 5 fases SEQUENCIAIS (a fase seguinte depende da anterior). Cada fase tem titulo, descricao curta e suas subtarefas, cada subtarefa com "perguntaIndice" da lista acima quando aplicável.
 - Escreva em português do Brasil, linguagem de negócio clara para um gestor não-técnico.`;
+}
 
-  const client = new Anthropic({ apiKey });
-  const message = await client.messages.create(
+/**
+ * Generate the risks for a single pillar via a STREAMING Anthropic call. Streaming
+ * keeps the connection active so the SDK does not abort the generation mid-flight,
+ * and the smaller per-pillar payload finishes well within the timeout. Throws on
+ * transport/parse failure so the caller can record it as a per-pillar error.
+ */
+async function generateRisksForPilar(
+  client: Anthropic,
+  slug: string,
+  answers: WeakAnswer[],
+  signal?: AbortSignal,
+): Promise<GeneratedRisk[]> {
+  const prompt = buildPilarPrompt(slug, answers);
+
+  const stream = client.messages.stream(
     {
       model: "claude-opus-4-5",
       max_tokens: 4096,
       messages: [{ role: "user", content: prompt }],
     },
-    { timeout: RISK_AI_TIMEOUT_MS },
+    { timeout: RISK_AI_TIMEOUT_MS, maxRetries: RISK_AI_MAX_RETRIES, signal },
   );
+  // finalText() concatenates every text block, robust to multi-block responses.
+  const text = await stream.finalText();
 
-  const content = message.content[0];
-  if (!content || content.type !== "text") {
-    throw new Error("Unexpected response type from AI");
-  }
+  const jsonText = text.trim().replace(/^```json?\n?/, "").replace(/\n?```$/, "");
+  return parseGeneratedRisks(jsonText, answers, slug);
+}
 
-  const jsonText = content.text.trim().replace(/^```json?\n?/, "").replace(/\n?```$/, "");
+/**
+ * Parse one pillar's AI JSON into GeneratedRisk[]. `forcedSlug` is the pillar we
+ * asked about; every risk is pinned to it (all answers belong to that pillar) so
+ * the AI cannot misattribute a risk to a different pillar.
+ */
+function parseGeneratedRisks(
+  jsonText: string,
+  weakForPilar: WeakAnswer[],
+  forcedSlug: string,
+): GeneratedRisk[] {
   let parsed: { riscos?: unknown };
   try {
     parsed = JSON.parse(jsonText);
@@ -320,12 +411,12 @@ Regras:
     throw new Error("AI response missing required array: riscos");
   }
 
-  const weakByIndex = new Map(weak.map((w) => [w.index, w]));
+  const weakByIndex = new Map(weakForPilar.map((w) => [w.index, w]));
+  const pilarSlug = forcedSlug;
+  const pilarNome = PILAR_NOMES[pilarSlug] ?? pilarSlug;
 
   const result: GeneratedRisk[] = [];
   for (const raw of parsed.riscos as RawRisk[]) {
-    const pilarSlug = String(raw.pilarSlug ?? "");
-    if (!VALID_PILARES.has(pilarSlug)) continue;
     const nome = String(raw.nome ?? "").trim();
     if (!nome) continue;
 
@@ -348,7 +439,6 @@ Regras:
     const probabilidade = clampScore(raw.probabilidade);
     const impacto = clampScore(raw.impacto);
     const severidade = probabilidade * impacto;
-    const pilarNome = PILAR_NOMES[pilarSlug] ?? pilarSlug;
 
     // Camada consolidada (subtarefas planas rastreáveis). Fallback determinístico:
     // se a IA não devolver subtarefas válidas, deriva uma por ponto-fonte.
