@@ -138,7 +138,8 @@ export default function DiagnosticsTab({
     return <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary" /></div>;
   }
 
-  const inProgress = diagnostics?.find(d => d.status === "em_andamento");
+  const inProgressList = diagnostics?.filter(d => d.status === "em_andamento") || [];
+  const hasInProgress = inProgressList.length > 0;
   const history = diagnostics?.filter(d => d.status !== "em_andamento") || [];
 
   return (
@@ -148,7 +149,7 @@ export default function DiagnosticsTab({
           <h3 className="text-lg font-medium">Diagnósticos de Maturidade</h3>
           <p className="text-sm text-muted-foreground">Avalie os pilares de gestão da clínica.</p>
         </div>
-        {!inProgress && (
+        {!hasInProgress && (
           <Button onClick={handleCreate} disabled={createDiagnostic.isPending}>
             {createDiagnostic.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
             Novo Diagnóstico
@@ -156,8 +157,28 @@ export default function DiagnosticsTab({
         )}
       </div>
 
-      {inProgress && (
-        <Card className="border-primary">
+      {hasInProgress && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <p>
+            {inProgressList.length > 1 ? (
+              <>
+                Existem <strong>{inProgressList.length} diagnósticos em andamento</strong> nesta clínica. Conclua
+                (responda 100%) ou exclua os diagnósticos abaixo — só é possível iniciar um novo quando não houver
+                nenhum em andamento.
+              </>
+            ) : (
+              <>
+                Há um diagnóstico <strong>em andamento</strong>. Conclua-o (responda 100% das perguntas) ou exclua-o
+                antes de iniciar um novo.
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {inProgressList.map((inProgress) => (
+        <Card key={inProgress.id} className="border-primary">
           <CardHeader className="pb-3">
             <div className="flex justify-between items-start">
               <div>
@@ -203,7 +224,7 @@ export default function DiagnosticsTab({
                       disabled={deleteDiagnostic.isPending}
                       title="Excluir este diagnóstico em andamento"
                     >
-                      {deleteDiagnostic.isPending ? (
+                      {deleteDiagnostic.isPending && deleteDiagnostic.variables?.id === inProgress.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Trash2 className="h-4 w-4" />
@@ -322,7 +343,7 @@ export default function DiagnosticsTab({
             </div>
           </CardContent>
         </Card>
-      )}
+      ))}
 
       {history.length > 0 && (
         <div className="space-y-4">
@@ -386,7 +407,7 @@ export default function DiagnosticsTab({
                         onCommitted={() => navigate(`/riscos/${clinicId}`)}
                       />
                     )}
-                    {diag.status === "concluido" && !inProgress && (
+                    {diag.status === "concluido" && !hasInProgress && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button size="sm" variant="ghost" className="text-xs" disabled={reopenDiagnostic.isPending}>
@@ -427,7 +448,7 @@ export default function DiagnosticsTab({
         </div>
       )}
 
-      {!inProgress && history.length === 0 && (
+      {!hasInProgress && history.length === 0 && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center p-12 text-center">
             <div className="rounded-full bg-primary/10 p-3 mb-4">
