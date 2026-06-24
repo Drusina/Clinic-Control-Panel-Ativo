@@ -4,8 +4,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, ClipboardList, BarChart3, GitCompare, CheckSquare, Square, Search, ChevronRight } from "lucide-react";
+import { Loader2, Plus, ClipboardList, BarChart3, GitCompare, CheckSquare, Square, Search, ChevronRight, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 import { getStoredToken, useCurrentRole, getActiveClinicId } from "@/hooks/use-auth";
 import { useClinicsForCurrentUser } from "@/hooks/use-clinics-for-current-user";
 
@@ -21,8 +33,21 @@ async function apiFetch(path: string, opts?: RequestInit) {
       ...(opts?.headers ?? {}),
     },
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+  if (!res.ok) {
+    let message = `API error: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // response had no JSON body
+    }
+    const err = new Error(message) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  if (res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 interface Clinic {
@@ -44,6 +69,7 @@ interface Diagnostic {
 export default function DiagnosticoSelectPage() {
   const [location, navigate] = useLocation();
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [selectedClinic, setSelectedClinic] = useState<string>("");
   const [clinicSearch, setClinicSearch] = useState("");
   const [compareMode, setCompareMode] = useState(false);
@@ -99,7 +125,34 @@ export default function DiagnosticoSelectPage() {
       qc.invalidateQueries({ queryKey: ["diagnostics", selectedClinic] });
       navigate(`${diagBase}/${diag.id}`);
     },
+    onError: (err: unknown) => {
+      toast({
+        variant: "destructive",
+        title: "Não foi possível iniciar o diagnóstico",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+      });
+    },
   });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => apiFetch(`/diagnostics/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast({
+        title: "Diagnóstico excluído",
+        description: "O diagnóstico em andamento e todas as suas respostas foram removidos.",
+      });
+      qc.invalidateQueries({ queryKey: ["diagnostics", selectedClinic] });
+    },
+    onError: (err: unknown) => {
+      toast({
+        variant: "destructive",
+        title: "Não foi possível excluir o diagnóstico",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+      });
+    },
+  });
+
+  const inProgress = diagnostics?.find((d) => d.status === "em_andamento");
 
   const activeClinic = clinics?.data.find((c) => c.id === selectedClinic);
 
@@ -230,7 +283,12 @@ export default function DiagnosticoSelectPage() {
                 <Button
                   size="sm"
                   onClick={() => createMut.mutate()}
-                  disabled={createMut.isPending || compareMode}
+                  disabled={createMut.isPending || compareMode || !!inProgress}
+                  title={
+                    inProgress
+                      ? "Conclua (responda 100%) ou exclua o diagnóstico em andamento antes de iniciar um novo."
+                      : undefined
+                  }
                 >
                   {createMut.isPending ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -244,6 +302,12 @@ export default function DiagnosticoSelectPage() {
             {compareMode && (
               <p className="text-xs text-muted-foreground mt-1">
                 Selecione dois diagnósticos para comparar (apenas diagnósticos com score são elegíveis).
+              </p>
+            )}
+            {!compareMode && inProgress && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Há um diagnóstico <strong>em andamento</strong> (Versão {inProgress.versao}). Conclua-o
+                (responda 100% das perguntas) ou exclua-o antes de iniciar um novo.
               </p>
             )}
           </CardHeader>
@@ -340,6 +404,44 @@ export default function DiagnosticoSelectPage() {
                                 <BarChart3 className="h-3.5 w-3.5 mr-1" />
                                 Resultado
                               </Button>
+                            )}
+                            {d.status === "em_andamento" && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-destructive hover:text-destructive"
+                                    disabled={deleteMut.isPending}
+                                    title="Excluir este diagnóstico em andamento"
+                                  >
+                                    {deleteMut.isPending && deleteMut.variables === d.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    )}
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Excluir diagnóstico em andamento?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Todas as respostas já registradas neste diagnóstico (Versão {d.versao})
+                                      serão apagadas <strong>permanentemente</strong> e não poderão ser
+                                      recuperadas. Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => deleteMut.mutate(d.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Excluir definitivamente
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             )}
                           </div>
                         )}

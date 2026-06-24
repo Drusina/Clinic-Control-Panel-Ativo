@@ -43,6 +43,7 @@ import type {
   CreateActivityBody,
   CreateChecklistItemBody,
   CreateClinicBody,
+  CreateDiagnostic409,
   CreateFaturaBody,
   CreateParceiroExternoBody,
   CreateRiskBody,
@@ -51,6 +52,7 @@ import type {
   CreateTarefaBody,
   CreateTeamMemberBody,
   DashboardSummary,
+  DeleteDiagnostic409,
   DeletePerguntaParams,
   DeleteSocietaryDoc200,
   Diagnostic,
@@ -2476,7 +2478,7 @@ export const createDiagnostic = async (
 };
 
 export const getCreateDiagnosticMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<CreateDiagnostic409>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -2517,13 +2519,13 @@ export type CreateDiagnosticMutationResult = NonNullable<
   Awaited<ReturnType<typeof createDiagnostic>>
 >;
 
-export type CreateDiagnosticMutationError = ErrorType<unknown>;
+export type CreateDiagnosticMutationError = ErrorType<CreateDiagnostic409>;
 
 /**
  * @summary Start a new diagnostic
  */
 export const useCreateDiagnostic = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<CreateDiagnostic409>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -2628,6 +2630,91 @@ export function useGetDiagnostic<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Delete an in-progress diagnostic (answers are removed via cascade)
+ */
+export const getDeleteDiagnosticUrl = (id: string) => {
+  return `/api/diagnostics/${id}`;
+};
+
+export const deleteDiagnostic = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteDiagnosticUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteDiagnosticMutationOptions = <
+  TError = ErrorType<void | DeleteDiagnostic409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDiagnostic>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDiagnostic>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteDiagnostic"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDiagnostic>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteDiagnostic(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDiagnosticMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDiagnostic>>
+>;
+
+export type DeleteDiagnosticMutationError =
+  ErrorType<void | DeleteDiagnostic409>;
+
+/**
+ * @summary Delete an in-progress diagnostic (answers are removed via cascade)
+ */
+export const useDeleteDiagnostic = <
+  TError = ErrorType<void | DeleteDiagnostic409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDiagnostic>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDiagnostic>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteDiagnosticMutationOptions(options));
+};
 
 /**
  * @summary Mark diagnostic as complete and calculate score

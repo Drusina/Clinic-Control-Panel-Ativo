@@ -855,6 +855,13 @@ export const GetDiagnosticResponse = zod.object({
 });
 
 /**
+ * @summary Delete an in-progress diagnostic (answers are removed via cascade)
+ */
+export const DeleteDiagnosticParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary Mark diagnostic as complete and calculate score
  */
 export const CompleteDiagnosticParams = zod.object({

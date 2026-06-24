@@ -14,3 +14,4 @@
 - [Wizard autosave data safety](wizard-autosave-data-safety.md) — sessionStorage token can expire mid-diagnostic; autosave→compute must flush+abort, compare-and-delete the buffer, merge pending over refetch, and show persistent save/401 state.
 - [Risk-generation hand-written types](risk-generation-handwritten-types.md) — generate-risks-button.tsx uses raw fetch + local types (NOT Orval) for preview/commit; mirror contract changes by hand, typecheck won't catch drift.
 - [Plano de Ação camada/multi-responsável](plano-acao-camada-multiresp.md) — camada derived server-side from scoresPilares; acao_responsaveis join table; standalone Kanban filter must union responsaveis[] + legacy responsavelNome.
+- [Single in-progress diagnostic](diagnostic-single-inprogress.md) — one em_andamento/clinic enforced by per-clinic advisory lock in create tx, NOT a DB unique index (legacy dup rows block it until cleaned).

@@ -1,4 +1,4 @@
-import { useListDiagnostics, getListDiagnosticsQueryKey, useCreateDiagnostic, useCompleteDiagnostic, useReopenDiagnostic } from "@workspace/api-client-react";
+import { useListDiagnostics, getListDiagnosticsQueryKey, useCreateDiagnostic, useCompleteDiagnostic, useReopenDiagnostic, useDeleteDiagnostic } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plus, PlayCircle, CheckCircle, ListChecks, Unlock, AlertTriangle } from "lucide-react";
+import { Loader2, Plus, PlayCircle, CheckCircle, ListChecks, Unlock, AlertTriangle, Trash2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -65,6 +65,7 @@ export default function DiagnosticsTab({
   const createDiagnostic = useCreateDiagnostic();
   const completeDiagnostic = useCompleteDiagnostic();
   const reopenDiagnostic = useReopenDiagnostic();
+  const deleteDiagnostic = useDeleteDiagnostic();
 
   const handleCreate = () => {
     createDiagnostic.mutate(
@@ -74,8 +75,25 @@ export default function DiagnosticsTab({
           toast({ title: "Diagnóstico iniciado", description: "Um novo diagnóstico foi criado para a clínica." });
           queryClient.invalidateQueries({ queryKey: getListDiagnosticsQueryKey(clinicId) });
         },
-        onError: () => {
-          toast({ variant: "destructive", title: "Erro", description: "Falha ao iniciar diagnóstico." });
+        onError: (err: unknown) => {
+          const data = (err as { data?: { error?: string } } | null)?.data;
+          toast({ variant: "destructive", title: "Erro", description: data?.error ?? "Falha ao iniciar diagnóstico." });
+        },
+      }
+    );
+  };
+
+  const handleDelete = (id: string) => {
+    deleteDiagnostic.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          toast({ title: "Diagnóstico excluído", description: "O diagnóstico em andamento e todas as suas respostas foram removidos." });
+          queryClient.invalidateQueries({ queryKey: getListDiagnosticsQueryKey(clinicId) });
+        },
+        onError: (err: unknown) => {
+          const data = (err as { data?: { error?: string } } | null)?.data;
+          toast({ variant: "destructive", title: "Erro", description: data?.error ?? "Falha ao excluir diagnóstico." });
         },
       }
     );
@@ -162,19 +180,58 @@ export default function DiagnosticsTab({
                   Iniciado em {format(new Date(inProgress.iniciadoEm), "dd/MM/yyyy", { locale: ptBR })}
                 </CardDescription>
               </div>
-              <Button
-                size="sm"
-                onClick={() => handleComplete(inProgress.id)}
-                disabled={completeDiagnostic.isPending || !inProgress.progresso?.completo}
-                title={
-                  inProgress.progresso?.completo
-                    ? undefined
-                    : "Conclua todas as perguntas dos 8 pilares para liberar a conclusão."
-                }
-              >
-                {completeDiagnostic.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                Concluir Diagnóstico
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => handleComplete(inProgress.id)}
+                  disabled={completeDiagnostic.isPending || !inProgress.progresso?.completo}
+                  title={
+                    inProgress.progresso?.completo
+                      ? undefined
+                      : "Conclua todas as perguntas dos 8 pilares para liberar a conclusão."
+                  }
+                >
+                  {completeDiagnostic.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                  Concluir Diagnóstico
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      disabled={deleteDiagnostic.isPending}
+                      title="Excluir este diagnóstico em andamento"
+                    >
+                      {deleteDiagnostic.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                      <span className="sr-only sm:not-sr-only sm:ml-2">Excluir</span>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Excluir diagnóstico em andamento?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Todas as respostas já registradas neste diagnóstico (v{inProgress.versao}) serão
+                        apagadas <strong>permanentemente</strong> e não poderão ser recuperadas. Esta ação não
+                        pode ser desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleDelete(inProgress.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Excluir definitivamente
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">

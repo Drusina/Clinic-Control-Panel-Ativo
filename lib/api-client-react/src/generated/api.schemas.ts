@@ -2255,6 +2255,14 @@ export type GetSocietaryDocSignedUrl200 = {
   url: string;
 };
 
+export type CreateDiagnostic409 = {
+  error: string;
+};
+
+export type DeleteDiagnostic409 = {
+  error: string;
+};
+
 export type DeletePerguntaParams = {
   force?: boolean;
 };

@@ -645,6 +645,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Diagnostic"
+        "409":
+          description: A diagnostic is already in progress for this clinic
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string }
 
   /diagnostics/{id}:
     get:
@@ -664,6 +673,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Diagnostic"
+    delete:
+      operationId: deleteDiagnostic
+      tags: [diagnostics]
+      summary: Delete an in-progress diagnostic (answers are removed via cascade)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+        "409":
+          description: Only in-progress diagnostics can be deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string }
 
   /diagnostics/{id}/complete:
     post:

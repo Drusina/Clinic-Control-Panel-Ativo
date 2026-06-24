@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db, diagnosticsTable } from "@workspace/db";
 import {
   ListDiagnosticsResponse,
@@ -81,19 +81,49 @@ router.post("/clinics/:clinicId/diagnostics", async (req, res): Promise<void> =>
   const clinicId = Array.isArray(req.params.clinicId) ? req.params.clinicId[0] : req.params.clinicId;
   if (await assertClinicAccess(req, res, clinicId)) return;
 
-  const existing = await db
-    .select()
-    .from(diagnosticsTable)
-    .where(eq(diagnosticsTable.clinicId, clinicId));
+  // The "at most one em_andamento per clinic" check and the version allocation
+  // both read existing rows and then write, so two concurrent creates (e.g. a
+  // double-click) could each see no in-progress diagnostic and both insert.
+  // A per-clinic transaction advisory lock serializes creates for the same
+  // clinic, keeping the invariant and the max(versao)+1 numbering race-safe.
+  const outcome = await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`create-diagnostic:${clinicId}`}))`,
+    );
 
-  const nextVersion = existing.length + 1;
+    const existing = await tx
+      .select()
+      .from(diagnosticsTable)
+      .where(eq(diagnosticsTable.clinicId, clinicId));
 
-  const [diagnostic] = await db
-    .insert(diagnosticsTable)
-    .values({ clinicId, versao: nextVersion })
-    .returning();
+    if (existing.some((d) => d.status === "em_andamento")) {
+      return { conflict: true as const };
+    }
 
-  res.status(201).json(mapDiagnostic(diagnostic));
+    // Next version comes from the highest existing version (not the count) so
+    // deletions never produce duplicate version numbers.
+    const nextVersion =
+      existing.reduce((max, d) => Math.max(max, d.versao ?? 0), 0) + 1;
+
+    const [created] = await tx
+      .insert(diagnosticsTable)
+      .values({ clinicId, versao: nextVersion })
+      .returning();
+
+    return { conflict: false as const, created };
+  });
+
+  // Only one diagnostic can be "em andamento" at a time. Enforced server-side
+  // so the rule holds regardless of which frontend triggered the create.
+  if (outcome.conflict) {
+    res.status(409).json({
+      error:
+        "Já existe um diagnóstico em andamento para esta clínica. Conclua (responda 100%) ou exclua o diagnóstico atual antes de iniciar um novo.",
+    });
+    return;
+  }
+
+  res.status(201).json(mapDiagnostic(outcome.created));
 });
 
 router.get("/diagnostics/:id", async (req, res): Promise<void> => {
@@ -190,6 +220,52 @@ router.post("/diagnostics/:id/reopen", async (req, res): Promise<void> => {
   }
 
   res.json(CompleteDiagnosticResponse.parse(mapDiagnostic(diagnostic)));
+});
+
+router.delete("/diagnostics/:id", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  const existing = await db.select().from(diagnosticsTable).where(eq(diagnosticsTable.id, id));
+  if (!existing.length) {
+    res.status(404).json({ error: "Diagnostic not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, existing[0].clinicId)) return;
+
+  // Only in-progress diagnostics can be deleted. Concluded diagnostics are
+  // preserved because their scores feed the risk map and action plan; removing
+  // one requires reopening it first (out of scope here).
+  if (existing[0].status !== "em_andamento") {
+    res.status(409).json({
+      error:
+        "Apenas diagnósticos em andamento podem ser excluídos. Diagnósticos concluídos preservam o histórico, riscos e plano de ação vinculados.",
+    });
+    return;
+  }
+
+  // The diagnostic's answers (respostas) are removed automatically via the
+  // ON DELETE CASCADE foreign key on respostas.diagnostico_id. The delete is
+  // re-scoped to status='em_andamento' so a concurrent "concluir" between the
+  // check above and this write can never delete a now-concluded diagnostic.
+  const deleted = await db
+    .delete(diagnosticsTable)
+    .where(
+      and(
+        eq(diagnosticsTable.id, id),
+        eq(diagnosticsTable.status, "em_andamento"),
+      ),
+    )
+    .returning({ id: diagnosticsTable.id });
+
+  if (!deleted.length) {
+    res.status(409).json({
+      error:
+        "O diagnóstico deixou de estar em andamento e não pode mais ser excluído.",
+    });
+    return;
+  }
+
+  res.status(204).end();
 });
 
 export default router;
