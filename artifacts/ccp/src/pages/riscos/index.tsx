@@ -190,10 +190,13 @@ function getSeverityLabel(sev: number): { label: string; variant: "default" | "s
 }
 
 // O status do risco é dirigido pelo Plano de Ação (board) quando há card
-// vinculado; "Não aceito" é um override manual. "aceito" é legado e cai no
-// rótulo de "Identificado".
+// vinculado: card só no backlog → "Aceito"; card em andamento → "Em mitigação";
+// tudo concluído → "Mitigado". Sem card → "Identificado" (triagem). "Não aceito"
+// é um override manual.
 function riskStatusMeta(status: string): { label: string; className: string } {
   switch (status) {
+    case "aceito":
+      return { label: "Aceito", className: "bg-amber-100 text-amber-700 border-amber-200" };
     case "em_mitigacao":
       return { label: "Em mitigação", className: "bg-blue-100 text-blue-700 border-blue-200" };
     case "mitigado":
@@ -204,6 +207,27 @@ function riskStatusMeta(status: string): { label: string; className: string } {
     default:
       return { label: "Identificado", className: "bg-gray-100 text-gray-700 border-gray-200" };
   }
+}
+
+// Cartões do painel de status (ordem do funil de tratamento) + filtros.
+const STATUS_CARDS: { key: string; label: string; dot: string; active: string }[] = [
+  { key: "identificado", label: "Identificados", dot: "bg-gray-400", active: "border-gray-400 bg-gray-50" },
+  { key: "aceito", label: "Aceitos", dot: "bg-amber-500", active: "border-amber-400 bg-amber-50" },
+  { key: "em_mitigacao", label: "Em mitigação", dot: "bg-blue-500", active: "border-blue-400 bg-blue-50" },
+  { key: "mitigado", label: "Mitigados", dot: "bg-green-500", active: "border-green-400 bg-green-50" },
+  { key: "nao_aceito", label: "Não aceitos", dot: "bg-red-500", active: "border-red-400 bg-red-50" },
+];
+
+const NIVEL_OPTIONS: { value: string; label: string }[] = [
+  { value: "alto", label: "Alto (≥15)" },
+  { value: "medio", label: "Médio (7–14)" },
+  { value: "baixo", label: "Baixo (≤6)" },
+];
+
+function severityBand(sev: number): "baixo" | "medio" | "alto" {
+  if (sev <= 6) return "baixo";
+  if (sev <= 14) return "medio";
+  return "alto";
 }
 
 const DATE_TIME_FMT = new Intl.DateTimeFormat("pt-BR", {
@@ -271,6 +295,10 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
   const [expandedRisk, setExpandedRisk] = useState<string | null>(null);
   const [hoveredRisk, setHoveredRisk] = useState<string | null>(null);
   const [highlightedRisk, setHighlightedRisk] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("todos");
+  const [pilarFilter, setPilarFilter] = useState<string>("todos");
+  const [nivelFilter, setNivelFilter] = useState<string>("todos");
+  const [sortBy, setSortBy] = useState<"severidade" | "recentes">("severidade");
   const [form, setForm] = useState({
     nome: "",
     descricao: "",
@@ -329,8 +357,34 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
     return <ClinicSelector />;
   }
 
-  const sortedRiscos = [...riscos].sort((a, b) => b.severidade - a.severidade);
+  // rankedRiscos: ordenação canônica por severidade (matriz + numeração da lista).
+  // Decoupla a numeração do risco da ordem de exibição filtrada/ordenada.
+  const rankedRiscos = [...riscos].sort((a, b) => b.severidade - a.severidade);
   const generations = computeGenerations(riscos, diagnostics);
+
+  const statusCounts = riscos.reduce<Record<string, number>>((acc, r) => {
+    acc[r.status] = (acc[r.status] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const filtersActive =
+    statusFilter !== "todos" || pilarFilter !== "todos" || nivelFilter !== "todos";
+
+  const displayedRiscos = rankedRiscos
+    .filter((r) => (statusFilter === "todos" ? true : r.status === statusFilter))
+    .filter((r) => (pilarFilter === "todos" ? true : r.pilarSlug === pilarFilter))
+    .filter((r) => (nivelFilter === "todos" ? true : severityBand(r.severidade) === nivelFilter))
+    .sort((a, b) =>
+      sortBy === "recentes"
+        ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        : b.severidade - a.severidade,
+    );
+
+  const clearFilters = () => {
+    setStatusFilter("todos");
+    setPilarFilter("todos");
+    setNivelFilter("todos");
+  };
 
   const handleSubmit = () => {
     if (!form.nome) return;
@@ -412,7 +466,34 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
       ) : (
-        <div className="flex flex-col lg:flex-row gap-6">
+        <div className="space-y-6">
+          {/* Painel de status — cartões clicáveis que filtram a lista por status. */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {STATUS_CARDS.map((c) => {
+              const count = statusCounts[c.key] ?? 0;
+              const active = statusFilter === c.key;
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => setStatusFilter(active ? "todos" : c.key)}
+                  aria-pressed={active}
+                  className={cn(
+                    "rounded-xl border p-3 text-left transition-all hover:shadow-sm",
+                    active ? `${c.active} ring-2 ring-primary/30` : "border-border bg-card",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={cn("h-2.5 w-2.5 rounded-full", c.dot)} />
+                    <span className="text-xs font-medium text-muted-foreground truncate">{c.label}</span>
+                  </div>
+                  <div className="mt-1 text-2xl font-bold tabular-nums">{count}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-6">
           <div className="w-full lg:w-[420px] lg:flex-shrink-0">
             <div className="border rounded-xl overflow-hidden p-4 bg-card">
               <div className="flex items-end gap-2 mb-3">
@@ -434,8 +515,8 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
                                 getCellBorder(prob, impact)
                               )}
                             >
-                              {risksInCell.map((risk, i) => {
-                                const rank = sortedRiscos.findIndex(r => r.id === risk.id) + 1;
+                              {risksInCell.map((risk) => {
+                                const rank = rankedRiscos.findIndex(r => r.id === risk.id) + 1;
                                 const isHighlighted = highlightedRisk === risk.id;
                                 const isHovered = hoveredRisk === risk.id;
                                 return (
@@ -486,9 +567,43 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
           </div>
 
           <div className="w-full flex-1 space-y-2">
-            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Riscos por Severidade</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Riscos por Severidade</h3>
+              <span className="text-xs text-muted-foreground">
+                {displayedRiscos.length} de {riscos.length}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={pilarFilter} onValueChange={setPilarFilter}>
+                <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Pilar" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os pilares</SelectItem>
+                  {PILARES.map(p => <SelectItem key={p.slug} value={p.slug}>{p.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={nivelFilter} onValueChange={setNivelFilter}>
+                <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Nível" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os níveis</SelectItem>
+                  {NIVEL_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as "severidade" | "recentes")}>
+                <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="severidade">Maior severidade</SelectItem>
+                  <SelectItem value="recentes">Mais recentes</SelectItem>
+                </SelectContent>
+              </Select>
+              {filtersActive && (
+                <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={clearFilters}>
+                  Limpar filtros
+                </Button>
+              )}
+            </div>
             <div className="space-y-2.5 max-h-[640px] overflow-y-auto pr-1">
-              {sortedRiscos.map((risk, i) => {
+              {displayedRiscos.map((risk) => {
+                const rank = rankedRiscos.findIndex(r => r.id === risk.id) + 1;
                 const sev = getSeverityLabel(risk.severidade);
                 const isHighlighted = highlightedRisk === risk.id;
                 const isExpanded = expandedRisk === risk.id;
@@ -514,7 +629,7 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
                             "h-6 w-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white mt-0.5",
                             risk.severidade <= 6 ? "bg-green-600" : risk.severidade <= 14 ? "bg-yellow-500" : "bg-red-600"
                           )}>
-                            {i + 1}
+                            {rank}
                           </span>
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm leading-tight">{risk.nome}</div>
@@ -645,13 +760,16 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
                   </div>
                 );
               })}
-              {sortedRiscos.length === 0 && (
+              {displayedRiscos.length === 0 && (
                 <div className="text-center text-muted-foreground py-8 text-sm">
-                  Nenhum risco cadastrado. Clique em "+ Novo Risco" para adicionar.
+                  {riscos.length === 0
+                    ? 'Nenhum risco cadastrado. Clique em "+ Novo Risco" para adicionar.'
+                    : "Nenhum risco corresponde aos filtros selecionados."}
                 </div>
               )}
             </div>
           </div>
+        </div>
         </div>
       )}
 

@@ -19,6 +19,20 @@ function getCellBg(prob: number, impact: number): string {
   return "#fee2e2";
 }
 
+// O status do risco é dirigido pelo Plano de Ação (board): card só no backlog →
+// "Aceito"; em andamento → "Em mitigação"; tudo concluído → "Mitigado". Sem card
+// → "Identificado". "Não aceito" é override manual.
+const RISK_STATUS_LABEL: Record<string, string> = {
+  identificado: "Identificado",
+  aceito: "Aceito",
+  em_mitigacao: "Em mitigação",
+  mitigado: "Mitigado",
+  nao_aceito: "Não aceito",
+};
+function getStatusLabel(status: string): string {
+  return RISK_STATUS_LABEL[status] ?? status;
+}
+
 type Risk = {
   id: string;
   nome: string;
@@ -163,7 +177,7 @@ export function MapaRiscosPdf({ clinicName, date, risks }: MapaRiscosPdfProps) {
                 <Text style={styles.tableCell}>{r.impacto}</Text>
                 <Text style={styles.tableCell}>{r.severidade}</Text>
                 <Text style={[styles.tableCell, { color: getSevColor(r.severidade), fontFamily: "Helvetica-Bold" }]}>{getSevLabel(r.severidade)}</Text>
-                <Text style={styles.tableCell}>{r.status}</Text>
+                <Text style={styles.tableCell}>{getStatusLabel(r.status)}</Text>
               </View>
             ))}
             {sorted.length === 0 && (

@@ -52,10 +52,13 @@ const formSchema = z.object({
 });
 
 // O status do risco é dirigido pelo Plano de Ação (board) quando há card
-// vinculado; "Não aceito" é um override manual. "aceito" é legado e cai no
-// rótulo de "Identificado".
+// vinculado: card só no backlog → "Aceito"; card em andamento → "Em mitigação";
+// tudo concluído → "Mitigado". Sem card → "Identificado" (triagem). "Não aceito"
+// é um override manual.
 function riskStatusMeta(status: string): { label: string; className: string } {
   switch (status) {
+    case "aceito":
+      return { label: "Aceito", className: "bg-amber-100 text-amber-700 border-amber-200" };
     case "em_mitigacao":
       return { label: "Em mitigação", className: "bg-blue-100 text-blue-700 border-blue-200" };
     case "mitigado":

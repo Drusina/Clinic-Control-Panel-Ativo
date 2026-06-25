@@ -226,7 +226,7 @@ const PRIORIDADE_VARIANT: Record<string, "destructive" | "secondary" | "outline"
   media: "secondary",
   baixa: "outline",
 };
-const RISK_OPEN_STATUS = new Set(["identificado", "em_mitigacao"]);
+const RISK_OPEN_STATUS = new Set(["identificado", "aceito", "em_mitigacao"]);
 const RISK_HIGH_SEVERIDADE = 14; // severidade > 14 ⇒ nível "alto" (vide severidadeToNivel)
 
 /** Coerce a possibly-unknown score value (scoresPilares is typed loosely). */

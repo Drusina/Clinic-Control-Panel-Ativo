@@ -646,7 +646,7 @@ router.delete("/actions/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   const [existingAction] = await db
-    .select({ clinicId: actionsTable.clinicId })
+    .select({ clinicId: actionsTable.clinicId, riscoOrigemId: actionsTable.riscoOrigemId })
     .from(actionsTable)
     .where(eq(actionsTable.id, id))
     .limit(1);
@@ -656,7 +656,16 @@ router.delete("/actions/:id", async (req, res): Promise<void> => {
   }
   if (await assertClinicAccess(req, res, existingAction.clinicId)) return;
 
-  await db.delete(actionsTable).where(eq(actionsTable.id, id));
+  // The board is the source of truth: removing a card reconciles the linked
+  // risk (e.g. deleting the last card returns the risk to "identificado").
+  await db.transaction(async (tx) => {
+    await tx.delete(actionsTable).where(eq(actionsTable.id, id));
+    if (existingAction.riscoOrigemId) {
+      await reconcileRiskStatus(tx, existingAction.riscoOrigemId, {
+        resetWhenNoCards: true,
+      });
+    }
+  });
   res.sendStatus(204);
 });
 

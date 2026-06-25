@@ -8,7 +8,7 @@ import { seedPerguntasIfEmpty } from "./lib/perguntas-seed.js";
 import { backfillTrilha } from "./lib/trilha.js";
 import { backfillAcaoChecklistToTarefas } from "./lib/tarefa-backfill.js";
 import { normalizeLegacyFaturaStatuses } from "./lib/faturas-status.js";
-import { remapLegacyAceitoStatus } from "./lib/risk-lifecycle.js";
+import { backfillRiskStatuses } from "./lib/risk-lifecycle.js";
 
 if (!process.env.SUPER_ADMIN_SECRET || process.env.SUPER_ADMIN_SECRET.length === 0) {
   throw new Error(
@@ -126,16 +126,16 @@ async function main(): Promise<void> {
       logger.error({ err: e }, "Failed to normalize legacy fatura statuses"),
     );
 
-  // Retire the legacy "aceito" risk status: the lifecycle is now board-driven
-  // (Aceitar creates a card; status follows the Kanban). Reset any lingering
-  // "aceito" rows to "identificado" so they re-enter the triage flow.
-  // Idempotent and non-fatal.
-  await remapLegacyAceitoStatus()
+  // Re-derive every board-linked risk's status from the Kanban (source of
+  // truth). Heals rows that predate the board-driven "aceito" status — e.g. a
+  // risk whose only card sits in `backlog` that was stuck on legacy
+  // "identificado". Idempotent and non-fatal.
+  await backfillRiskStatuses()
     .then((n) => {
-      if (n > 0) logger.info({ risks: n }, "Remapped legacy 'aceito' risk status to 'identificado'");
+      if (n > 0) logger.info({ risks: n }, "Backfilled board-driven risk statuses");
     })
     .catch((e) =>
-      logger.error({ err: e }, "Failed to remap legacy 'aceito' risk status"),
+      logger.error({ err: e }, "Failed to backfill board-driven risk statuses"),
     );
 
   app.listen(port, async (err) => {

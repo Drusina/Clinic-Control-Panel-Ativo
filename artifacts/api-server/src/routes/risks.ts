@@ -205,9 +205,9 @@ router.patch("/risks/:id", async (req, res): Promise<void> => {
 
 // Aceitar um risco = decidir tratá-lo. Cria (se ainda não existir) um card no
 // backlog do Plano de Ação vinculado ao risco e limpa qualquer override
-// "Não aceito". O status passa a ser controlado pelo board (um card recém-criado
-// no backlog mantém "identificado"). Idempotente: aceitar de novo não duplica
-// cards nem altera o status já derivado do board.
+// "Não aceito". O status passa a ser controlado pelo board: um card recém-criado
+// no backlog deriva "aceito". Idempotente: aceitar de novo não duplica cards
+// nem altera o status já derivado do board.
 router.post("/risks/:id/accept", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
