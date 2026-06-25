@@ -1,0 +1,61 @@
+CONTEXTO
+Quero aplicar uma nova identidade visual ao sistema, mantendo TODA a estrutura
+atual. Anexei um protótipo HTML (clinionex-prototipo.html) que é a fonte da
+verdade para cores, tipografia, formato do logo e aparência dos componentes.
+
+ESCOPO DESTA TAREFA — só camada visual (re-skin)
+- NÃO altere lógica de negócio, rotas, endpoints, queries, schema ou
+  comportamento de nenhuma funcionalidade.
+- NÃO reposicione, reordene ou remova elementos. Cada tela continua com os
+  mesmos componentes nos mesmos lugares. (A posição de tudo será discutida
+  numa etapa seguinte — agora é só "trocar a roupa".)
+- Mude apenas: paleta de cores, tipografia, logo/marca, e o ESTILO dos
+  componentes compartilhados (cards, botões, badges, inputs, itens de menu,
+  cabeçalhos). Quero a mesma "cara" do protótipo aplicada por cima do que já existe.
+
+1) TOKENS DE COR  (definir nas variáveis de tema do projeto — index.css/globals.css :root.
+   Lembrando que o shadcn usa HSL; converta se necessário.)
+   - Marca / primary (navy):      #16274D   (hsl 221 56% 19%)
+   - Primary hover (navy escuro):  #0F1C3A
+   - Tint navy (fundos suaves):    #E8EBF3
+   - Acento / marca (dourado):     #C49A3D   (hsl 41 53% 50%)  — usar com parcimônia
+   - Dourado escuro (texto):       #9F7C29
+   - Tint dourado:                 #F7F0DC
+   - Fundo de página:              #F4F5F8
+   - Superfície (cards):           #FFFFFF
+   - Superfície sutil:             #F8F9FC
+   - Bordas:                       #E4E7EF  (hover/ênfase: #D6DAE5)
+   - Texto principal:              #131B2E
+   - Texto secundário:             #58607A
+   - Texto terciário:              #8C92A6
+   - Sucesso: #2E7D5B (tint #E5F1EA) | Atenção: #B5742A (tint #F7EEDD) |
+     Crítico: #A83A3A (tint #F6E6E3)
+   Importante: o dourado é só identidade/destaque (logo, barra da trilha).
+   NÃO use dourado como cor de status — mantenha verde/âmbar/vermelho para isso.
+
+2) TIPOGRAFIA  (via Google Fonts)
+   - Títulos/headings e o wordmark: "Bricolage Grotesque", weights 500/600.
+   - Corpo, dados e UI em geral: "Inter", weights 400/500/600.
+   - Use no máximo os pesos 400/500/600. Números/métricas com tabular-nums.
+
+3) MARCA / LOGO
+   - Wordmark "IONEX360": "IONEX" em navy (#16274D), "360" em dourado (#C49A3D),
+     em Bricolage Grotesque 600.
+   - Mark: hexágono dourado com swirl de 6 lâminas. Use o SVG que está no
+     protótipo (bloco .brand) — copie-o como está.
+
+4) FORMATO DOS COMPONENTES  (seguir o protótipo)
+   - Raios: pequenos 8px, padrão 10px, cards 14px.
+   - Bordas: 1px sólida na cor de borda; superfícies brancas; sombras quase
+     inexistentes (no máximo uma muito sutil).
+   - Itens de menu da sidebar: estado ativo com fundo tint-navy (#E8EBF3) e
+     texto navy; quando o módulo for somente leitura, mostrar um selo
+     discreto "leitura" em dourado/âmbar.
+   - Botão primário: navy com texto branco; secundário: branco com borda.
+   - KPI cards, badges (ok/atenção/crítico/marca), barras de progresso e o
+     stepper da trilha: replicar exatamente o estilo do protótipo (a barra da
+     trilha avança em DOURADO).
+   - Avatar: círculo navy com iniciais brancas.
+
+5) ONDE APLICAR
+   - Tokens globais primeiro, para o tema
