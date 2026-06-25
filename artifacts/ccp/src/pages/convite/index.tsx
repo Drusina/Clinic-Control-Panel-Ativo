@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Bell, BellRing, BellOff, CheckCircle2, Loader2, User, Building2, Briefcase, ArrowRight } from "lucide-react";
+import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { setActiveClinicId, useSwitchSession, type MyClinicsResponse } from "@/hooks/use-auth";
@@ -276,7 +277,7 @@ export default function ConvitePage() {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
             <Building2 className="h-7 w-7 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">IONEX360</h1>
+          <Brand className="justify-center text-2xl" />
           <p className="text-sm text-muted-foreground mt-1">Portal do membro da equipe</p>
         </div>
 

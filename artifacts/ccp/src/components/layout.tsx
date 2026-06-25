@@ -5,7 +5,6 @@ import {
   Bell,
   Settings,
   Menu,
-  Activity,
   ClipboardList,
   Users,
   ShieldAlert,
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { Brand } from "@/components/brand";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { GlobalClinicSwitcher } from "@/components/global-clinic-switcher";
@@ -157,9 +157,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const SidebarContent = () => (
     <div className="flex h-full flex-col gap-4 py-4">
-      <div className="px-6 py-2 flex items-center gap-2">
-        <Activity className="h-6 w-6 text-primary" />
-        <span className="text-xl font-bold tracking-tight text-sidebar-primary">IONEX<span className="text-sidebar-foreground">360</span></span>
+      <div className="px-6 py-2 flex items-center">
+        <Brand className="text-xl" />
       </div>
       <ClinicSwitcher />
       <div className="flex-1 px-4 overflow-y-auto">
@@ -316,8 +315,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
           <div className="flex flex-1 items-center justify-between">
              <div className="flex items-center gap-2">
-                <Activity className="h-5 w-5 text-primary" />
-                <span className="text-lg font-bold">IONEX360</span>
+                <Brand className="text-lg" />
              </div>
              {isTeamMember && activeClinic && (
                <span className="text-xs text-muted-foreground truncate max-w-[140px]">

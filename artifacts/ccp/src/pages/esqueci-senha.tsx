@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Activity, Loader2, Mail, CheckCircle2 } from "lucide-react";
+import { Loader2, Mail, CheckCircle2 } from "lucide-react";
+import { Brand } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,10 +36,7 @@ export default function EsqueciSenhaPage() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-2 mb-8">
-          <Activity className="h-8 w-8 text-primary" />
-          <span className="text-2xl font-bold tracking-tight">
-            IONEX<span className="text-muted-foreground">360</span>
-          </span>
+          <Brand className="text-2xl" />
         </div>
 
         <Card>

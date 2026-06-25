@@ -17,3 +17,4 @@
 - [Risk lifecycle board source of truth](risk-lifecycle-board-source-of-truth.md) — card-linked risks are board-driven; any status write must re-run reconcileRiskStatus (except nao_aceito); accept locks the row; legacy aceito retired→identificado.
 - [Anthropic call timeouts](anthropic-call-timeouts.md) — big single non-streaming opus calls blow the ~45s SDK timeout (×2 retries ≈137s→502); split per-unit, stream+finalText, cap with a shared AbortSignal deadline.
 - [Single in-progress diagnostic](diagnostic-single-inprogress.md) — one em_andamento/clinic enforced by per-clinic advisory lock in create tx, NOT a DB unique index (legacy dup rows block it until cleaned).
+- [Brand gold usage & SVG mark ids](brand-gold-usage.md) — gold only for logo + Trilha bar (never status); text gold = --brand-gold-strong for AA, --brand-gold for SVG fills; reusable marks need useId() gradient ids.

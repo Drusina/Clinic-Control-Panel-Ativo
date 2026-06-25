@@ -1,6 +1,5 @@
 import { Link, useLocation } from "wouter";
 import {
-  Activity,
   Bell,
   Settings,
   LogOut,
@@ -8,6 +7,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { Brand, BrandMark } from "@/components/brand";
 import { ClinicLogo } from "@/components/clinic-logo";
 import { GlobalClinicSwitcher } from "@/components/global-clinic-switcher";
 import { rerouteForClinic } from "@/lib/clinic-routing";
@@ -74,12 +74,11 @@ export function PortalLayout({ children }: { children: React.ReactNode }) {
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/portal"
-            className="flex items-center gap-2 font-bold tracking-tight"
+            aria-label="IONEX360"
+            className="flex items-center"
           >
-            <span className="flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground">
-              <Activity className="h-4 w-4" />
-            </span>
-            <span className="hidden sm:inline">IONEX360</span>
+            <BrandMark className="h-7 w-7 sm:hidden" />
+            <Brand className="hidden text-lg sm:inline-flex" />
           </Link>
 
           <div className="h-6 w-px bg-sidebar-border" />

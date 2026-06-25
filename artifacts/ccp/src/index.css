@@ -45,6 +45,15 @@
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
 
+  --color-brand-navy: hsl(var(--brand-navy));
+  --color-brand-gold: hsl(var(--brand-gold));
+  --color-brand-gold-foreground: hsl(var(--brand-gold-foreground));
+  --color-brand-gold-strong: hsl(var(--brand-gold-strong));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+
   --color-sidebar: hsl(var(--sidebar));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
@@ -57,6 +66,7 @@
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
   --font-sans: var(--app-font-sans);
+  --font-heading: var(--app-font-heading);
   --font-serif: var(--app-font-serif);
   --font-mono: var(--app-font-mono);
 
@@ -67,65 +77,78 @@
 }
 
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(22,39,77, .12);
+  --badge-outline: rgba(22,39,77, .07);
 
   --opaque-button-border-intensity: -8;
 
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(22,39,77, .035);
+  --elevate-2: rgba(22,39,77, .07);
 
-  /* Deep Navy & Cobalt Theme */
-  --background: 210 33% 99%;
-  --foreground: 222 47% 11%;
+  /* IONEX360 — Navy & Gold (light) */
+  --background: 225 22% 96%;        /* #F4F5F8 page */
+  --foreground: 222 42% 13%;        /* #131B2E text principal */
 
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 221 83% 53%;
+  --border: 224 26% 92%;            /* #E4E7EF */
+  --input: 224 26% 92%;
+  --ring: 221 56% 19%;              /* navy focus ring */
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  --card-foreground: 222 42% 13%;
+  --card-border: 224 26% 92%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 222 42% 13%;
+  --popover-border: 224 26% 92%;
 
-  --primary: 221 83% 53%;
-  --primary-foreground: 210 40% 98%;
+  --primary: 221 56% 19%;           /* #16274D navy */
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 224 31% 93%;         /* #E8EBF3 tint navy */
+  --secondary-foreground: 221 56% 19%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 226 33% 97%;             /* subtle surface */
+  --muted-foreground: 226 16% 41%;  /* #58607A text secundário */
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
+  --accent: 224 31% 93%;            /* tint navy (hover surfaces) */
+  --accent-foreground: 221 56% 19%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 49% 44%;         /* #A83A3A crítico */
+  --destructive-foreground: 0 0% 100%;
 
-  /* Sidebar: Deep Navy */
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  --sidebar-primary: 221 83% 53%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 217 33% 17%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 221 83% 53%;
+  /* Brand identity — dourado SÓ no logo + barra da Trilha, nunca status */
+  --brand-navy: 221 56% 19%;        /* #16274D */
+  --brand-gold: 41 53% 50%;         /* #C49A3D */
+  --brand-gold-foreground: 0 0% 100%;
+  --brand-gold-strong: 42 59% 39%;  /* #9F7C29 (dourado sobre claro) */
 
-  --chart-1: 221 83% 53%;
-  --chart-2: 173 58% 39%;
-  --chart-3: 199 89% 48%;
-  --chart-4: 43 74% 66%;
-  --chart-5: 27 87% 67%;
+  /* Status — mantidos verde/âmbar/vermelho, nos tons do brief */
+  --success: 154 46% 34%;           /* #2E7D5B */
+  --success-foreground: 0 0% 100%;
+  --warning: 32 62% 44%;            /* #B5742A */
+  --warning-foreground: 0 0% 100%;
+
+  /* Sidebar: superfície clara */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 42% 13%;
+  --sidebar-border: 224 26% 92%;
+  --sidebar-primary: 221 56% 19%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 224 31% 93%;        /* #E8EBF3 item ativo */
+  --sidebar-accent-foreground: 221 56% 19%;  /* texto navy no item ativo */
+  --sidebar-ring: 221 56% 19%;
+
+  --chart-1: 221 56% 28%;   /* navy */
+  --chart-2: 41 53% 50%;    /* dourado */
+  --chart-3: 199 70% 42%;   /* azul */
+  --chart-4: 154 46% 40%;   /* verde */
+  --chart-5: 32 62% 50%;    /* âmbar */
 
   --app-font-sans: 'Inter', sans-serif;
+  --app-font-heading: 'Bricolage Grotesque', 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
-  --radius: 0.5rem;
+  --radius: 0.625rem;       /* 10px base → sm6 / md8 / lg10 / xl14 */
   
   --shadow-2xs: 0px 2px 0px 0px rgba(0,0,0, 0.02);
   --shadow-xs: 0px 2px 0px 0px rgba(0,0,0, 0.04);
@@ -209,6 +232,10 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--app-font-heading);
   }
 }
 

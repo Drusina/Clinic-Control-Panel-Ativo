@@ -290,7 +290,11 @@ export function TrilhaStepper({
           </div>
         </div>
         {trilha && (
-          <Progress value={trilha.resumo.progresso} className="mt-2 h-2" />
+          <Progress
+            value={trilha.resumo.progresso}
+            className="mt-2 h-2 bg-brand-gold/15"
+            indicatorClassName="bg-brand-gold"
+          />
         )}
         {trilha && !prefs.collapsed && (
           <div
