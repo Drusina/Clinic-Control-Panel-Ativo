@@ -4,10 +4,11 @@ import {
   getListRisksQueryKey, 
   useCreateRisk, 
   useUpdateRisk, 
-  useDeleteRisk 
+  useDeleteRisk,
+  useAcceptRisk
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, MoreHorizontal, AlertTriangle } from "lucide-react";
+import { Plus, Loader2, MoreHorizontal, AlertTriangle, ListChecks } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -41,21 +42,31 @@ import {
 } from "@/components/ui/table";
 import type { Risk } from "@workspace/api-client-react";
 
-const formSchema = z
-  .object({
-    nome: z.string().min(2, "Nome obrigatório"),
-    descricao: z.string().optional(),
-    probabilidade: z.coerce.number().min(1).max(5),
-    impacto: z.coerce.number().min(1).max(5),
-    responsavel: z.string().optional(),
-    acoesMitigadoras: z.string().optional(),
-    status: z.enum(["identificado", "em_mitigacao", "mitigado", "aceito", "nao_aceito"]).optional(),
-    statusJustificativa: z.string().optional(),
-  })
-  .refine((d) => d.status !== "nao_aceito" || !!d.statusJustificativa?.trim(), {
-    message: "Justificativa obrigatória para 'Não aceito'",
-    path: ["statusJustificativa"],
-  });
+const formSchema = z.object({
+  nome: z.string().min(2, "Nome obrigatório"),
+  descricao: z.string().optional(),
+  probabilidade: z.coerce.number().min(1).max(5),
+  impacto: z.coerce.number().min(1).max(5),
+  responsavel: z.string().optional(),
+  acoesMitigadoras: z.string().optional(),
+});
+
+// O status do risco é dirigido pelo Plano de Ação (board) quando há card
+// vinculado; "Não aceito" é um override manual. "aceito" é legado e cai no
+// rótulo de "Identificado".
+function riskStatusMeta(status: string): { label: string; className: string } {
+  switch (status) {
+    case "em_mitigacao":
+      return { label: "Em mitigação", className: "bg-blue-100 text-blue-700 border-blue-200" };
+    case "mitigado":
+      return { label: "Mitigado", className: "bg-green-100 text-green-700 border-green-200" };
+    case "nao_aceito":
+      return { label: "Não aceito", className: "bg-red-100 text-red-700 border-red-200" };
+    case "identificado":
+    default:
+      return { label: "Identificado", className: "bg-gray-100 text-gray-700 border-gray-200" };
+  }
+}
 
 export default function RisksTab({ clinicId }: { clinicId: string }) {
   const { toast } = useToast();
@@ -70,6 +81,9 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
   const createRisk = useCreateRisk();
   const updateRisk = useUpdateRisk();
   const deleteRisk = useDeleteRisk();
+  const acceptRisk = useAcceptRisk();
+
+  const [justifyTarget, setJustifyTarget] = useState<{ id: string; text: string } | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -80,12 +94,8 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
       impacto: 3,
       responsavel: "",
       acoesMitigadoras: "",
-      status: "identificado",
-      statusJustificativa: "",
     },
   });
-
-  const statusValue = form.watch("status");
 
   const openDialog = (risk?: Risk) => {
     if (risk) {
@@ -97,8 +107,6 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
         impacto: risk.impacto,
         responsavel: risk.responsavel || "",
         acoesMitigadoras: risk.acoesMitigadoras || "",
-        status: (risk.status as any) || "identificado",
-        statusJustificativa: risk.statusJustificativa || "",
       });
     } else {
       setEditingRisk(null);
@@ -109,22 +117,15 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
         impacto: 3,
         responsavel: "",
         acoesMitigadoras: "",
-        status: "identificado",
-        statusJustificativa: "",
       });
     }
     setIsDialogOpen(true);
   };
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    const payload = {
-      ...values,
-      statusJustificativa:
-        values.status === "nao_aceito" ? values.statusJustificativa?.trim() || null : null,
-    };
     if (editingRisk) {
       updateRisk.mutate(
-        { id: editingRisk.id, data: payload },
+        { id: editingRisk.id, data: values },
         {
           onSuccess: () => {
             toast({ title: "Risco atualizado" });
@@ -136,7 +137,7 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
       );
     } else {
       createRisk.mutate(
-        { clinicId, data: payload as any },
+        { clinicId, data: values as any },
         {
           onSuccess: () => {
             toast({ title: "Risco registrado" });
@@ -147,6 +148,35 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
         }
       );
     }
+  };
+
+  const handleAccept = (id: string) => {
+    acceptRisk.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          toast({ title: "Risco aceito", description: "Card criado no backlog do Plano de Ação." });
+          queryClient.invalidateQueries({ queryKey: getListRisksQueryKey(clinicId) });
+        },
+        onError: () => toast({ variant: "destructive", title: "Erro ao aceitar o risco" }),
+      }
+    );
+  };
+
+  const handleDiscard = () => {
+    const text = justifyTarget?.text.trim();
+    if (!justifyTarget || !text) return;
+    updateRisk.mutate(
+      { id: justifyTarget.id, data: { status: "nao_aceito", statusJustificativa: text } },
+      {
+        onSuccess: () => {
+          toast({ title: "Risco descartado" });
+          queryClient.invalidateQueries({ queryKey: getListRisksQueryKey(clinicId) });
+          setJustifyTarget(null);
+        },
+        onError: () => toast({ variant: "destructive", title: "Erro ao descartar o risco" }),
+      }
+    );
   };
 
   const handleDelete = (id: string) => {
@@ -216,9 +246,16 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
                   </TableCell>
                   <TableCell>{risk.responsavel || "-"}</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="capitalize">
-                      {risk.status.replace("_", " ")}
-                    </Badge>
+                    <div className="flex flex-col gap-0.5">
+                      <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${riskStatusMeta(risk.status).className}`}>
+                        {riskStatusMeta(risk.status).label}
+                      </span>
+                      {risk.temCard && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <ListChecks className="h-3 w-3" /> via Plano de Ação
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -228,6 +265,18 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {risk.status === "nao_aceito" ? (
+                          <DropdownMenuItem onClick={() => handleAccept(risk.id)}>Reconsiderar</DropdownMenuItem>
+                        ) : (
+                          <>
+                            {!risk.temCard && (
+                              <DropdownMenuItem onClick={() => handleAccept(risk.id)}>Aceitar</DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => setJustifyTarget({ id: risk.id, text: risk.statusJustificativa ?? "" })}>
+                              Descartar
+                            </DropdownMenuItem>
+                          </>
+                        )}
                         <DropdownMenuItem onClick={() => openDialog(risk)}>Editar</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDelete(risk.id)} className="text-destructive">
                           Excluir
@@ -322,61 +371,17 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
                   </FormItem>
                 )}
               />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="responsavel"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Responsável</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {editingRisk && (
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="identificado">Identificado</SelectItem>
-                            <SelectItem value="em_mitigacao">Em Mitigação</SelectItem>
-                            <SelectItem value="mitigado">Mitigado</SelectItem>
-                            <SelectItem value="aceito">Aceito</SelectItem>
-                            <SelectItem value="nao_aceito">Não aceito</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+              <FormField
+                control={form.control}
+                name="responsavel"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Responsável</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
-              {editingRisk && statusValue === "nao_aceito" && (
-                <FormField
-                  control={form.control}
-                  name="statusJustificativa"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Justificativa (Não aceito) *</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          className="resize-none"
-                          rows={3}
-                          placeholder="Explique por que este risco não foi aceito..."
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+              />
               <DialogFooter className="pt-4">
                 <Button type="submit" disabled={createRisk.isPending || updateRisk.isPending}>
                   Salvar
@@ -384,6 +389,39 @@ export default function RisksTab({ clinicId }: { clinicId: string }) {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!justifyTarget} onOpenChange={(o) => { if (!o) setJustifyTarget(null); }}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>Descartar risco (Não aceito)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <label className="text-sm font-medium block">
+              Justificativa <span className="text-red-600">*</span>
+            </label>
+            <Textarea
+              placeholder="Explique por que este risco não foi aceito..."
+              rows={4}
+              value={justifyTarget?.text ?? ""}
+              onChange={(e) => setJustifyTarget((d) => (d ? { ...d, text: e.target.value } : d))}
+              className="resize-none"
+            />
+            <p className="text-xs text-muted-foreground">
+              A justificativa é obrigatória ao descartar um risco.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setJustifyTarget(null)}>Cancelar</Button>
+            <Button
+              onClick={handleDiscard}
+              disabled={!justifyTarget?.text.trim() || updateRisk.isPending}
+            >
+              {updateRisk.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar descarte
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

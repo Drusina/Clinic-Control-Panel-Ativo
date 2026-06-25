@@ -75,6 +75,7 @@ type Risk = {
   nivel: string | null;
   diagnosticoId: string | null;
   perguntasFonte: PerguntaFonte[] | null;
+  temCard: boolean;
   createdAt: string;
 };
 
@@ -123,6 +124,16 @@ async function updateRisco(id: string, data: object): Promise<Risk> {
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Failed to update");
+  return res.json();
+}
+
+async function acceptRisco(id: string): Promise<Risk> {
+  const token = getStoredToken();
+  const res = await fetch(`${BASE}/api/risks/${id}/accept`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to accept");
   return res.json();
 }
 
@@ -176,6 +187,23 @@ function getSeverityLabel(sev: number): { label: string; variant: "default" | "s
   if (sev <= 6) return { label: "Baixo", variant: "outline" };
   if (sev <= 14) return { label: "Médio", variant: "secondary" };
   return { label: "Alto", variant: "destructive" };
+}
+
+// O status do risco é dirigido pelo Plano de Ação (board) quando há card
+// vinculado; "Não aceito" é um override manual. "aceito" é legado e cai no
+// rótulo de "Identificado".
+function riskStatusMeta(status: string): { label: string; className: string } {
+  switch (status) {
+    case "em_mitigacao":
+      return { label: "Em mitigação", className: "bg-blue-100 text-blue-700 border-blue-200" };
+    case "mitigado":
+      return { label: "Mitigado", className: "bg-green-100 text-green-700 border-green-200" };
+    case "nao_aceito":
+      return { label: "Não aceito", className: "bg-red-100 text-red-700 border-red-200" };
+    case "identificado":
+    default:
+      return { label: "Identificado", className: "bg-gray-100 text-gray-700 border-gray-200" };
+  }
 }
 
 const DATE_TIME_FMT = new Intl.DateTimeFormat("pt-BR", {
@@ -286,6 +314,15 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
     mutationFn: ({ id, data }: { id: string; data: object }) => updateRisco(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["riscos", clinicId] }),
     onError: () => toast({ variant: "destructive", title: "Erro ao atualizar" }),
+  });
+
+  const acceptMut = useMutation({
+    mutationFn: (id: string) => acceptRisco(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["riscos", clinicId] });
+      toast({ title: "Risco aceito", description: "Card criado no backlog do Plano de Ação." });
+    },
+    onError: () => toast({ variant: "destructive", title: "Erro ao aceitar o risco" }),
   });
 
   if (!clinicId) {
@@ -467,65 +504,98 @@ export default function RiscosPage({ embedded = false }: { embedded?: boolean })
                       isHighlighted ? "border-primary bg-primary/5" : "border-border bg-card"
                     )}
                   >
-                    <button
-                      onClick={() => setHighlightedRisk(isHighlighted ? null : risk.id)}
-                      className="w-full text-left p-3 hover:bg-muted/50 rounded-lg"
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className={cn(
-                          "h-6 w-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white mt-0.5",
-                          risk.severidade <= 6 ? "bg-green-600" : risk.severidade <= 14 ? "bg-yellow-500" : "bg-red-600"
-                        )}>
-                          {i + 1}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm leading-tight">{risk.nome}</div>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <Badge variant={sev.variant} className="text-[10px] px-1.5 py-0">{sev.label}</Badge>
-                            <span className="text-[10px] text-muted-foreground">Sev: {risk.severidade}</span>
-                            {fromDiag && (
-                              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-indigo-100 text-indigo-700">
-                                <Sparkles className="h-2.5 w-2.5" /> Diagnóstico
-                              </span>
+                    <div className="flex items-start">
+                      <button
+                        onClick={() => setHighlightedRisk(isHighlighted ? null : risk.id)}
+                        className="flex-1 min-w-0 text-left p-3 hover:bg-muted/50 rounded-l-lg"
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className={cn(
+                            "h-6 w-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white mt-0.5",
+                            risk.severidade <= 6 ? "bg-green-600" : risk.severidade <= 14 ? "bg-yellow-500" : "bg-red-600"
+                          )}>
+                            {i + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm leading-tight">{risk.nome}</div>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <Badge variant={sev.variant} className="text-[10px] px-1.5 py-0">{sev.label}</Badge>
+                              <span className="text-[10px] text-muted-foreground">Sev: {risk.severidade}</span>
+                              {fromDiag && (
+                                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium bg-indigo-100 text-indigo-700">
+                                  <Sparkles className="h-2.5 w-2.5" /> Diagnóstico
+                                </span>
+                              )}
+                              {risk.pilarSlug && (
+                                <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", PILAR_COLORS[risk.pilarSlug] ?? "bg-gray-100 text-gray-700")}>
+                                  {PILARES.find(p => p.slug === risk.pilarSlug)?.nome.split(" ")[0] ?? risk.pilarSlug}
+                                </span>
+                              )}
+                            </div>
+                            {risk.temCard && (
+                              <div className="flex items-center gap-1 text-[10px] text-indigo-600 mt-1">
+                                <ListChecks className="h-3 w-3" /> Card no Plano de Ação
+                              </div>
                             )}
-                            {risk.pilarSlug && (
-                              <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", PILAR_COLORS[risk.pilarSlug] ?? "bg-gray-100 text-gray-700")}>
-                                {PILARES.find(p => p.slug === risk.pilarSlug)?.nome.split(" ")[0] ?? risk.pilarSlug}
-                              </span>
+                            {risk.responsavel && (
+                              <div className="text-xs text-muted-foreground mt-1 truncate">{risk.responsavel}</div>
                             )}
                           </div>
-                          {fromDiag && risk.nivel === "alto" && (
-                            <div className="flex items-center gap-1 text-[10px] text-red-600 mt-1">
-                              <ListChecks className="h-3 w-3" /> Card criado no Plano de Ação
-                            </div>
-                          )}
-                          {risk.responsavel && (
-                            <div className="text-xs text-muted-foreground mt-1 truncate">{risk.responsavel}</div>
-                          )}
                         </div>
-                        <Select
-                          value={risk.status}
-                          onValueChange={(val) => {
-                            if (val === "nao_aceito") {
-                              setJustifyDialog({ riskId: risk.id, text: risk.statusJustificativa ?? "" });
-                            } else {
-                              updateMut.mutate({ id: risk.id, data: { status: val, statusJustificativa: null } });
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="h-7 w-[116px] text-[11px]" onClick={e => e.stopPropagation()}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="identificado">Identificado</SelectItem>
-                            <SelectItem value="em_mitigacao">Em Mitigação</SelectItem>
-                            <SelectItem value="mitigado">Mitigado</SelectItem>
-                            <SelectItem value="aceito">Aceito</SelectItem>
-                            <SelectItem value="nao_aceito">Não aceito</SelectItem>
-                          </SelectContent>
-                        </Select>
+                      </button>
+                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0 p-3 pl-2">
+                        <span className={cn(
+                          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+                          riskStatusMeta(risk.status).className
+                        )}>
+                          {riskStatusMeta(risk.status).label}
+                        </span>
+                        {risk.status === "nao_aceito" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-[11px]"
+                            disabled={acceptMut.isPending || updateMut.isPending}
+                            onClick={() => acceptMut.mutate(risk.id)}
+                          >
+                            Reconsiderar
+                          </Button>
+                        ) : risk.temCard ? (
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="text-[9px] text-muted-foreground leading-tight">via Plano de Ação</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-red-600"
+                              disabled={acceptMut.isPending || updateMut.isPending}
+                              onClick={() => setJustifyDialog({ riskId: risk.id, text: risk.statusJustificativa ?? "" })}
+                            >
+                              Descartar
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              className="h-6 px-2 text-[11px]"
+                              disabled={acceptMut.isPending || updateMut.isPending}
+                              onClick={() => acceptMut.mutate(risk.id)}
+                            >
+                              Aceitar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-[11px]"
+                              disabled={acceptMut.isPending || updateMut.isPending}
+                              onClick={() => setJustifyDialog({ riskId: risk.id, text: risk.statusJustificativa ?? "" })}
+                            >
+                              Descartar
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    </button>
+                    </div>
                     {hasDetail && (
                       <div className="px-3 pb-2">
                         <button

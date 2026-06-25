@@ -6381,6 +6381,91 @@ export const useDeleteRisk = <
 };
 
 /**
+ * Idempotently creates a backlog card linked to the risk (when none exists yet) and clears any "nao_aceito" override. The risk status is then derived from the Kanban board.
+ * @summary Accept a risk (create a linked Plano de Ação backlog card)
+ */
+export const getAcceptRiskUrl = (id: string) => {
+  return `/api/risks/${id}/accept`;
+};
+
+export const acceptRisk = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Risk> => {
+  return customFetch<Risk>(getAcceptRiskUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getAcceptRiskMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof acceptRisk>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof acceptRisk>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["acceptRisk"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof acceptRisk>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return acceptRisk(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AcceptRiskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof acceptRisk>>
+>;
+
+export type AcceptRiskMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Accept a risk (create a linked Plano de Ação backlog card)
+ */
+export const useAcceptRisk = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof acceptRisk>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof acceptRisk>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getAcceptRiskMutationOptions(options));
+};
+
+/**
  * @summary List agenda appointments for a clinic
  */
 export const getListCompromissosUrl = (

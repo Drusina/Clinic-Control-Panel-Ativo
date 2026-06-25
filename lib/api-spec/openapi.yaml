@@ -1600,6 +1600,26 @@ paths:
         "204":
           description: Deleted
 
+  /risks/{id}/accept:
+    post:
+      operationId: acceptRisk
+      tags: [risks]
+      summary: Accept a risk (create a linked Plano de Ação backlog card)
+      description: Idempotently creates a backlog card linked to the risk (when none exists yet) and clears any "nao_aceito" override. The risk status is then derived from the Kanban board.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Accepted risk
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Risk"
+
   /clinics/{clinicId}/compromissos:
     get:
       operationId: listCompromissos
@@ -4333,6 +4353,9 @@ components:
           type: ["array", "null"]
           items:
             $ref: "#/components/schemas/PerguntaFonte"
+        temCard:
+          type: boolean
+          description: True when at least one Plano de Ação card is linked to this risk. A risk with a card has its status driven by the Kanban board; a risk without one is still manual (Aceitar/Descartar).
         createdAt:
           type: string
       required:
@@ -4344,6 +4367,7 @@ components:
         - severidade
         - status
         - origem
+        - temCard
         - createdAt
 
     PerguntaFonte:
@@ -4588,7 +4612,7 @@ components:
           type: ["string", "null"]
         status:
           type: ["string", "null"]
-          enum: [identificado, em_mitigacao, mitigado, aceito, nao_aceito, null]
+          enum: [identificado, em_mitigacao, mitigado, nao_aceito, null]
         statusJustificativa:
           type: ["string", "null"]
         pilarSlug:

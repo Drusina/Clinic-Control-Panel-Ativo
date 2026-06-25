@@ -29,11 +29,12 @@ import {
   type PlanoFase,
 } from "../lib/tarefas.js";
 import { loadPilarScores } from "../lib/origem-diagnostico.js";
+import { reconcileRiskStatus, severidadeToPrioridade } from "../lib/risk-lifecycle.js";
 import type { PerguntaFonte } from "@workspace/db";
 
 const router: IRouter = Router();
 
-function mapRisk(r: typeof risksTable.$inferSelect) {
+function mapRisk(r: typeof risksTable.$inferSelect, temCard = false) {
   return {
     id: r.id,
     clinicId: r.clinicId,
@@ -51,6 +52,10 @@ function mapRisk(r: typeof risksTable.$inferSelect) {
     nivel: r.nivel,
     diagnosticoId: r.diagnosticoId,
     perguntasFonte: r.perguntasFonte ?? null,
+    // True when at least one Plano de Ação card is linked to this risk. Drives
+    // the Aceitar/Descartar flow on the Mapa de Riscos: a risk with a card has
+    // its status controlled by the board; a risk without one is still manual.
+    temCard,
     createdAt: r.createdAt.toISOString(),
   };
 }
@@ -64,7 +69,17 @@ router.get("/clinics/:clinicId/risks", async (req, res): Promise<void> => {
     .where(eq(risksTable.clinicId, clinicId))
     .orderBy(risksTable.createdAt);
 
-  res.json(risks.map(mapRisk));
+  // Resolve which risks have at least one linked Plano de Ação card in a single
+  // query (distinct risco_origem_id for this clinic), then flag each risk.
+  const linkedRows = await db
+    .selectDistinct({ riscoOrigemId: actionsTable.riscoOrigemId })
+    .from(actionsTable)
+    .where(eq(actionsTable.clinicId, clinicId));
+  const riskIdsWithCard = new Set(
+    linkedRows.map((row) => row.riscoOrigemId).filter((v): v is string => v != null),
+  );
+
+  res.json(risks.map((r) => mapRisk(r, riskIdsWithCard.has(r.id))));
 });
 
 router.post("/clinics/:clinicId/risks", async (req, res): Promise<void> => {
@@ -162,12 +177,85 @@ router.patch("/risks/:id", async (req, res): Promise<void> => {
       await tx
         .delete(actionsTable)
         .where(and(eq(actionsTable.riscoOrigemId, id), eq(actionsTable.coluna, "backlog")));
+      return updated;
     }
 
-    return updated;
+    // O board é a fonte da verdade para riscos com card vinculado: após qualquer
+    // alteração manual de status, re-deriva o status a partir do Kanban para que
+    // um chamador direto da API não consiga colocar um risco vinculado num status
+    // que contradiz seus cards. No-op (mantém o status manual) quando o risco não
+    // tem nenhum card.
+    await reconcileRiskStatus(tx, id);
+    const [reconciled] = await tx.select().from(risksTable).where(eq(risksTable.id, id));
+    return reconciled;
   });
 
   res.json(UpdateRiskResponse.parse(mapRisk(risk)));
+});
+
+// Aceitar um risco = decidir tratá-lo. Cria (se ainda não existir) um card no
+// backlog do Plano de Ação vinculado ao risco e limpa qualquer override
+// "Não aceito". O status passa a ser controlado pelo board (um card recém-criado
+// no backlog mantém "identificado"). Idempotente: aceitar de novo não duplica
+// cards nem altera o status já derivado do board.
+router.post("/risks/:id/accept", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  const [existing] = await db.select().from(risksTable).where(eq(risksTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Risk not found" });
+    return;
+  }
+  if (await assertClinicAccess(req, res, existing.clinicId)) return;
+
+  const risk = await db.transaction(async (tx) => {
+    // Trava a linha do risco durante o aceite: dois aceites concorrentes não
+    // podem ambos observar "sem card" e acabar inserindo cards duplicados.
+    await tx
+      .select({ id: risksTable.id })
+      .from(risksTable)
+      .where(eq(risksTable.id, id))
+      .for("update");
+
+    const linked = await tx
+      .select({ id: actionsTable.id })
+      .from(actionsTable)
+      .where(eq(actionsTable.riscoOrigemId, id));
+
+    if (linked.length === 0) {
+      const [maxOrdemRow] = await tx
+        .select({ ordem: actionsTable.ordem })
+        .from(actionsTable)
+        .where(and(eq(actionsTable.clinicId, existing.clinicId), eq(actionsTable.coluna, "backlog")))
+        .orderBy(desc(actionsTable.ordem))
+        .limit(1);
+      const nextOrdem = (maxOrdemRow?.ordem ?? 0) + 1;
+
+      await tx.insert(actionsTable).values({
+        clinicId: existing.clinicId,
+        titulo: existing.nome,
+        descricao: existing.acoesMitigadoras ?? existing.descricao ?? null,
+        pilarSlug: existing.pilarSlug,
+        prioridade: severidadeToPrioridade(existing.severidade),
+        coluna: "backlog",
+        ordem: nextOrdem,
+        riscoOrigemId: id,
+        camada: null,
+      });
+    }
+
+    await tx
+      .update(risksTable)
+      .set({ status: "identificado", statusJustificativa: null })
+      .where(eq(risksTable.id, id));
+
+    await reconcileRiskStatus(tx, id);
+
+    const [updated] = await tx.select().from(risksTable).where(eq(risksTable.id, id));
+    return updated;
+  });
+
+  res.json(mapRisk(risk, true));
 });
 
 
@@ -208,7 +296,7 @@ router.post("/clinics/:clinicId/risks/seed", async (req, res): Promise<void> => 
     )
     .returning();
 
-  res.status(201).json({ created: created.length, risks: created.map(mapRisk) });
+  res.status(201).json({ created: created.length, risks: created.map((r) => mapRisk(r)) });
 });
 
 async function loadConcludedDiagnostic(
@@ -502,7 +590,7 @@ router.post(
       created: result.insertedRisks.length,
       cardsCreated: result.cardsCreated,
       message: `${result.insertedRisks.length} risco(s) salvo(s) do diagnóstico.`,
-      risks: result.insertedRisks.map(mapRisk),
+      risks: result.insertedRisks.map((r) => mapRisk(r)),
     });
   },
 );

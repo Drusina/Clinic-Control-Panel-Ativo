@@ -2348,6 +2348,11 @@ export const ListRisksResponseItem = zod.object({
       }),
     )
     .nullish(),
+  temCard: zod
+    .boolean()
+    .describe(
+      "True when at least one Plano de Ação card is linked to this risk. A risk with a card has its status driven by the Kanban board; a risk without one is still manual (Aceitar\/Descartar).",
+    ),
   createdAt: zod.string(),
 });
 export const ListRisksResponse = zod.array(ListRisksResponseItem);
@@ -2388,7 +2393,6 @@ export const UpdateRiskBody = zod.object({
       zod.literal("identificado"),
       zod.literal("em_mitigacao"),
       zod.literal("mitigado"),
-      zod.literal("aceito"),
       zod.literal("nao_aceito"),
       zod.literal(null),
     ])
@@ -2442,6 +2446,11 @@ export const UpdateRiskResponse = zod.object({
       }),
     )
     .nullish(),
+  temCard: zod
+    .boolean()
+    .describe(
+      "True when at least one Plano de Ação card is linked to this risk. A risk with a card has its status driven by the Kanban board; a risk without one is still manual (Aceitar\/Descartar).",
+    ),
   createdAt: zod.string(),
 });
 
@@ -2450,6 +2459,67 @@ export const UpdateRiskResponse = zod.object({
  */
 export const DeleteRiskParams = zod.object({
   id: zod.coerce.string(),
+});
+
+/**
+ * Idempotently creates a backlog card linked to the risk (when none exists yet) and clears any "nao_aceito" override. The risk status is then derived from the Kanban board.
+ * @summary Accept a risk (create a linked Plano de Ação backlog card)
+ */
+export const AcceptRiskParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const AcceptRiskResponse = zod.object({
+  id: zod.string(),
+  clinicId: zod.string(),
+  nome: zod.string(),
+  descricao: zod.string().nullish(),
+  probabilidade: zod.number(),
+  impacto: zod.number(),
+  severidade: zod.number(),
+  responsavel: zod.string().nullish(),
+  acoesMitigadoras: zod.string().nullish(),
+  status: zod.enum([
+    "identificado",
+    "em_mitigacao",
+    "mitigado",
+    "aceito",
+    "nao_aceito",
+  ]),
+  statusJustificativa: zod.string().nullish(),
+  pilarSlug: zod.string().nullish(),
+  origem: zod.enum(["manual", "diagnostico"]),
+  nivel: zod
+    .union([
+      zod.literal("baixo"),
+      zod.literal("medio"),
+      zod.literal("alto"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  diagnosticoId: zod.string().nullish(),
+  perguntasFonte: zod
+    .array(
+      zod.object({
+        pergunta: zod.string(),
+        resposta: zod.string(),
+        pilarSlug: zod.string().nullish(),
+        respostaId: zod
+          .string()
+          .nullish()
+          .describe(
+            "Live reference to the diagnostic answer; may be null after a new diagnostic replaces it. The pergunta\/resposta pair is the durable snapshot.",
+          ),
+        perguntaId: zod.string().nullish(),
+      }),
+    )
+    .nullish(),
+  temCard: zod
+    .boolean()
+    .describe(
+      "True when at least one Plano de Ação card is linked to this risk. A risk with a card has its status driven by the Kanban board; a risk without one is still manual (Aceitar\/Descartar).",
+    ),
+  createdAt: zod.string(),
 });
 
 /**
@@ -2822,6 +2892,11 @@ export const CommitRisksFromDiagnosticResponse = zod.object({
           }),
         )
         .nullish(),
+      temCard: zod
+        .boolean()
+        .describe(
+          "True when at least one Plano de Ação card is linked to this risk. A risk with a card has its status driven by the Kanban board; a risk without one is still manual (Aceitar\/Descartar).",
+        ),
       createdAt: zod.string(),
     }),
   ),

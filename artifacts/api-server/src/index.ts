@@ -8,6 +8,7 @@ import { seedPerguntasIfEmpty } from "./lib/perguntas-seed.js";
 import { backfillTrilha } from "./lib/trilha.js";
 import { backfillAcaoChecklistToTarefas } from "./lib/tarefa-backfill.js";
 import { normalizeLegacyFaturaStatuses } from "./lib/faturas-status.js";
+import { remapLegacyAceitoStatus } from "./lib/risk-lifecycle.js";
 
 if (!process.env.SUPER_ADMIN_SECRET || process.env.SUPER_ADMIN_SECRET.length === 0) {
   throw new Error(
@@ -123,6 +124,18 @@ async function main(): Promise<void> {
     })
     .catch((e) =>
       logger.error({ err: e }, "Failed to normalize legacy fatura statuses"),
+    );
+
+  // Retire the legacy "aceito" risk status: the lifecycle is now board-driven
+  // (Aceitar creates a card; status follows the Kanban). Reset any lingering
+  // "aceito" rows to "identificado" so they re-enter the triage flow.
+  // Idempotent and non-fatal.
+  await remapLegacyAceitoStatus()
+    .then((n) => {
+      if (n > 0) logger.info({ risks: n }, "Remapped legacy 'aceito' risk status to 'identificado'");
+    })
+    .catch((e) =>
+      logger.error({ err: e }, "Failed to remap legacy 'aceito' risk status"),
     );
 
   app.listen(port, async (err) => {

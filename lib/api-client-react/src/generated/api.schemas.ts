@@ -1313,6 +1313,8 @@ export interface Risk {
   diagnosticoId?: string | null;
   /** @nullable */
   perguntasFonte?: PerguntaFonte[] | null;
+  /** True when at least one Plano de Ação card is linked to this risk. A risk with a card has its status driven by the Kanban board; a risk without one is still manual (Aceitar/Descartar). */
+  temCard: boolean;
   createdAt: string;
 }
 
@@ -1455,7 +1457,6 @@ export const UpdateRiskBodyStatus = {
   identificado: "identificado",
   em_mitigacao: "em_mitigacao",
   mitigado: "mitigado",
-  aceito: "aceito",
   nao_aceito: "nao_aceito",
 } as const;
 

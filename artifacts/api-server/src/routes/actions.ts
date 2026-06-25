@@ -49,6 +49,7 @@ import {
   buildOrigemDiagnostico,
   type OrigemDiagnostico,
 } from "../lib/origem-diagnostico.js";
+import { reconcileRiskStatus } from "../lib/risk-lifecycle.js";
 
 const router: IRouter = Router();
 
@@ -490,11 +491,23 @@ router.patch("/actions/:id", async (req, res): Promise<void> => {
   if (d.ordem != null) updates.ordem = d.ordem;
   updates.updatedAt = new Date();
 
-  const [action] = await db
-    .update(actionsTable)
-    .set(updates)
-    .where(eq(actionsTable.id, id))
-    .returning();
+  const [action] = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(actionsTable)
+      .set(updates)
+      .where(eq(actionsTable.id, id))
+      .returning();
+
+    // The Kanban board is the source of truth for the linked risk's lifecycle:
+    // moving this card to/from a column reconciles the risk's status (e.g. a
+    // card reaching "done" mitigates the risk). A "nao_aceito" override and
+    // risks without linked cards are left untouched inside the reconciler.
+    if (updated && d.coluna != null && updated.riscoOrigemId) {
+      await reconcileRiskStatus(tx, updated.riscoOrigemId);
+    }
+
+    return [updated];
+  });
 
   if (!action) {
     res.status(404).json({ error: "Action not found" });
