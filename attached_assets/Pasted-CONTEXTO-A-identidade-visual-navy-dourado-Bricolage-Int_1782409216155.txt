@@ -1,0 +1,60 @@
+CONTEXTO
+A identidade visual (navy + dourado, Bricolage/Inter, componente de marca) já está
+aplicada no projeto. Agora quero REMODELAR O LAYOUT da home do gestor (o dashboard
+do portal). Anexei ionex360-home-gestor.html como referência visual — ele é
+responsivo (desktop em 2 colunas, mobile empilhado). É a fonte da verdade do arranjo.
+
+ATENÇÃO: diferente da tarefa anterior, ESTA tarefa MUDA posições e estrutura da
+home do gestor. Pode reorganizar os blocos desta página conforme abaixo.
+
+REUSO (não recriar)
+- Use os tokens de cor já existentes no index.css e os componentes de UI atuais
+  (card, badge, button, avatar, progress) e o componente de marca (brand.tsx) e o
+  trilha-stepper. NÃO redefina cores, fontes ou o logo.
+- Trabalhe na home do portal do gestor (portal-dashboard.tsx / portal-layout.tsx).
+- NÃO altere schema, endpoints ou lógica de negócio. Apenas consuma os dados que
+  já existem (clínica, trilha, plano de ação, tarefas, módulos).
+
+LAYOUT DA HOME (de cima para baixo)
+1) Cabeçalho da clínica (card): ícone, nome, CNPJ, cidade/UF, badges de fase
+   (ex.: "Prospect") e de plano (ex.: "Plano Starter"), e um progresso compacto
+   de implantação (etapa · %).
+2) Trilha de implementação (card): barra em DOURADO, "Etapa X de 15 · %", com
+   chevron para expandir. Reusar o trilha-stepper existente.
+3) Linha com DOIS cards lado a lado no desktop, empilhados no mobile:
+   a) PLANO DE AÇÃO (visão estratégica / panorama — NÃO é lista de tarefas):
+      - 4 contadores por etapa do board (A fazer / Em andamento / Em revisão / Concluído).
+      - "Ações abertas por pilar": 3 a 4 pilares com barra + contagem.
+      - Link "Ver board" que abre o módulo Plano de Ação completo (em Operação).
+   b) TAREFAS (visão de execução — lista de to-dos):
+      - Toggle "Equipe" / "Minhas".
+        * Gestor: abre em "Equipe" e vê as tarefas de todos, cada uma com o
+          avatar do responsável.
+        * Usuário não-gestor: abre em "Minhas", travado nas próprias tarefas.
+        (Derivar do papel da sessão, não hardcodar.)
+      - 3 contadores por status no topo.
+      - Cada tarefa: selo de status + título + (abaixo) a AÇÃO-PAI a que ela
+        pertence (ex.: "Ação: LGPD & Jurídico") ou "Avulsa" se não pertencer a
+        nenhuma + responsável + prazo.
+      - IMPORTANTE sobre o vínculo tarefa→ação: se o modelo de dados atual já
+        relaciona tarefa a uma ação do plano, mostre esse vínculo. Se NÃO existir
+        esse campo hoje, NÃO invente: exiba a tarefa sem o rótulo de ação e me
+        avise que esse relacionamento ainda não existe no schema.
+4) Hub de módulos, agrupado em 3 seções com rótulo:
+   - Onboarding: Agenda, Equipe interna, Equipe externa, Sistemas e acessos
+   - Operação: Diagnóstico, Mapa de riscos, Plano de ação, Processos
+   - Documentação: Documentos, Evidências
+   Cada item é um tile (ícone + nome) com um indicador opcional discreto quando
+   fizer sentido (ex.: Diagnóstico "33%", Mapa de riscos "2 críticos",
+   Plano de ação "N abertas", Documentos "N arquivos").
+
+RESPONSIVIDADE
+- Desktop: passos 1 e 2 em largura total; passo 3 em 2 colunas; hub em 3-4 colunas.
+- Mobile: tudo em coluna única; hub em 2 colunas; ações secundárias do topo
+  (ex.: "Sair") podem recolher.
+
+CRITÉRIO DE PRONTO
+- A home do gestor segue o arranjo acima, responsiva, usando os componentes e
+  cores já existentes. Plano de Ação e Tarefas ficam visivelmente separados
+  (panorama x execução). Nada de lógica/negócio muda. Onde faltar dado real
+  (ex.: vínculo tarefa→ação), me avise em vez de inventar.
