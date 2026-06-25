@@ -190,7 +190,17 @@ router.patch("/risks/:id", async (req, res): Promise<void> => {
     return reconciled;
   });
 
-  res.json(UpdateRiskResponse.parse(mapRisk(risk)));
+  // temCard precisa refletir o estado real do board na resposta da mutação (e
+  // não o default false), senão o cliente vê um valor que contradiz o banco até
+  // o próximo refetch. Resolvido após a tx (o caminho "nao_aceito" pode ter
+  // removido o card de backlog).
+  const [linkedCard] = await db
+    .select({ id: actionsTable.id })
+    .from(actionsTable)
+    .where(eq(actionsTable.riscoOrigemId, id))
+    .limit(1);
+
+  res.json(UpdateRiskResponse.parse(mapRisk(risk, linkedCard != null)));
 });
 
 // Aceitar um risco = decidir tratá-lo. Cria (se ainda não existir) um card no
