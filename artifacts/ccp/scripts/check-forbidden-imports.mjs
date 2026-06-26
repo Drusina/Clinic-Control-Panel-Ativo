@@ -32,6 +32,9 @@ const RULES = [
       // The clinics admin index is the single legitimate caller; it is
       // already wrapped in `SuperAdminGuard`.
       "src/pages/clinics/index.tsx",
+      // The platform Painel (dashboard) is super-admin only — it is mounted
+      // under `SuperAdminGuard` and renders the clinic-health overview grid.
+      "src/pages/dashboard.tsx",
     ],
     message:
       "useListClinics targets the super-admin-only `GET /api/clinics` endpoint. " +

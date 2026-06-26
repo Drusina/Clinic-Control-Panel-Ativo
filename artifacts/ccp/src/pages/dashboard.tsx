@@ -1,115 +1,263 @@
-import {
-  useGetDashboardSummary,
-  useGetDashboardPipeline,
-  useGetDashboardRecentActivity,
-  useGetDashboardDiagnostics,
-  getGetDashboardSummaryQueryKey,
-  getGetDashboardPipelineQueryKey,
-  getGetDashboardRecentActivityQueryKey,
-  getGetDashboardDiagnosticsQueryKey,
-} from "@workspace/api-client-react";
+import { useMemo, useState } from "react";
+import { useListClinics } from "@workspace/api-client-react";
+import type { Clinic, ClinicStatus, ClinicPlano } from "@workspace/api-client-react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Activity, Building2, Bell, AlertTriangle, TrendingUp, ClipboardList } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import {
+  Activity,
+  Building2,
+  AlertTriangle,
+  Rocket,
+  CheckCircle2,
+  Search,
+  ArrowRight,
+} from "lucide-react";
+import { useLocation } from "wouter";
+import { setActiveClinicId } from "@/hooks/use-auth";
+import { cn } from "@/lib/utils";
 
-const PILAR_INFO: Record<string, { short: string; color: string }> = {
-  estrategia: { short: "Estratégia", color: "#6366f1" },
-  financeiro: { short: "Financeiro", color: "#10b981" },
-  contabil: { short: "Contábil", color: "#f59e0b" },
-  marketing: { short: "Marketing", color: "#f43f5e" },
-  operacoes: { short: "Operações", color: "#06b6d4" },
-  pessoas: { short: "Pessoas", color: "#8b5cf6" },
-  tecnologia: { short: "Tecnologia", color: "#0ea5e9" },
-  compliance: { short: "Compliance", color: "#64748b" },
+type SemaforoLevel = "green" | "amber" | "red";
+
+const STATUS_LABEL: Record<ClinicStatus, string> = {
+  prospect: "Prospect",
+  proposta: "Proposta",
+  contrato: "Contrato",
+  trial: "Trial",
+  ativa: "Ativa",
+  suspensa: "Suspensa",
+  desativada: "Desativada",
 };
 
-const PILAR_ORDER = [
-  "estrategia",
-  "financeiro",
-  "contabil",
-  "marketing",
-  "operacoes",
-  "pessoas",
-  "tecnologia",
-  "compliance",
+const PLANO_LABEL: Record<ClinicPlano, string> = {
+  starter: "Starter",
+  pro: "Pro",
+  enterprise: "Enterprise",
+};
+
+const SEMAFORO_DOT: Record<SemaforoLevel, string> = {
+  green: "bg-emerald-500",
+  amber: "bg-amber-500",
+  red: "bg-red-500",
+};
+
+const DAY_MS = 86_400_000;
+
+function computeSemaforo(c: Clinic): { level: SemaforoLevel; reasons: string[] } {
+  const reasons: string[] = [];
+
+  const last = c.lastTrilhaActivityAt ? new Date(c.lastTrilhaActivityAt) : null;
+  const daysSince = last
+    ? Math.floor((Date.now() - last.getTime()) / DAY_MS)
+    : null;
+  const trilhaStalled =
+    c.progresso < 100 && (last === null || (daysSince !== null && daysSince > 7));
+  if (trilhaStalled) {
+    reasons.push(
+      daysSince !== null ? `Trilha parada há ${daysSince}d` : "Trilha sem atividade",
+    );
+  }
+
+  const overdue = c.overdueActionsCount ?? 0;
+  if (overdue > 0) {
+    reasons.push(
+      `${overdue} ${overdue === 1 ? "pendência em atraso" : "pendências em atraso"}`,
+    );
+  }
+
+  const risks = c.openCriticalRisksCount ?? 0;
+  if (risks > 0) {
+    reasons.push(
+      `${risks} ${risks === 1 ? "risco crítico" : "riscos críticos"}`,
+    );
+  }
+
+  const level: SemaforoLevel =
+    reasons.length >= 2 ? "red" : reasons.length === 1 ? "amber" : "green";
+  return { level, reasons };
+}
+
+function isEmImplantacao(c: Clinic): boolean {
+  if (c.status === "desativada" || c.status === "suspensa") return false;
+  if (c.status === "prospect" || c.status === "proposta") return false;
+  return c.progresso < 100;
+}
+
+type FilterKey = "todas" | "atencao" | "criticas" | "implantacao";
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: "todas", label: "Todas" },
+  { key: "atencao", label: "Atenção" },
+  { key: "criticas", label: "Críticas" },
+  { key: "implantacao", label: "Em implantação" },
 ];
 
-function ScoreBadge({ score }: { score: number | null | undefined }) {
-  if (score == null) return <span className="text-muted-foreground text-xs">—</span>;
-  const pct = Math.round((score / 5) * 100);
-  const color =
-    pct >= 70 ? "bg-emerald-100 text-emerald-700" : pct >= 40 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
+function KpiCard({
+  title,
+  value,
+  hint,
+  icon: Icon,
+  tone,
+  testId,
+}: {
+  title: string;
+  value: number;
+  hint: string;
+  icon: typeof Building2;
+  tone?: "destructive";
+  testId: string;
+}) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${color}`}>
-      {score.toFixed(1)}
-    </span>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon
+          className={cn(
+            "h-4 w-4",
+            tone === "destructive" ? "text-destructive" : "text-muted-foreground",
+          )}
+        />
+      </CardHeader>
+      <CardContent>
+        <div
+          className={cn(
+            "text-2xl font-bold",
+            tone === "destructive" && "text-destructive",
+          )}
+          data-testid={testId}
+        >
+          {value}
+        </div>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </CardContent>
+    </Card>
   );
 }
 
-function PillarMiniChart({ scoresPilares }: { scoresPilares: Record<string, number> | null | undefined }) {
-  if (!scoresPilares) return <span className="text-muted-foreground text-xs">—</span>;
-
-  const data = PILAR_ORDER.filter((slug) => scoresPilares[slug] != null).map((slug) => ({
-    slug,
-    short: PILAR_INFO[slug]?.short ?? slug,
-    value: scoresPilares[slug],
-    color: PILAR_INFO[slug]?.color ?? "#888",
-  }));
-
-  if (data.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+function ClinicCard({
+  clinic,
+  onEnter,
+}: {
+  clinic: Clinic;
+  onEnter: (id: string) => void;
+}) {
+  const { level, reasons } = computeSemaforo(clinic);
+  const name = clinic.fantasia || clinic.nome;
 
   return (
-    <ResponsiveContainer width={240} height={36}>
-      <BarChart data={data} margin={{ top: 0, right: 0, bottom: 0, left: 0 }} barCategoryGap="10%">
-        <Bar dataKey="value" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-          {data.map((entry) => (
-            <Cell key={entry.slug} fill={entry.color} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <Card className="flex flex-col" data-testid="clinic-card">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className={cn("h-2.5 w-2.5 shrink-0 rounded-full", SEMAFORO_DOT[level])}
+              aria-hidden
+            />
+            <CardTitle className="truncate text-base" title={name}>
+              {name}
+            </CardTitle>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <Badge variant="outline">{STATUS_LABEL[clinic.status]}</Badge>
+          <Badge variant="secondary">{PLANO_LABEL[clinic.plano]}</Badge>
+          <Badge variant="outline" className="font-normal">
+            Etapa {clinic.etapa}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-1 flex-col gap-3">
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Progresso</span>
+            <span className="font-medium text-foreground">{clinic.progresso}%</span>
+          </div>
+          <Progress value={clinic.progresso} className="h-2" />
+        </div>
+
+        <div className="min-h-[2.5rem] text-xs">
+          {reasons.length === 0 ? (
+            <span className="inline-flex items-center gap-1.5 text-emerald-600">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Tudo em dia
+            </span>
+          ) : (
+            <ul className="space-y-0.5 text-muted-foreground">
+              {reasons.map((r) => (
+                <li key={r} className="flex items-center gap-1.5">
+                  <span
+                    className={cn("h-1.5 w-1.5 rounded-full", SEMAFORO_DOT[level])}
+                  />
+                  {r}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <Button
+          className="mt-auto w-full gap-2"
+          onClick={() => onEnter(clinic.id)}
+          data-testid={`enter-clinic-${clinic.id}`}
+        >
+          Entrar na clínica
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
+  const [filter, setFilter] = useState<FilterKey>("todas");
+  const [search, setSearch] = useState("");
 
-  const { data: summary, isLoading: loadingSummary } = useGetDashboardSummary({
-    query: { queryKey: getGetDashboardSummaryQueryKey() },
-  });
+  const { data, isLoading } = useListClinics({ pageSize: 1000 });
+  const clinics = useMemo(() => data?.data ?? [], [data]);
 
-  const { data: pipeline, isLoading: loadingPipeline } = useGetDashboardPipeline({
-    query: { queryKey: getGetDashboardPipelineQueryKey() },
-  });
+  const kpis = useMemo(() => {
+    const ativas = clinics.filter((c) => c.status === "ativa").length;
+    const implantacao = clinics.filter(isEmImplantacao).length;
+    const atencao = clinics.filter(
+      (c) => computeSemaforo(c).level !== "green",
+    ).length;
+    return {
+      total: data?.total ?? clinics.length,
+      ativas,
+      implantacao,
+      atencao,
+    };
+  }, [clinics, data]);
 
-  const { data: activity, isLoading: loadingActivity } = useGetDashboardRecentActivity({
-    query: { queryKey: getGetDashboardRecentActivityQueryKey() },
-  });
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return clinics.filter((c) => {
+      if (q) {
+        const hay = `${c.nome} ${c.fantasia ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (filter === "todas") return true;
+      if (filter === "implantacao") return isEmImplantacao(c);
+      const level = computeSemaforo(c).level;
+      if (filter === "atencao") return level === "amber";
+      if (filter === "criticas") return level === "red";
+      return true;
+    });
+  }, [clinics, filter, search]);
 
-  const { data: diagnosticsOverview, isLoading: loadingDiagnostics } = useGetDashboardDiagnostics({
-    query: { queryKey: getGetDashboardDiagnosticsQueryKey() },
-  });
+  const enterClinic = (id: string) => {
+    setActiveClinicId(id);
+    navigate(`/admin/clinicas/${id}?tab=overview`);
+  };
 
-  if (loadingSummary || loadingPipeline || loadingActivity) {
+  if (isLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <Activity className="h-8 w-8 animate-spin text-primary" />
@@ -117,203 +265,89 @@ export default function Dashboard() {
     );
   }
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground" data-testid="dashboard-title">
-          Dashboard
+        <h1
+          className="text-3xl font-bold tracking-tight text-foreground"
+          data-testid="painel-title"
+        >
+          Painel
         </h1>
-        <p className="text-muted-foreground">Visão geral da operação das clínicas.</p>
+        <p className="text-muted-foreground">
+          Visão geral da carteira de clínicas. Entre em uma clínica para operá-la.
+        </p>
       </div>
 
-      {summary && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total de Clínicas</CardTitle>
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="stats-total-clinics">
-                {summary.totalClinics}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {summary.clinicasAtivas} ativas, {summary.clinicasTrial} em trial
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Receita Mensal (Ativa)</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="stats-total-revenue">
-                {formatCurrency(summary.receitaMensalTotal)}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                +{formatCurrency(summary.receitaPipeline)} no pipeline
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Ações Atrasadas</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-destructive" data-testid="stats-delayed-actions">
-                {summary.acoesAtrasadas}
-              </div>
-              <p className="text-xs text-muted-foreground">Em planos de ação</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Notificações Não Lidas</CardTitle>
-              <Bell className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="stats-unread-notifications">
-                {summary.notificacoesNaoLidas}
-              </div>
-              <p className="text-xs text-muted-foreground">Aguardando sua atenção</p>
-            </CardContent>
-          </Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          title="Total de clínicas"
+          value={kpis.total}
+          hint="Carteira completa"
+          icon={Building2}
+          testId="kpi-total"
+        />
+        <KpiCard
+          title="Ativas"
+          value={kpis.ativas}
+          hint="Em operação"
+          icon={CheckCircle2}
+          testId="kpi-ativas"
+        />
+        <KpiCard
+          title="Em implantação"
+          value={kpis.implantacao}
+          hint="Onboarding em andamento"
+          icon={Rocket}
+          testId="kpi-implantacao"
+        />
+        <KpiCard
+          title="Precisam de atenção"
+          value={kpis.atencao}
+          hint="Sinais amarelos ou vermelhos"
+          icon={AlertTriangle}
+          tone="destructive"
+          testId="kpi-atencao"
+        />
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {FILTERS.map((f) => (
+            <Button
+              key={f.key}
+              size="sm"
+              variant={filter === f.key ? "default" : "outline"}
+              onClick={() => setFilter(f.key)}
+              data-testid={`filter-${f.key}`}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
+        <div className="relative sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar clínica..."
+            className="pl-8"
+            data-testid="painel-search"
+          />
+        </div>
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="flex h-40 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+          Nenhuma clínica encontrada para este filtro.
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {visible.map((c) => (
+            <ClinicCard key={c.id} clinic={c} onEnter={enterClinic} />
+          ))}
         </div>
       )}
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Pipeline de Clínicas</CardTitle>
-            <CardDescription>Distribuição de clínicas por status atual</CardDescription>
-          </CardHeader>
-          <CardContent className="pl-2">
-            {pipeline && pipeline.length > 0 ? (
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={pipeline}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="status"
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="#888888"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => String(value)}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "var(--muted)" }}
-                    contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)" }}
-                  />
-                  <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-[350px] items-center justify-center text-muted-foreground">
-                Nenhum dado no pipeline
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Atividades Recentes</CardTitle>
-            <CardDescription>O que aconteceu recentemente nas clínicas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-8">
-              {activity?.length ? (
-                activity.map((item) => (
-                  <div className="flex items-center" key={item.id}>
-                    <div className="ml-4 space-y-1">
-                      <p className="text-sm font-medium leading-none">{item.titulo}</p>
-                      <p className="text-sm text-muted-foreground">{item.descricao}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {format(new Date(item.createdAt), "dd 'de' MMMM, HH:mm", { locale: ptBR })}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center text-muted-foreground py-4">Nenhuma atividade recente</div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card data-testid="diagnostics-overview">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5" />
-              Diagnósticos Concluídos
-            </CardTitle>
-            <CardDescription>Resumo de pontuações por clínica — clique em uma linha para ver o resultado completo</CardDescription>
-          </div>
-          {diagnosticsOverview && diagnosticsOverview.length > 0 && (
-            <Badge variant="secondary">{diagnosticsOverview.length} diagnóstico{diagnosticsOverview.length !== 1 ? "s" : ""}</Badge>
-          )}
-        </CardHeader>
-        <CardContent>
-          {loadingDiagnostics ? (
-            <div className="flex h-24 items-center justify-center">
-              <Activity className="h-5 w-5 animate-spin text-primary" />
-            </div>
-          ) : !diagnosticsOverview || diagnosticsOverview.length === 0 ? (
-            <div className="flex h-24 items-center justify-center text-muted-foreground text-sm">
-              Nenhum diagnóstico concluído ainda
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="diagnostics-table">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="pb-2 pr-4 text-left font-medium">Clínica</th>
-                    <th className="pb-2 pr-4 text-left font-medium">Versão</th>
-                    <th className="pb-2 pr-4 text-left font-medium">Concluído em</th>
-                    <th className="pb-2 pr-4 text-left font-medium">Score Global</th>
-                    <th className="pb-2 text-left font-medium">Pilares</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {diagnosticsOverview.map((diag) => (
-                    <tr
-                      key={diag.id}
-                      className="border-b last:border-0 hover:bg-muted/40 cursor-pointer transition-colors"
-                      onClick={() => navigate(`/diagnostico/${diag.id}/resultado`)}
-                      data-testid="diagnostics-row"
-                    >
-                      <td className="py-3 pr-4 font-medium">{diag.clinicNome}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">v{diag.versao}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">
-                        {format(new Date(diag.concluidoEm), "dd/MM/yyyy", { locale: ptBR })}
-                      </td>
-                      <td className="py-3 pr-4">
-                        <ScoreBadge score={diag.scoreGlobal} />
-                      </td>
-                      <td className="py-3">
-                        <PillarMiniChart scoresPilares={diag.scoresPilares as Record<string, number> | null} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

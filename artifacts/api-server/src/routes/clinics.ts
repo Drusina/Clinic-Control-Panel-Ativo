@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, count, sql } from "drizzle-orm";
-import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable } from "@workspace/db";
+import { eq, ilike, and, count, sql, lt, gte, ne, inArray, notInArray, max } from "drizzle-orm";
+import { db, clinicsTable, clinicActivityTable, clinicStatusHistoryTable, teamTable, sociosTable, actionsTable, acaoTarefasTable, risksTable } from "@workspace/db";
 import { dispatchPlatformInvite, dispatchRespondentInvitesForEmail, revokeRespondentDelegationInvites } from "./team.js";
 import { objectStorageClient } from "../lib/objectStorage";
 import { seedIcsData } from "../lib/ics-seed.js";
@@ -83,6 +83,102 @@ export function mapClinic(c: typeof clinicsTable.$inferSelect) {
   };
 }
 
+type ClinicHealth = {
+  overdueActionsCount: number;
+  openCriticalRisksCount: number;
+  lastTrilhaActivityAt: string | null;
+};
+
+/**
+ * Read-only health metrics for the clinics list (powers the platform Painel
+ * semáforo). Computed with isolated grouped aggregates scoped to the page's
+ * clinic ids — never a single multi-LEFT-JOIN, which would fan-out and double
+ * count actions × tarefas × riscos. No business-rule or schema change.
+ */
+async function computeClinicHealth(
+  ids: string[],
+): Promise<(id: string) => ClinicHealth> {
+  if (ids.length === 0) {
+    return () => ({
+      overdueActionsCount: 0,
+      openCriticalRisksCount: 0,
+      lastTrilhaActivityAt: null,
+    });
+  }
+
+  const [overdueActions, overdueTarefas, criticalRisks, lastTrilha] =
+    await Promise.all([
+      db
+        .select({ clinicId: actionsTable.clinicId, c: count() })
+        .from(actionsTable)
+        .where(
+          and(
+            inArray(actionsTable.clinicId, ids),
+            lt(actionsTable.prazo, sql`CURRENT_DATE`),
+            ne(actionsTable.coluna, "done"),
+          ),
+        )
+        .groupBy(actionsTable.clinicId),
+      db
+        .select({ clinicId: actionsTable.clinicId, c: count() })
+        .from(acaoTarefasTable)
+        .innerJoin(actionsTable, eq(acaoTarefasTable.acaoId, actionsTable.id))
+        .where(
+          and(
+            inArray(actionsTable.clinicId, ids),
+            lt(acaoTarefasTable.prazo, sql`CURRENT_DATE`),
+            ne(acaoTarefasTable.status, "concluida"),
+          ),
+        )
+        .groupBy(actionsTable.clinicId),
+      db
+        .select({ clinicId: risksTable.clinicId, c: count() })
+        .from(risksTable)
+        .where(
+          and(
+            inArray(risksTable.clinicId, ids),
+            gte(risksTable.severidade, 15),
+            notInArray(risksTable.status, ["mitigado", "nao_aceito"]),
+          ),
+        )
+        .groupBy(risksTable.clinicId),
+      db
+        .select({
+          clinicId: clinicActivityTable.clinicId,
+          m: max(clinicActivityTable.createdAt),
+        })
+        .from(clinicActivityTable)
+        .where(
+          and(
+            inArray(clinicActivityTable.clinicId, ids),
+            eq(clinicActivityTable.tipo, "trilha"),
+          ),
+        )
+        .groupBy(clinicActivityTable.clinicId),
+    ]);
+
+  const overdueMap = new Map<string, number>();
+  for (const r of overdueActions) overdueMap.set(r.clinicId, Number(r.c));
+  for (const r of overdueTarefas)
+    overdueMap.set(r.clinicId, (overdueMap.get(r.clinicId) ?? 0) + Number(r.c));
+
+  const riskMap = new Map<string, number>();
+  for (const r of criticalRisks) riskMap.set(r.clinicId, Number(r.c));
+
+  const trilhaMap = new Map<string, string>();
+  for (const r of lastTrilha) {
+    const v = r.m;
+    if (v != null)
+      trilhaMap.set(r.clinicId, typeof v === "string" ? v : v.toISOString());
+  }
+
+  return (id: string) => ({
+    overdueActionsCount: overdueMap.get(id) ?? 0,
+    openCriticalRisksCount: riskMap.get(id) ?? 0,
+    lastTrilhaActivityAt: trilhaMap.get(id) ?? null,
+  });
+}
+
 clinicsAdminRouter.get("/clinics", async (req, res): Promise<void> => {
   const params = ListClinicsQueryParams.safeParse(req.query);
   if (!params.success) {
@@ -109,9 +205,11 @@ clinicsAdminRouter.get("/clinics", async (req, res): Promise<void> => {
     db.select({ count: count() }).from(clinicsTable).where(where),
   ]);
 
+  const health = await computeClinicHealth(clinics.map((c) => c.id));
+
   res.json(
     ListClinicsResponse.parse({
-      data: clinics.map(mapClinic),
+      data: clinics.map((c) => ({ ...mapClinic(c), ...health(c.id) })),
       total: totalResult[0]?.count ?? 0,
       page: page ?? 1,
       pageSize: pageSize ?? 20,

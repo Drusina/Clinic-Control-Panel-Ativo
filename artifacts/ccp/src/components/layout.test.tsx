@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("wouter", () => ({
   useLocation: () => ["/me/clinicas", mocks.navigateMock] as const,
+  useSearch: () => "",
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
     <a href={href}>{children}</a>
   ),

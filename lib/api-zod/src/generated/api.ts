@@ -149,6 +149,24 @@ export const ListClinicsResponse = zod.object({
         ),
       createdAt: zod.string(),
       updatedAt: zod.string(),
+      overdueActionsCount: zod
+        .number()
+        .optional()
+        .describe(
+          "Read-only health metric (clinics list only): overdue actions + overdue tasks that are not done.",
+        ),
+      openCriticalRisksCount: zod
+        .number()
+        .optional()
+        .describe(
+          "Read-only health metric (clinics list only): open critical risks (severidade >= 15, excluding mitigado\/nao_aceito).",
+        ),
+      lastTrilhaActivityAt: zod
+        .string()
+        .nullish()
+        .describe(
+          "Read-only health metric (clinics list only): timestamp of the last trilha activity, or null.",
+        ),
     }),
   ),
   total: zod.number(),
@@ -258,6 +276,24 @@ export const GetClinicResponse = zod.object({
     ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+  overdueActionsCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Read-only health metric (clinics list only): overdue actions + overdue tasks that are not done.",
+    ),
+  openCriticalRisksCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Read-only health metric (clinics list only): open critical risks (severidade >= 15, excluding mitigado\/nao_aceito).",
+    ),
+  lastTrilhaActivityAt: zod
+    .string()
+    .nullish()
+    .describe(
+      "Read-only health metric (clinics list only): timestamp of the last trilha activity, or null.",
+    ),
 });
 
 /**
@@ -354,6 +390,24 @@ export const UpdateClinicResponse = zod.object({
     ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+  overdueActionsCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Read-only health metric (clinics list only): overdue actions + overdue tasks that are not done.",
+    ),
+  openCriticalRisksCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Read-only health metric (clinics list only): open critical risks (severidade >= 15, excluding mitigado\/nao_aceito).",
+    ),
+  lastTrilhaActivityAt: zod
+    .string()
+    .nullish()
+    .describe(
+      "Read-only health metric (clinics list only): timestamp of the last trilha activity, or null.",
+    ),
 });
 
 /**
@@ -443,6 +497,24 @@ export const UpdateClinicStatusResponse = zod.object({
     ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+  overdueActionsCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Read-only health metric (clinics list only): overdue actions + overdue tasks that are not done.",
+    ),
+  openCriticalRisksCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Read-only health metric (clinics list only): open critical risks (severidade >= 15, excluding mitigado\/nao_aceito).",
+    ),
+  lastTrilhaActivityAt: zod
+    .string()
+    .nullish()
+    .describe(
+      "Read-only health metric (clinics list only): timestamp of the last trilha activity, or null.",
+    ),
 });
 
 /**
@@ -3628,6 +3700,24 @@ export const SaveCondicoesComerciaisResponse = zod.object({
     ),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+  overdueActionsCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Read-only health metric (clinics list only): overdue actions + overdue tasks that are not done.",
+    ),
+  openCriticalRisksCount: zod
+    .number()
+    .optional()
+    .describe(
+      "Read-only health metric (clinics list only): open critical risks (severidade >= 15, excluding mitigado\/nao_aceito).",
+    ),
+  lastTrilhaActivityAt: zod
+    .string()
+    .nullish()
+    .describe(
+      "Read-only health metric (clinics list only): timestamp of the last trilha activity, or null.",
+    ),
 });
 
 /**

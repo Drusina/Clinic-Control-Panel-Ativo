@@ -147,6 +147,15 @@ export interface Clinic {
   logoUrl?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Read-only health metric (clinics list only): overdue actions + overdue tasks that are not done. */
+  overdueActionsCount?: number;
+  /** Read-only health metric (clinics list only): open critical risks (severidade >= 15, excluding mitigado/nao_aceito). */
+  openCriticalRisksCount?: number;
+  /**
+   * Read-only health metric (clinics list only): timestamp of the last trilha activity, or null.
+   * @nullable
+   */
+  lastTrilhaActivityAt?: string | null;
 }
 
 export interface ClinicListResponse {

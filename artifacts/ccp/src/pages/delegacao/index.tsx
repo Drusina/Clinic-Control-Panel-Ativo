@@ -368,9 +368,20 @@ async function fetchHydrated(clinicId: string, diagnosticoId: string): Promise<H
 
 // ─── Page entry ─────────────────────────────────────────────────────────────
 
-export default function DelegacaoPage({ embedded = false }: { embedded?: boolean }) {
+export default function DelegacaoPage({
+  embedded = false,
+  clinicId: clinicIdProp,
+}: {
+  embedded?: boolean;
+  /**
+   * Explicit clinic id. Required when this page is embedded under a route
+   * whose param is NOT `:clinicId` (e.g. the super-admin clinic detail uses
+   * `:id`). Falls back to the route param for the standalone `/delegacao/:clinicId`.
+   */
+  clinicId?: string;
+}) {
   const params = useParams<{ clinicId: string }>();
-  const clinicId = params.clinicId;
+  const clinicId = clinicIdProp ?? params.clinicId;
 
   if (!clinicId) {
     return <ClinicSelector />;

@@ -2936,6 +2936,15 @@ components:
           type: string
         updatedAt:
           type: string
+        overdueActionsCount:
+          type: integer
+          description: "Read-only health metric (clinics list only): overdue actions + overdue tasks that are not done."
+        openCriticalRisksCount:
+          type: integer
+          description: "Read-only health metric (clinics list only): open critical risks (severidade >= 15, excluding mitigado/nao_aceito)."
+        lastTrilhaActivityAt:
+          type: ["string", "null"]
+          description: "Read-only health metric (clinics list only): timestamp of the last trilha activity, or null."
       required:
         - id
         - nome

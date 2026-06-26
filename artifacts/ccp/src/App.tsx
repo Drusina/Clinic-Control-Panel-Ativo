@@ -36,6 +36,7 @@ import EvidenciasPage from "@/pages/evidencias/index";
 import DocumentosPage from "@/pages/documentos/index";
 import RelatoriosPage from "@/pages/relatorios/index";
 import IcsTemplatesPage from "@/pages/ics-templates/index";
+import LgpdTemplatesPage from "@/pages/lgpd-templates/index";
 import AdminConfiguracoesPage from "@/pages/admin-configuracoes/index";
 import ConvitePage from "@/pages/convite/index";
 import ResponderEntrypoint from "@/pages/responder/index";
@@ -716,6 +717,16 @@ export function Router() {
           <AppLayout>
             <SuperAdminGuard>
               <IcsTemplatesPage />
+            </SuperAdminGuard>
+          </AppLayout>
+        )}
+      </Route>
+
+      <Route path="/admin/lgpd-templates">
+        {() => (
+          <AppLayout>
+            <SuperAdminGuard>
+              <LgpdTemplatesPage />
             </SuperAdminGuard>
           </AppLayout>
         )}

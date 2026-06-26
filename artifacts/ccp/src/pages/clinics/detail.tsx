@@ -1,21 +1,28 @@
-import { useState } from "react";
-import { useParams } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useLocation, useSearch } from "wouter";
 import {
   useGetClinic,
   getGetClinicQueryKey,
 } from "@workspace/api-client-react";
 import { TrilhaStepper } from "@/components/trilha/trilha-stepper";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Activity, ArrowLeft, Building2 } from "lucide-react";
+import { Activity, ArrowLeft, Building2, CalendarCheck } from "lucide-react";
 import { Link } from "wouter";
 import { ClinicLogo } from "@/components/clinic-logo";
 import { getStatusBadgeVariant, getPlanBadgeVariant } from "./index";
 
 import OverviewTab from "./tabs/overview-tab";
 import KickoffTab from "./tabs/kickoff-tab";
-import DiagnosticsTab from "./tabs/diagnostics-tab";
+import DiagnosticoSection from "./tabs/diagnostico-section";
 import ActionPlanTab from "./tabs/action-plan-tab";
 import RisksTab from "./tabs/risks-tab";
 import TeamTab from "./tabs/team-tab";
@@ -34,18 +41,66 @@ const ADMIN_MODULE_TABS: Record<string, { tab: string; label: string }> = {
   financeiro: { tab: "financial", label: "Abrir Financeiro" },
   documentos: { tab: "documentos", label: "Abrir Documentos" },
   lgpd: { tab: "documentos", label: "Abrir Documentos" },
-  kickoff: { tab: "kickoff", label: "Abrir Kickoff" },
+  kickoff: { tab: "reunioes", label: "Abrir Reuniões" },
   diagnostico: { tab: "diagnostics", label: "Abrir Diagnóstico" },
   riscos: { tab: "risks", label: "Abrir Riscos" },
   plano_acao: { tab: "actions", label: "Abrir Plano de Ação" },
   painel: { tab: "overview", label: "Abrir Visão Geral" },
 };
 
+const VALID_TABS = new Set([
+  "cadastro",
+  "financial",
+  "status",
+  "usuarios",
+  "atividade",
+  "overview",
+  "kickoff",
+  "reunioes",
+  "documentos",
+  "diagnostics",
+  "risks",
+  "actions",
+  "agenda",
+  "team",
+  "rede-externa",
+  "sistemas-acessos",
+]);
+
+const DEFAULT_TAB = "cadastro";
+
 export default function ClinicDetail() {
   const params = useParams();
   const id = params.id as string;
   const backHref = "/admin/clinicas";
-  const [tab, setTab] = useState("cadastro");
+  const search = useSearch();
+  const [, navigate] = useLocation();
+
+  const tabFromUrl = useMemo(() => {
+    const sp = new URLSearchParams(search);
+    const t = sp.get("tab");
+    return t && VALID_TABS.has(t) ? t : DEFAULT_TAB;
+  }, [search]);
+
+  const [tab, setTab] = useState(tabFromUrl);
+
+  useEffect(() => {
+    setTab(tabFromUrl);
+  }, [tabFromUrl]);
+
+  const handleTabChange = (value: string) => {
+    setTab(value);
+    const sp = new URLSearchParams(search);
+    sp.set("tab", value);
+    // Diagnóstico owns the `aba`/`diagnostico` deep-link params; clear the
+    // residue when navigating to any other tab so they don't leak.
+    if (value !== "diagnostics") {
+      sp.delete("aba");
+      sp.delete("diagnostico");
+    }
+    const qs = sp.toString();
+    navigate(`/admin/clinicas/${id}${qs ? `?${qs}` : ""}`, { replace: true });
+  };
 
   const { data: clinic, isLoading } = useGetClinic(id, {
     query: { enabled: !!id, queryKey: getGetClinicQueryKey(id) },
@@ -115,14 +170,14 @@ export default function ClinicDetail() {
             kind: "action",
             label: m.label,
             onClick: () => {
-              setTab(m.tab);
+              handleTabChange(m.tab);
               window.scrollTo({ top: 0, behavior: "smooth" });
             },
           };
         }}
       />
 
-      <Tabs value={tab} onValueChange={setTab} className="w-full space-y-6">
+      <Tabs value={tab} onValueChange={handleTabChange} className="w-full space-y-6">
         <TabsList className="bg-card border w-full flex overflow-x-auto justify-start rounded-md h-auto flex-wrap gap-1 p-1">
           <TabsTrigger value="cadastro" className="min-w-fit" data-testid="tab-cadastro">Cadastro</TabsTrigger>
           <TabsTrigger value="financial" className="min-w-fit" data-testid="tab-financial">Central Comercial</TabsTrigger>
@@ -131,6 +186,7 @@ export default function ClinicDetail() {
           <TabsTrigger value="atividade" className="min-w-fit" data-testid="tab-atividade">Atividade</TabsTrigger>
           <TabsTrigger value="overview" className="min-w-fit">Visão Geral</TabsTrigger>
           <TabsTrigger value="kickoff" className="min-w-fit">Kickoff</TabsTrigger>
+          <TabsTrigger value="reunioes" className="min-w-fit" data-testid="tab-reunioes">Reuniões</TabsTrigger>
           <TabsTrigger value="documentos" className="min-w-fit" data-testid="tab-documentos">Documentos</TabsTrigger>
           <TabsTrigger value="diagnostics" className="min-w-fit">Diagnóstico</TabsTrigger>
           <TabsTrigger value="risks" className="min-w-fit">Riscos</TabsTrigger>
@@ -165,8 +221,36 @@ export default function ClinicDetail() {
         <TabsContent value="kickoff">
           <KickoffTab clinicId={id} />
         </TabsContent>
+        <TabsContent value="reunioes">
+          <div className="space-y-6">
+            <KickoffTab clinicId={id} />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CalendarCheck className="h-4 w-4 text-muted-foreground" />
+                  Outros tipos de reunião
+                </CardTitle>
+                <CardDescription>
+                  Reuniões recorrentes, marcos e acompanhamentos serão organizados
+                  aqui em breve.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-center rounded-md border border-dashed py-8 text-sm text-muted-foreground">
+                  Em breve
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
         <TabsContent value="diagnostics">
-          <DiagnosticsTab clinicId={id} />
+          <DiagnosticoSection
+            clinicId={id}
+            basePath={`/admin/clinicas/${id}`}
+            buildDelegacaoHref={(diagId) =>
+              `/admin/clinicas/${id}?tab=diagnostics&aba=delegacao&diagnostico=${diagId}`
+            }
+          />
         </TabsContent>
         <TabsContent value="actions">
           <ActionPlanTab clinicId={id} />
