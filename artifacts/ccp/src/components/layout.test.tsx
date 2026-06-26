@@ -47,13 +47,14 @@ const CLINICS = [
 ];
 
 const MODULE_LABELS = [
-  "Diagnóstico 360°",
+  "Painel",
+  "Clínicas",
   "Notificações",
-  "Operacional",
-  "Complementar",
-  "Delegação",
-  "Mapa de Riscos",
-  "Plano de Ação",
+  "Diagnóstico",
+  "Mapa de riscos",
+  "Plano de ação",
+  "Reuniões",
+  "Delegações",
   "Processos",
   "Evidências",
   "Documentos",
@@ -120,9 +121,9 @@ describe("AppLayout sidebar — team_member never sees modules on the chooser", 
       </AppLayout>,
     );
 
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getByText("Operacional")).toBeInTheDocument();
-    expect(screen.getByText("Complementar")).toBeInTheDocument();
+    expect(screen.getByText("Painel")).toBeInTheDocument();
+    expect(screen.getByText("Clínicas")).toBeInTheDocument();
+    expect(screen.getByText("Em breve")).toBeInTheDocument();
   });
 });
 
