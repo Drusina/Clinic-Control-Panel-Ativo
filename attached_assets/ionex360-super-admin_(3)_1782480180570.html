@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IONEX360 — Super Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+  :root{
+    --ink:#131B2E; --ink-2:#58607A; --ink-3:#8C92A6;
+    --paper:#F4F5F8; --surface:#FFFFFF; --surface-2:#F8F9FC;
+    --line:#E4E7EF; --line-2:#D6DAE5;
+    --brand:#16274D; --brand-700:#0F1C3A; --brand-50:#E8EBF3;
+    --gold:#C49A3D; --gold-600:#9F7C29; --gold-50:#F7F0DC;
+    --ok:#2E7D5B; --ok-50:#E5F1EA; --warn:#B5742A; --warn-50:#F7EEDD; --crit:#A83A3A; --crit-50:#F6E6E3;
+    --display:'Bricolage Grotesque',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;letter-spacing:-0.01em;}
+  button{font-family:var(--body);cursor:pointer;}
+
+  .topbar{background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:11px 22px;gap:14px;position:sticky;top:0;z-index:10;}
+  .tb-left{display:flex;align-items:center;gap:14px;min-width:0;}
+  .logo{display:flex;align-items:center;gap:8px;}
+  .logo .nm{font-family:var(--display);font-weight:600;font-size:18px;color:var(--brand);}
+  .logo .nm span{color:var(--gold);}
+  .ctx{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);font-size:13px;color:var(--ink-2);min-width:0;}
+  .ctx i:first-child{color:var(--brand);font-size:16px;}
+  .ctx .nm{font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tb-right{display:flex;align-items:center;gap:15px;color:var(--ink-2);}
+  .tb-right i{font-size:20px;}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;}
+
+  .wrap{max-width:1140px;margin:0 auto;padding:22px;}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+  .head h1{font-size:23px;}
+  .head .sub{font-size:13px;color:var(--ink-2);margin-top:3px;}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);border-radius:10px;padding:8px 14px;font-size:13px;font-weight:500;}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;}
+  .btn i{font-size:16px;}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+  .kpi .v{font-family:var(--display);font-size:26px;font-weight:600;}
+  .kpi .l{font-size:12.5px;color:var(--ink-2);display:flex;align-items:center;gap:6px;}
+  .kpi .l i{font-size:15px;}
+
+  .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
+  .chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:6px 13px;font-size:12.5px;color:var(--ink-2);}
+  .chip.on{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:500;}
+  .search{margin-left:auto;display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:10px;padding:7px 11px;background:var(--surface);}
+  .search input{border:none;outline:none;font-family:var(--body);font-size:13px;width:150px;background:transparent;color:var(--ink);}
+  .search i{color:var(--ink-3);font-size:16px;}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px;}
+  .cc{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 17px;display:flex;flex-direction:column;}
+  .cc .top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .cc h3{font-size:15px;line-height:1.25;}
+  .cc .badges{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+  .pill{font-size:11px;padding:2px 9px;border-radius:99px;font-weight:500;white-space:nowrap;}
+  .health{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;white-space:nowrap;}
+  .dot{width:9px;height:9px;border-radius:50%;}
+  .bar{height:7px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden;}
+  .reasons{display:flex;flex-wrap:wrap;gap:6px;margin:11px 0 14px;min-height:22px;}
+  .reason{font-size:11px;padding:2px 8px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);display:flex;align-items:center;gap:4px;}
+  .ent{margin-top:auto;border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:6px;}
+
+  /* modo clínica */
+  .banner{background:var(--brand);color:#fff;border-radius:14px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+  .banner .lbl{font-size:11px;color:#AEB8D0;letter-spacing:.05em;text-transform:uppercase;}
+  .banner h2{font-size:18px;color:#fff;}
+  .banner .acts{display:flex;gap:9px;}
+  .banner .bbtn{border:1px solid #C49A3D;background:transparent;color:#C49A3D;border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;display:flex;align-items:center;gap:6px;}
+  .sec{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin:2px 2px 10px;}
+  .hub{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:11px;margin-bottom:18px;}
+  .tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:9px;}
+  .tile .tic{width:34px;height:34px;border-radius:9px;background:var(--brand-50);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:19px;}
+  .tile .lab{font-size:13px;font-weight:500;}
+  .scopenote{text-align:center;font-size:12px;color:var(--ink-3);padding:6px 0 2px;}
+
+  @media (max-width:760px){
+    .topbar{padding:10px 14px;} .wrap{padding:14px;}
+    .kpis{grid-template-columns:1fr 1fr;}
+    .grid{grid-template-columns:1fr;}
+    .hub{grid-template-columns:1fr 1fr;}
+    .search{margin-left:0;width:100%;} .search input{width:100%;flex:1;}
+    .ctx .nm{max-width:120px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="tb-left">
+    <div class="logo">
+      <svg viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><path d="M50 5 L88 27 L88 73 L50 95 L12 73 L12 27 Z" fill="none" stroke="var(--gold)" stroke-width="7" stroke-linejoin="round"/><g fill="var(--gold)"><path id="bl" d="M50 50 C 54 33 67 27 79 32 C 67 41 58 51 50 50 Z"/><use href="#bl" transform="rotate(60 50 50)"/><use href="#bl" transform="rotate(120 50 50)"/><use href="#bl" transform="rotate(180 50 50)"/><use href="#bl" transform="rotate(240 50 50)"/><use href="#bl" transform="rotate(300 50 50)"/></g></svg>
+      <span class="nm">IONEX<span>360</span></span>
+    </div>
+    <div class="ctx" id="ctx"><i class="ti ti-stack-2"></i><span class="nm">Plataforma</span></div>
+  </div>
+  <div class="tb-right">
+    <i class="ti ti-bell" aria-label="Notificações"></i>
+    <i class="ti ti-settings" aria-label="Configurações"></i>
+    <div class="avatar">SA</div>
+  </div>
+</header>
+
+<div class="wrap" id="app"></div>
+
+<script>
+  const CLIN = [
+    {id:1,n:'Instituto de Cardiologia de Sorriso',fase:'Onboarding',plano:'Starter',prog:33,parada:6,acoes:0,tarefas:1,riscos:0},
+    {id:2,n:'Clínica Vida+',fase:'Ativo',plano:'Pro',prog:88,parada:0,acoes:0,tarefas:0,riscos:0},
+    {id:3,n:'Saúde Plena',fase:'Implantação',plano:'Enterprise',prog:54,parada:9,acoes:2,tarefas:1,riscos:2},
+    {id:4,n:'CardioCenter Cuiabá',fase:'Ativo',plano:'Pro',prog:71,parada:0,acoes:2,tarefas:1,riscos:0},
+    {id:5,n:'Odonto Bem-Estar',fase:'Prospect',plano:'Starter',prog:12,parada:0,acoes:0,tarefas:0,riscos:0},
+    {id:6,n:'Clínica Norte',fase:'Ativo',plano:'Starter',prog:95,parada:0,acoes:0,tarefas:0,riscos:1}
+  ];
+  const HL = {ok:['var(--ok)','var(--ok-50)','Saudável'], warn:['var(--warn)','var(--warn-50)','Atenção'], crit:['var(--crit)','var(--crit-50)','Crítico']};
+
+  function health(c){
+    let pts=0, r=[];
+    if(c.parada>=5){ pts+=2; r.push(['ti-map-pin-off','Trilha parada '+c.parada+'d']); }
+    const atraso=c.acoes+c.tarefas;
+    if(atraso>=3){ pts+=2; r.push(['ti-clock-exclamation',atraso+' itens em atraso']); }
+    else if(atraso>=1){ pts+=1; r.push(['ti-clock-exclamation',atraso+' em atraso']); }
+    if(c.riscos>=1){ pts+=2; r.push(['ti-alert-triangle',c.riscos+' risco'+(c.riscos>1?'s':'')+' crítico'+(c.riscos>1?'s':'')]); }
+    const level = pts>=4?'crit':pts>=2?'warn':'ok';
+    if(!r.length) r.push(['ti-check','Tudo em dia']);
+    return {level, r};
+  }
+
+  let filter='todas', q='';
+  const app = document.getElementById('app');
+  const ctx = document.getElementById('ctx');
+
+  function platform(){
+    ctx.innerHTML = '<i class="ti ti-stack-2"></i><span class="nm">Plataforma</span>';
+    const counts = CLIN.reduce((a,c)=>{a[health(c).level]++;return a;},{ok:0,warn:0,crit:0});
+    const ativas = CLIN.filter(c=>c.fase==='Ativo').length;
+    const impl = CLIN.filter(c=>c.fase==='Onboarding'||c.fase==='Implantação').length;
+    let html = `<div class="head"><div><h1>Painel da plataforma</h1><div class="sub">Visão de todas as clínicas sob sua gestão</div></div><button class="btn primary"><i class="ti ti-plus"></i>Nova clínica</button></div>`;
+    html += `<div class="kpis">
+      <div class="kpi"><div class="v">${CLIN.length}</div><div class="l"><i class="ti ti-building-hospital"></i>Clínicas</div></div>
+      <div class="kpi"><div class="v">${ativas}</div><div class="l"><i class="ti ti-circle-check"></i>Ativas</div></div>
+      <div class="kpi"><div class="v">${impl}</div><div class="l"><i class="ti ti-rocket"></i>Em implantação</div></div>
+      <div class="kpi"><div class="v" style="color:${counts.crit?'var(--crit)':'var(--ink)'}">${counts.warn+counts.crit}</div><div class="l"><i class="ti ti-alert-triangle"></i>Precisam de atenção</div></div>
+    </div>`;
+    const fchips = [['todas','Todas'],['warn','Atenção'],['crit','Críticas'],['impl','Em implantação']];
+    html += `<div class="filters">${fchips.map(f=>`<button class="chip ${filter===f[0]?'on':''}" data-f="${f[0]}">${f[1]}</button>`).join('')}
+      <div class="search"><i class="ti ti-search"></i><input id="q" placeholder="Buscar clínica..." value="${q}"></div></div>`;
+    let list = CLIN.filter(c=>{
+      const h=health(c).level;
+      if(filter==='warn'&&h!=='warn') return false;
+      if(filter==='crit'&&h!=='crit') return false;
+      if(filter==='impl'&&!(c.fase==='Onboarding'||c.fase==='Implantação')) return false;
+      if(q&&!c.n.toLowerCase().includes(q.toLowerCase())) return false;
+      return true;
+    });
+    html += `<div class="grid">${list.map(c=>{
+      const h=health(c); const hc=HL[h.level];
+      return `<div class="cc">
+        <div class="top"><div style="min-width:0;"><h3>${c.n}</h3><div class="badges"><span class="pill" style="background:var(--brand-50);color:var(--brand);">${c.fase}</span><span class="pill" style="background:var(--gold-50);color:var(--gold-600);">${c.plano}</span></div></div>
+          <span class="health" style="color:${hc[0]}"><span class="dot" style="background:${hc[0]}"></span>${hc[2]}</span></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;"><div class="bar" style="flex:1;"><div style="width:${c.prog}%;height:100%;background:var(--brand);"></div></div><span style="font-size:12px;color:var(--ink-2);width:34px;">${c.prog}%</span></div>
+        <div class="reasons">${h.r.map(x=>`<span class="reason" style="${h.level!=='ok'?'background:'+hc[1]+';border-color:'+hc[1]+';color:'+hc[0]:''}"><i class="ti ${x[0]}" style="font-size:13px;"></i>${x[1]}</span>`).join('')}</div>
+        <button class="ent" data-id="${c.id}">Entrar na clínica <i class="ti ti-arrow-right" style="font-size:15px;"></i></button>
+      </div>`;
+    }).join('')}</div>`;
+    app.innerHTML = html;
+    app.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{filter=b.dataset.f;platform();});
+    app.querySelectorAll('.ent').forEach(b=>b.onclick=()=>clinic(CLIN.find(c=>c.id==b.dataset.id)));
+    const qi=document.getElementById('q'); qi.oninput=()=>{q=qi.value;const p=qi.selectionStart;platform();const n=document.getElementById('q');n.focus();n.setSelectionRange(p,p);};
+  }
+
+  function clinic(c){
+    ctx.innerHTML = `<i class="ti ti-building-hospital"></i><span class="nm">${c.n}</span><i class="ti ti-chevron-down" style="color:var(--ink-3);font-size:15px;"></i>`;
+    const groups=[['Onboarding',[['ti-calendar-event','Agenda'],['ti-users','Equipe interna'],['ti-users-group','Equipe externa'],['ti-key','Sistemas e acessos']]],
+      ['Operação',[['ti-stethoscope','Diagnóstico'],['ti-alert-triangle','Mapa de riscos'],['ti-layout-kanban','Plano de ação'],['ti-route','Processos']]],
+      ['Condução',[['ti-presentation','Reuniões'],['ti-share','Delegações']]],
+      ['Documentação',[['ti-files','Documentos'],['ti-photo','Evidências']]]];
+    let html = `<div class="banner"><div><div class="lbl">Você está dentro de</div><h2>${c.n}</h2></div>
+      <div class="acts"><button class="bbtn" id="trocar"><i class="ti ti-switch-horizontal"></i>Trocar de clínica</button><button class="bbtn" id="sair"><i class="ti ti-arrow-left"></i>Sair para a plataforma</button></div></div>`;
+    html += `<div class="kpis">
+      <div class="kpi"><div class="v">${c.prog}%</div><div class="l">Score do diagnóstico</div></div>
+      <div class="kpi"><div class="v">${c.acoes+5}</div><div class="l">Ações abertas</div></div>
+      <div class="kpi"><div class="v">${c.riscos}</div><div class="l">Riscos críticos</div></div>
+      <div class="kpi"><div class="v">${c.tarefas+3}</div><div class="l">Tarefas hoje</div></div>
+    </div>`;
+    html += groups.map(g=>`<div class="sec">${g[0]}</div><div class="hub">${g[1].map(m=>`<div class="tile"><div class="tic"><i class="ti ${m[0]}"></i></div><div class="lab">${m[1]}</div></div>`).join('')}</div>`).join('');
+    html += `<div class="scopenote"><i class="ti ti-lock" style="font-size:13px;vertical-align:-1px;"></i> Somente os dados de ${c.n} estão disponíveis neste modo.</div>`;
+    app.innerHTML = html;
+    document.getElementById('sair').onclick=platform;
+    document.getElementById('trocar').onclick=platform;
+  }
+
+  platform();
+</script>
+</body>
+</html>

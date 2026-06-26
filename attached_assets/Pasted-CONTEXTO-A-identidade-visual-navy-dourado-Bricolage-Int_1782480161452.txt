@@ -1,0 +1,87 @@
+CONTEXTO
+A identidade visual (navy + dourado, Bricolage/Inter, componente de marca) já está
+aplicada. Anexei ionex360-super-admin.html como referência visual do novo painel.
+Quero REMODELAR o painel do super admin num shell com DOIS MODOS. Reaproveite o que
+já existe; não recrie do zero.
+
+REUSO / NÃO RECRIAR
+- Use os tokens e componentes de UI já existentes (não redefina cores/fontes/logo).
+- Reaproveite páginas/rotas atuais: dashboard do admin, pages/clinics e /admin/clinicas
+  (lista/detalhe), /admin/ics-templates, /api/admin/lgpd-templates, /admin/configuracoes,
+  /configuracoes, pages/kickoff, pages/diagnostico (acompanhamento de delegações),
+  components/layout.tsx.
+- NÃO altere schema, endpoints ou regras de negócio. Consuma os dados que já existem.
+  Onde faltar dado para algo abaixo, NÃO invente: renderize sem aquele trecho e me avise.
+
+ESTRUTURA: SHELL COM DOIS MODOS (mesma navegação que troca de estado)
+O estado é definido por haver ou não uma clínica ativa selecionada (reutilize o conceito
+de "clínica ativa" / ClinicAccessGuard já presente).
+
+MODO PLATAFORMA (nenhuma clínica selecionada)
+- Indicador de contexto no topo: "Plataforma".
+- Navegação lateral, agrupada:
+  · Plataforma: Painel, Clínicas
+  · Administração:
+      - Modelos  → é uma SEÇÃO que reúne os templates que já existem, como sub-itens:
+          · Templates ICS  (página atual /admin/ics-templates)
+          · Templates LGPD (hoje só via /api/admin/lgpd-templates — criar a porta de
+            entrada de menu para ela aqui, ao lado do ICS)
+      - Integrações  (a página atual em /admin/configuracoes)
+      - Configurações (/configuracoes)
+    OBS: hoje o rótulo "Integrações" aponta para a rota /admin/configuracoes (nome de
+    rota e rótulo divergem). MANTENHA o comportamento atual e me avise dessa
+    inconsistência; NÃO renomeie a rota sem confirmar.
+    NÃO crie "Planos" nem "Equipe IONEX" agora (não existem). Se quiser, deixe-os apenas
+    como itens desabilitados marcados "em breve".
+  · Rodapé do menu (separado dos grupos): Sair.
+- Painel (conteúdo):
+  · KPIs do conjunto: total de clínicas, ativas, em implantação, e "precisam de atenção"
+    (derivado do semáforo).
+  · Lista de clínicas em CARDS (não tabela), grid responsivo. Cada card: nome, badges de
+    fase e plano, barra de progresso da implantação + %, semáforo de saúde (verde/âmbar/
+    vermelho) com etiquetas do PORQUÊ, e botão "Entrar na clínica".
+  · Filtros (Todas / Atenção / Críticas / Em implantação) + busca por nome.
+- SEMÁFORO DE SAÚDE (combinação, com motivo visível):
+  · Fatores: (1) trilha de implantação parada/atrasada, (2) ações ou tarefas em atraso,
+    (3) riscos críticos em aberto. Pontue e classifique: vários fatores = vermelho, um
+    fator relevante = âmbar, nenhum = verde. Mostre as etiquetas dos fatores que pesaram
+    (ex.: "trilha parada 6d", "3 em atraso", "2 riscos críticos").
+  · Se algum fator não for calculável com os dados atuais, ignore-o e me avise quais.
+
+MODO CLÍNICA (ao clicar "Entrar" num card)
+- Faixa fixa no topo: "Você está em: <clínica>", com "Trocar de clínica" e
+  "Sair para a plataforma" sempre visíveis. O indicador de contexto do topo passa a
+  mostrar o nome da clínica.
+- A navegação da plataforma some e entra a navegação da clínica — um SUPERCONJUNTO do
+  que o gestor vê, agrupada:
+  · Onboarding: Agenda, Equipe interna, Equipe externa, Sistemas e acessos
+  · Operação: Diagnóstico, Mapa de riscos, Plano de ação, Processos
+  · Condução (grupo do super admin): Reuniões, Delegações
+  · Documentação: Documentos, Evidências
+  · Rodapé do menu: Sair.
+- REUNIÕES (absorve o Kick Off):
+  · Lista de reuniões da clínica. A primeira é a "Reunião de Kick Off" (tipo especial,
+    destacada). Demais tipos: Acompanhamento e Marco.
+  · Reaproveite a página/fluxo de kickoff já existente (pages/kickoff, use-kickoff-api),
+    transformando-o no item "Reunião de Kick Off" dentro de Reuniões.
+  · Cada reunião: tipo, data, status (realizada/agendada/cancelada), participantes, ata,
+    e ações geradas (ligam ao Plano de Ação).
+  · Se hoje não existir um campo "tipo de reunião" no modelo, me avise — não invente; por
+    ora trate o kickoff existente como a única reunião e deixe a lista preparada para os
+    demais tipos.
+- DELEGAÇÕES: NÃO duplicar. É um atalho que abre o acompanhamento de delegações que já
+  vive dentro do Diagnóstico (a visão de leitura "quem acompanha").
+- Escopo: apenas dados da clínica ativa. Rodapé/indicador reforçando "somente os dados
+  desta clínica".
+
+RESPONSIVIDADE
+- Desktop: cards de clínica em 2–3 colunas; navegação lateral; hub da clínica em 3–4 col.
+- Mobile: coluna única; navegação vira gaveta; hub em 2 colunas; faixa de contexto fixa.
+
+CRITÉRIO DE PRONTO
+- Super admin com os dois modos funcionando e a transição Entrar/Sair clara.
+- Modo plataforma: cards + semáforo combinado + Administração com Modelos (ICS + LGPD),
+  Integrações e Configurações, e Sair no rodapé.
+- Modo clínica: superconjunto do gestor + grupo Condução (Reuniões com Kick Off absorvido,
+  Delegações como atalho para o Diagnóstico), Sair no rodapé.
+- Nada de lógica/negócio muda. Onde faltar dado real, o agente me avisa em vez de inventar.
