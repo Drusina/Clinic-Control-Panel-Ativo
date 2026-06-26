@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useListClinics } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
+import { listClinics } from "@workspace/api-client-react";
 import type { Clinic, ClinicStatus, ClinicPlano } from "@workspace/api-client-react";
 import {
   Card,
@@ -214,12 +215,37 @@ function ClinicCard({
   );
 }
 
+const ALL_CLINICS_PAGE_SIZE = 500;
+
+/**
+ * Fetches the complete clinic set by walking every page, so the Painel KPIs
+ * and semáforo filters stay accurate regardless of how many clinics exist.
+ * The previous single `pageSize: 1000` fetch silently capped totals and the
+ * "atenção/críticas" counts once the carteira exceeded 1000 clinics.
+ */
+function useAllClinics() {
+  return useQuery({
+    queryKey: ["dashboard", "all-clinics", ALL_CLINICS_PAGE_SIZE],
+    queryFn: async () => {
+      const first = await listClinics({ page: 1, pageSize: ALL_CLINICS_PAGE_SIZE });
+      const total = first.total ?? first.data.length;
+      const clinics = [...first.data];
+      const totalPages = Math.max(1, Math.ceil(total / ALL_CLINICS_PAGE_SIZE));
+      for (let page = 2; page <= totalPages; page++) {
+        const next = await listClinics({ page, pageSize: ALL_CLINICS_PAGE_SIZE });
+        clinics.push(...next.data);
+      }
+      return { data: clinics, total };
+    },
+  });
+}
+
 export default function Dashboard() {
   const [, navigate] = useLocation();
   const [filter, setFilter] = useState<FilterKey>("todas");
   const [search, setSearch] = useState("");
 
-  const { data, isLoading } = useListClinics({ pageSize: 1000 });
+  const { data, isLoading } = useAllClinics();
   const clinics = useMemo(() => data?.data ?? [], [data]);
 
   const kpis = useMemo(() => {
