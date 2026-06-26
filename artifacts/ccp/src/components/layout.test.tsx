@@ -21,11 +21,13 @@ const mocks = vi.hoisted(() => ({
   role: undefined as undefined | { role: string },
   activeClinicId: null as string | null,
   clinics: [] as Array<{ id: string; nome: string; fantasia?: string | null }>,
+  location: "/me/clinicas",
+  search: "",
 }));
 
 vi.mock("wouter", () => ({
-  useLocation: () => ["/me/clinicas", mocks.navigateMock] as const,
-  useSearch: () => "",
+  useLocation: () => [mocks.location, mocks.navigateMock] as const,
+  useSearch: () => mocks.search,
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
     <a href={href}>{children}</a>
   ),
@@ -73,6 +75,8 @@ describe("AppLayout sidebar — team_member never sees modules on the chooser", 
     mocks.role = undefined;
     mocks.activeClinicId = null;
     mocks.clinics = [];
+    mocks.location = "/me/clinicas";
+    mocks.search = "";
   });
 
   afterEach(() => {
@@ -134,6 +138,8 @@ describe("AppLayout — logout button", () => {
     mocks.role = undefined;
     mocks.activeClinicId = null;
     mocks.clinics = [];
+    mocks.location = "/me/clinicas";
+    mocks.search = "";
   });
 
   afterEach(() => {
@@ -180,5 +186,129 @@ describe("AppLayout — logout button", () => {
     await waitFor(() =>
       expect(mocks.navigateMock).toHaveBeenCalledWith("/entrar"),
     );
+  });
+});
+
+/**
+ * Task #339 — the super-admin shell is a URL-driven two-mode chrome:
+ *
+ *   • Platform mode (default): platform nav (Painel/Clínicas/Notificações…)
+ *     and NO clinic banner. Platform routes (`/`, `/admin/clinicas`, templates,
+ *     configurações…) ALWAYS render platform chrome — even if a clinic is still
+ *     stored as "active" — because the mode is decided by the URL, not storage.
+ *   • Clinic mode: entered only when the route itself carries an accessible
+ *     clinic id (e.g. `/admin/clinicas/<uuid>`). It swaps the sidebar for the
+ *     clinic-scoped nav and pins the "Você está em: <clinic>" banner with the
+ *     "Trocar de clínica" / "Sair para a plataforma" affordances.
+ *
+ * Clinic ids must look like a uuid/hex slug so they match the layout's
+ * `clinicIdFromPath` regex (a plain "clinic-1" would not).
+ */
+const CLINIC_UUID = "aaaaaaaa-1111-2222-3333-444444444444";
+const TWO_MODE_CLINICS = [
+  { id: CLINIC_UUID, nome: "Clínica Gamma", fantasia: "Gamma Saúde" },
+  { id: "bbbbbbbb-1111-2222-3333-444444444444", nome: "Clínica Delta" },
+];
+
+describe("AppLayout — super_admin two-mode shell (platform vs clinic)", () => {
+  beforeEach(() => {
+    mocks.navigateMock.mockClear();
+    mocks.logoutMock.mockClear();
+    mocks.role = { role: "super_admin" };
+    mocks.activeClinicId = null;
+    mocks.clinics = TWO_MODE_CLINICS;
+    mocks.location = "/";
+    mocks.search = "";
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders platform chrome (no clinic banner) on the platform dashboard route", () => {
+    mocks.location = "/";
+
+    render(
+      <AppLayout>
+        <div>conteúdo</div>
+      </AppLayout>,
+    );
+
+    expect(screen.getByTestId("nav-painel")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-clinicas")).toBeInTheDocument();
+    expect(screen.queryByTestId("clinic-context-banner")).not.toBeInTheDocument();
+  });
+
+  it("keeps platform chrome on a platform route even when a clinic is stored active", () => {
+    // The mode is URL-driven: a stored active clinic must NOT flip platform
+    // routes into clinic mode.
+    mocks.location = "/admin/clinicas";
+    mocks.activeClinicId = CLINIC_UUID;
+
+    render(
+      <AppLayout>
+        <div>conteúdo</div>
+      </AppLayout>,
+    );
+
+    expect(screen.getByTestId("nav-painel")).toBeInTheDocument();
+    expect(screen.queryByTestId("clinic-context-banner")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("exit-to-platform")).not.toBeInTheDocument();
+  });
+
+  it("renders clinic chrome + banner when the URL carries an accessible clinic id", () => {
+    mocks.location = `/admin/clinicas/${CLINIC_UUID}`;
+    mocks.search = "tab=overview";
+
+    render(
+      <AppLayout>
+        <div>conteúdo</div>
+      </AppLayout>,
+    );
+
+    // The fixed clinic banner appears with the clinic's name + exit affordance.
+    const banner = screen.getByTestId("clinic-context-banner");
+    expect(banner).toBeInTheDocument();
+    expect(banner).toHaveTextContent("Gamma Saúde");
+    expect(screen.getByTestId("exit-to-platform")).toBeInTheDocument();
+
+    // Clinic-scoped nav replaces the platform nav.
+    expect(screen.queryByTestId("nav-painel")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Diagnóstico").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Plano de ação").length).toBeGreaterThan(0);
+  });
+
+  it("clinic-mode nav links and the 'Sair para a plataforma' button stay under the clinic", () => {
+    mocks.location = `/admin/clinicas/${CLINIC_UUID}`;
+    mocks.search = "tab=overview";
+
+    render(
+      <AppLayout>
+        <div>conteúdo</div>
+      </AppLayout>,
+    );
+
+    // Every clinic-scoped nav anchor keeps the `/admin/clinicas/:id` base.
+    const diagnosticoLinks = screen
+      .getAllByText("Diagnóstico")
+      .map((el) => el.closest("a"))
+      .filter((a): a is HTMLAnchorElement => a !== null);
+    expect(diagnosticoLinks.length).toBeGreaterThan(0);
+    for (const a of diagnosticoLinks) {
+      expect(a.getAttribute("href")).toContain(`/admin/clinicas/${CLINIC_UUID}`);
+    }
+
+    // The delegação deep link stays under the clinic detail route too.
+    const delegacaoLink = screen
+      .getAllByText("Delegações")
+      .map((el) => el.closest("a"))
+      .find((a): a is HTMLAnchorElement => a !== null);
+    expect(delegacaoLink?.getAttribute("href")).toBe(
+      `/admin/clinicas/${CLINIC_UUID}?tab=diagnostics&aba=delegacao`,
+    );
+
+    // "Sair para a plataforma" returns to the platform root.
+    fireEvent.click(screen.getByTestId("exit-to-platform"));
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/");
   });
 });
