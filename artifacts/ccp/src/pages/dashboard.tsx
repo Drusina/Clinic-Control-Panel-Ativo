@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listClinics } from "@workspace/api-client-react";
 import type { Clinic, ClinicStatus, ClinicPlano } from "@workspace/api-client-react";
@@ -90,6 +90,8 @@ function isEmImplantacao(c: Clinic): boolean {
   if (c.status === "prospect" || c.status === "proposta") return false;
   return c.progresso < 100;
 }
+
+const CARDS_PAGE_SIZE = 60;
 
 type FilterKey = "todas" | "atencao" | "criticas" | "implantacao";
 
@@ -244,6 +246,7 @@ export default function Dashboard() {
   const [, navigate] = useLocation();
   const [filter, setFilter] = useState<FilterKey>("todas");
   const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(CARDS_PAGE_SIZE);
 
   const { data, isLoading } = useAllClinics();
   const clinics = useMemo(() => data?.data ?? [], [data]);
@@ -277,6 +280,15 @@ export default function Dashboard() {
       return true;
     });
   }, [clinics, filter, search]);
+
+  useEffect(() => {
+    setVisibleCount(CARDS_PAGE_SIZE);
+  }, [filter, search]);
+
+  const shown = useMemo(
+    () => visible.slice(0, visibleCount),
+    [visible, visibleCount],
+  );
 
   const enterClinic = (id: string) => {
     setActiveClinicId(id);
@@ -368,11 +380,33 @@ export default function Dashboard() {
           Nenhuma clínica encontrada para este filtro.
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {visible.map((c) => (
-            <ClinicCard key={c.id} clinic={c} onEnter={enterClinic} />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {shown.map((c) => (
+              <ClinicCard key={c.id} clinic={c} onEnter={enterClinic} />
+            ))}
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="painel-cards-count"
+            >
+              Exibindo {shown.length} de {visible.length}{" "}
+              {visible.length === 1 ? "clínica" : "clínicas"}
+            </p>
+            {shown.length < visible.length && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setVisibleCount((c) => c + CARDS_PAGE_SIZE)
+                }
+                data-testid="painel-load-more"
+              >
+                Carregar mais
+              </Button>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
